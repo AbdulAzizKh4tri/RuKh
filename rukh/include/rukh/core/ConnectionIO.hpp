@@ -27,7 +27,7 @@ enum class WriteResult {
 
 template <typename Stream> class ConnectionIO {
 public:
-  struct ReadAwaitable {
+  struct ReadDataAwaitable {
     ConnectionIO &io;
     std::chrono::steady_clock::time_point deadline;
     size_t maxBufferSize;
@@ -49,7 +49,7 @@ public:
     }
   };
 
-  struct WriteAwaitable {
+  struct WriteDataAwaitable {
     ConnectionIO &io;
     int inactivitySeconds;
     bool error = false;
@@ -85,13 +85,13 @@ public:
 
   ConnectionIO(std::shared_ptr<Stream> stream) : stream_(std::move(stream)) {}
 
-  [[nodiscard]] ReadAwaitable
+  [[nodiscard]] ReadDataAwaitable
   read(std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max(),
        size_t maxBufferSize = ServerConfig::MAX_CONTENT_LENGTH) noexcept {
     return {*this, deadline, maxBufferSize};
   }
 
-  [[nodiscard]] WriteAwaitable write(int inactivitySeconds = 0) noexcept { return {*this, inactivitySeconds}; }
+  [[nodiscard]] WriteDataAwaitable write(int inactivitySeconds = 0) noexcept { return {*this, inactivitySeconds}; }
 
   ReadResult drainIntoReadBuffer(size_t maxBufferSize) {
     bool gotData = false;

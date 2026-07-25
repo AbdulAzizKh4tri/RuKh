@@ -8,7 +8,9 @@
 #include <rukh/HttpResponse.hpp>
 #include <rukh/MultipartParser.hpp>
 #include <rukh/ThreadPool.hpp>
+#include <rukh/orm/Mapper.hpp>
 
+#include "models/User.hpp"
 #include "routes.hpp"
 #include "rukh/db/IDatabase.hpp"
 
@@ -700,8 +702,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       co_return res;
     }
 
-    std::string queryStr =
-        "SELECT id, name, email, age, created_at FROM users WHERE " + whereClause + " ORDER BY " + orderBy + ";";
+    std::string queryStr = "SELECT * FROM users WHERE " + whereClause + " ORDER BY " + orderBy + ";";
 
     // Execute query in thread pool to avoid blocking the event loop
     std::expected<db::QueryResult, db::DatabaseError> result =
@@ -716,33 +717,20 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       co_return res;
     }
 
-    auto rows = result.value().rows;
-    if (rows.size() == 0) {
+    auto queryResult = result.value();
+
+    json arr = json::array();
+    auto users = hydrate<models::User>(queryResult);
+    for (auto &user : users) {
+      arr.push_back(user.toJson());
+      SPDLOG_INFO("User: {}", user.toString());
+    }
+
+    if (queryResult.rows.size() == 0) {
       co_return HttpResponse(200, "application/json", json::array().dump());
     }
 
     // Build response as array of user objects
-    auto arr = json::array();
-    for (auto row : rows) {
-      json user = json::object();
-
-      auto id = row.as<int64_t>("id");
-      user["id"] = id ? *id : 0;
-
-      auto name = row.as<std::string>("name");
-      user["name"] = name ? *name : "";
-
-      auto email = row.as<std::string>("email");
-      user["email"] = email ? *email : "";
-
-      auto age = row.as<int64_t>("age");
-      user["age"] = age ? *age : 0;
-
-      auto createdAt = row.as<std::string>("created_at");
-      user["created_at"] = createdAt ? *createdAt : "";
-
-      arr.push_back(user);
-    }
     co_return HttpResponse(200, "application/json", arr.dump());
   });
 

@@ -32,4 +32,9 @@ struct DatabaseException : public std::runtime_error {
   explicit DatabaseException(const std::string &msg) : std::runtime_error(msg) {}
 };
 
+struct OrmException : public std::runtime_error {
+  using std::runtime_error::runtime_error;
+  explicit OrmException(const std::string &msg) : std::runtime_error(msg) {}
+};
+
 } // namespace rukh

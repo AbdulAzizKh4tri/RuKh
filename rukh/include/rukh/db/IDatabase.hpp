@@ -28,12 +28,15 @@ inline DbValue toDbValue(std::nullptr_t) { return nullptr; }
 
 class Row {
 public:
-  template <typename T> std::optional<T> as(const std::string &col) {
-    auto *val = std::get_if<T>(&values[(*columns).at(col)]);
+  template <typename T> std::optional<T> as(const std::string &col) const {
+    auto it = columns->find(col);
+    if (it == columns->end())
+      return std::nullopt;
+    auto *val = std::get_if<T>(&values[it->second]);
     return val ? std::make_optional(*val) : std::nullopt;
   }
 
-  template <typename T> std::optional<T> as(const size_t col) {
+  template <typename T> std::optional<T> as(const size_t col) const {
     auto *val = std::get_if<T>(&values[col]);
     return val ? std::make_optional(*val) : std::nullopt;
   }
