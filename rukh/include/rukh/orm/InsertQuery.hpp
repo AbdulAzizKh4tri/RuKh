@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
+#include <rukh/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Hydrator.hpp>
 #include <rukh/orm/Predicate.hpp>
@@ -12,18 +13,20 @@ namespace rukh::orm {
 
 template <typename Model> class InsertQuery {
 public:
-  std::pair<size_t, std::vector<Model>> execute(rukh::db::IDatabase *db, const std::vector<Model> &objs,
-                                                bool returning = false) {
+  Task<std::pair<size_t, std::vector<Model>>> execute(rukh::db::IDatabase *db, const std::vector<Model> &objs,
+                                                      bool returning = false) {
     buildInsertSqlAndSetParams(objs, returning);
-    auto queryResult = db->executeQuery(sql_, params_);
+
+    auto queryResult = co_await Model::threadPool->submit(
+        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
       SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      return std::make_pair(0, std::vector<Model>());
+      co_return std::make_pair(0, std::vector<Model>());
     }
 
-    return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
+    co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }
 
 private:

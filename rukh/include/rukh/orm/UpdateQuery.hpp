@@ -4,25 +4,30 @@
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
+#include <rukh/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Hydrator.hpp>
 #include <rukh/orm/Predicate.hpp>
+#include <rukh/orm/WhereClause.hpp>
 
 namespace rukh::orm {
 
-template <typename Model> class UpdateQuery {
+template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>> {
 public:
-  std::pair<size_t, std::vector<Model>> execute(rukh::db::IDatabase *db, const Model &obj, bool returning = false) {
+  Task<std::pair<size_t, std::vector<Model>>> execute(rukh::db::IDatabase *db, const Model &obj,
+                                                      bool returning = false) {
     buildUpdateSqlAndSetParams(obj, returning);
-    auto queryResult = db->executeQuery(sql_, params_);
+
+    auto queryResult = co_await Model::threadPool->submit(
+        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
       SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      return std::make_pair(0, std::vector<Model>{obj});
+      co_return std::make_pair(0, std::vector<Model>{obj});
     }
 
-    return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
+    co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }
 
   UpdateQuery &column(std::string col) {
@@ -30,29 +35,10 @@ public:
     return *this;
   }
 
-  UpdateQuery &where(Predicate p) {
-    if (not wherePredicate_.has_value())
-      wherePredicate_ = p;
-    else
-      wherePredicate_ = *wherePredicate_ && p;
-    return *this;
-  }
-
-  UpdateQuery &andWhere(Predicate p) { return where(p); }
-
-  UpdateQuery &orWhere(Predicate p) {
-    if (not wherePredicate_.has_value())
-      wherePredicate_ = p;
-    else
-      wherePredicate_ = *wherePredicate_ || p;
-    return *this;
-  }
-
 private:
   std::string sql_;
   std::vector<std::string> columns_;
   std::vector<rukh::db::DbValue> params_;
-  std::optional<Predicate> wherePredicate_ = std::nullopt;
 
   void buildUpdateSqlAndSetParams(const Model &obj, bool returning = false) {
     sql_ = sqlInit;
@@ -60,9 +46,9 @@ private:
 
     sql_ += modelColumnValueUpdateListString(obj);
 
-    if (wherePredicate_) {
+    if (this->wherePredicate) {
       sql_ += " WHERE ";
-      sql_ += Predicate::resolvePredicates(*wherePredicate_, params_);
+      sql_ += Predicate::resolvePredicates(*this->wherePredicate, params_);
     }
 
     if (returning)

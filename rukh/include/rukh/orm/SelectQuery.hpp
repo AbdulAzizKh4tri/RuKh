@@ -3,37 +3,19 @@
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
+#include <rukh/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Hydrator.hpp>
 #include <rukh/orm/Predicate.hpp>
+#include <rukh/orm/WhereClause.hpp>
 
 namespace rukh::orm {
 
-template <typename Model> class SelectQuery {
+template <typename Model> class SelectQuery : public WhereClause<SelectQuery<Model>> {
 public:
   SelectQuery &column(std::string col) {
     changed = true;
     columns_.push_back(col);
-    return *this;
-  }
-
-  SelectQuery &where(Predicate p) {
-    changed = true;
-    if (not wherePredicate_.has_value())
-      wherePredicate_ = p;
-    else
-      wherePredicate_ = *wherePredicate_ && p;
-    return *this;
-  }
-
-  SelectQuery &andWhere(Predicate p) { return where(p); }
-
-  SelectQuery &orWhere(Predicate p) {
-    changed = true;
-    if (not wherePredicate_.has_value())
-      wherePredicate_ = p;
-    else
-      wherePredicate_ = *wherePredicate_ || p;
     return *this;
   }
 
@@ -57,7 +39,7 @@ public:
     return *this;
   }
 
-  int64_t count(db::IDatabase *db, bool distinct = false) {
+  Task<int64_t> count(db::IDatabase *db, bool distinct = false) {
     changed = true;
     columns_.clear();
 
@@ -68,18 +50,19 @@ public:
 
     buildSelectSqlAndSetParams();
 
-    auto queryResult = db->executeQuery(sql_, params_);
+    auto queryResult = co_await Model::threadPool->submit(
+        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
       SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      return -1;
+      co_return -1;
     }
 
-    return queryResult->rows[0].as<int64_t>(0).value_or(0);
+    co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
-  int64_t count(db::IDatabase *db, const std::string &col, bool distinct = false) {
+  Task<int64_t> count(db::IDatabase *db, const std::string &col, bool distinct = false) {
     changed = true;
     columns_.clear();
 
@@ -90,60 +73,66 @@ public:
 
     buildSelectSqlAndSetParams();
 
-    auto queryResult = db->executeQuery(sql_, params_);
+    auto queryResult = co_await Model::threadPool->submit(
+        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
       SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      return -1;
+      co_return -1;
     }
 
-    return queryResult->rows[0].as<int64_t>(0).value_or(0);
+    co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
-  std::optional<std::vector<Model>> get(rukh::db::IDatabase *db) {
+  Task<std::optional<std::vector<Model>>> get(rukh::db::IDatabase *db) {
     buildSelectSqlAndSetParams();
 
-    auto queryResult = db->executeQuery(sql_, params_);
+    auto queryResult = co_await Model::threadPool->submit(
+        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
       SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      return std::nullopt;
+      co_return std::nullopt;
     }
 
-    return hydrate<Model>(*queryResult);
+    co_return hydrate<Model>(*queryResult);
   }
 
-  std::optional<Model> first(rukh::db::IDatabase *db) {
+  Task<std::optional<Model>> first(rukh::db::IDatabase *db) {
     buildSelectSqlAndSetParams();
 
-    auto queryResult = db->executeQuery(sql_, params_);
+    auto queryResult = co_await Model::threadPool->submit(
+        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
       SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      return std::nullopt;
+      co_return std::nullopt;
     }
 
     if (queryResult->rows.empty())
-      return std::nullopt;
+      co_return std::nullopt;
 
-    return hydrate<Model>(queryResult->rows[0]);
+    co_return hydrate<Model>(queryResult->rows[0]);
   }
 
-  bool exists(rukh::db::IDatabase *db) {
+  Task<bool> exists(rukh::db::IDatabase *db) {
     buildSelectSqlAndSetParams();
 
-    auto queryResult = db->executeQuery("SELECT EXISTS (" + sql_ + ")", params_);
+    auto queryResult =
+        co_await Model::threadPool->submit([db, this]() -> std::expected<db::QueryResult, db::DatabaseError> {
+          return db->executeQuery("SELECT EXISTS (" + sql_ + ")", params_);
+        });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
       SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      return false;
+      co_return false;
     }
 
-    return queryResult->rows.size() > 0;
+    co_return queryResult->rows.size() > 0;
   }
 
   std::vector<rukh::db::DbValue> getParams() const { return params_; }
@@ -154,16 +143,16 @@ private:
   bool changed = true;
   std::vector<std::string> columns_;
   std::vector<rukh::db::DbValue> params_;
-  std::optional<Predicate> wherePredicate_ = std::nullopt;
   std::vector<std::pair<std::string, bool>> orderBy_;
   std::vector<std::string> groupBy_;
   std::optional<size_t> limit_;
 
   void buildSelectSqlAndSetParams() {
-    if (not changed)
+    if (not changed and not this->whereChanged)
       return;
 
     changed = false;
+    this->whereChanged = false;
 
     sql_ = "SELECT ";
     if (columns_.empty()) {
@@ -179,9 +168,9 @@ private:
 
     sql_ += " FROM " + Model::tableName + " ";
 
-    if (wherePredicate_) {
+    if (this->wherePredicate) {
       sql_ += " WHERE ";
-      sql_ += Predicate::resolvePredicates(*wherePredicate_, params_);
+      sql_ += Predicate::resolvePredicates(*this->wherePredicate, params_);
     }
 
     if (!groupBy_.empty()) {

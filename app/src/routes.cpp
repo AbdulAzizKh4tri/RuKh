@@ -22,6 +22,7 @@ using namespace rukh;
 void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool *threadPool, db::IDatabase *db) {
 
   models::User::db = db;
+  models::User::threadPool = threadPool;
 
   router.get("/", [&errorFactory](const HttpRequest &request) -> Task<Response> {
     auto name = request.getQueryParam("name");
@@ -669,8 +670,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       query.orderBy(orderBy);
 
     // Execute query in thread pool to avoid blocking the event loop
-    auto users = co_await threadPool->submit(
-        [db, &query]() -> std::optional<std::vector<models::User>> { return query.get(db); });
+    auto users = co_await query.get(db);
 
     if (not users) {
       auto res = HttpResponse(500, json{{"error", "Database error"}}.dump());
@@ -711,7 +711,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     user.password = body.contains("password") ? body["password"].get<std::string>() : "";
 
     // Execute insert in thread pool to avoid blocking the event loop
-    auto result = co_await threadPool->submit([db, &user]() -> bool { return user.save(); });
+    auto result = co_await user.save();
 
     if (not result)
       co_return HttpResponse(500, "application/json", json{{"error", "Insert failed"}}.dump());
@@ -729,8 +729,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     auto id = body["id"].get<models::User::pk>();
 
-    auto userOpt =
-        co_await threadPool->submit([db, id]() -> std::optional<models::User> { return models::User::find(id); });
+    auto userOpt = co_await models::User::find(id);
+
     if (not userOpt) {
       co_return HttpResponse(404, "application/json", json{{"error", "User not found"}}.dump());
     }
@@ -742,7 +742,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     user.password = body.contains("password") ? body["password"].get<std::string>() : "";
 
     // Execute update in thread pool to avoid blocking the event loop
-    auto result = co_await threadPool->submit([db, &user]() -> bool { return user.save(); });
+    auto result = co_await user.save();
 
     if (not result)
       co_return HttpResponse(500, "application/json", json{{"error", "Update failed"}}.dump());
@@ -759,13 +759,13 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       co_return HttpResponse(400, "application/json", json{{"error", "id is required"}}.dump());
 
     auto id = body["id"].get<models::User::pk>();
-    auto user =
-        co_await threadPool->submit([db, id]() -> std::optional<models::User> { return models::User::find(id); });
+    auto user = co_await models::User::find(id);
+
     if (not user) {
       co_return HttpResponse(404, "application/json", json{{"error", "User not found"}}.dump());
     }
 
-    if (not user->destroy()) {
+    if (not co_await user->destroy()) {
       co_return HttpResponse(500, "application/json", json{{"error", "Delete failed"}}.dump());
     }
 

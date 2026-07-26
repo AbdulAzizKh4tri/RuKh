@@ -21,7 +21,7 @@ template <typename Model> Model hydrate(const rukh::db::Row &row) {
       [&](auto &&...col) {
         auto handle = [&](auto &&c) {
           if (not ok)
-            return; // short-circuit: skip remaining fields once one has failed
+            return;
           ok = hydrateOne(obj, c, row);
         };
         (handle(col), ...);
@@ -29,7 +29,7 @@ template <typename Model> Model hydrate(const rukh::db::Row &row) {
       Model::columns());
 
   if (not ok) {
-    auto rowId = *(row.as<int64_t>("id"));
+    auto rowId = *(row.as<int64_t>(Model::pkColumn().name));
     throw rukh::OrmException("Failed to hydrate row: " + obj.tableName + " " + std::to_string(rowId));
   }
 
