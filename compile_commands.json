@@ -1,133 +1,133 @@
 [
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/cc -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -O3 -DNDEBUG -O2 -o CMakeFiles/sqlite3_amalgamation.dir/external/sqlite3/sqlite3.c.o -c /home/pair/stuff/HttpServer/rukh/external/sqlite3/sqlite3.c",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/cc -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -g -O2 -o CMakeFiles/sqlite3_amalgamation.dir/external/sqlite3/sqlite3.c.o -c /home/pair/stuff/HttpServer/rukh/external/sqlite3/sqlite3.c",
   "file": "/home/pair/stuff/HttpServer/rukh/external/sqlite3/sqlite3.c",
   "output": "rukh/CMakeFiles/sqlite3_amalgamation.dir/external/sqlite3/sqlite3.c.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -x c++-header -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/cmake_pch.hxx.gch -c /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx.cxx",
-  "file": "/home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx.cxx",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -x c++-header -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/cmake_pch.hxx.gch -c /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx.cxx",
+  "file": "/home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx.cxx",
   "output": "rukh/CMakeFiles/rukh.dir/cmake_pch.hxx.gch"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/ErrorFactory.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/ErrorFactory.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/ErrorFactory.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/ErrorFactory.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/ErrorFactory.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/ErrorFactory.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpRequest.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpRequest.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpRequest.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpRequest.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/HttpRequest.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/HttpRequest.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpResponse.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpResponse.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpResponse.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpResponse.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/HttpResponse.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/HttpResponse.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpServer.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpServer.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpServer.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpServer.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/HttpServer.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/HttpServer.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpStreamResponse.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpStreamResponse.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/HttpStreamResponse.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/HttpStreamResponse.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/HttpStreamResponse.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/HttpStreamResponse.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/Router.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/Router.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/Router.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/Router.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/Router.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/Router.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/EpollInstance.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/EpollInstance.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/EpollInstance.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/EpollInstance.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/core/EpollInstance.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/core/EpollInstance.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/Executor.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/Executor.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/Executor.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/Executor.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/core/Executor.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/core/Executor.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/ListenerSocket.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/ListenerSocket.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/ListenerSocket.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/ListenerSocket.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/core/ListenerSocket.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/core/ListenerSocket.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/Socket.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/Socket.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/Socket.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/Socket.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/core/Socket.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/core/Socket.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/TcpStream.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/TcpStream.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/TcpStream.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/TcpStream.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/core/TcpStream.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/core/TcpStream.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/TlsStream.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/TlsStream.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/core/TlsStream.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/core/TlsStream.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/core/TlsStream.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/core/TlsStream.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/logUtils.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/logUtils.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/logUtils.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/logUtils.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/logUtils.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/logUtils.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/CacheControlMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/CacheControlMiddleware.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/CacheControlMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/CacheControlMiddleware.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/middleware/CacheControlMiddleware.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/middleware/CacheControlMiddleware.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/CompressionMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/CompressionMiddleware.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/CompressionMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/CompressionMiddleware.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/middleware/CompressionMiddleware.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/middleware/CompressionMiddleware.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/CorsMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/CorsMiddleware.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/CorsMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/CorsMiddleware.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/middleware/CorsMiddleware.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/middleware/CorsMiddleware.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/SessionMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/SessionMiddleware.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/SessionMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/SessionMiddleware.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/middleware/SessionMiddleware.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/middleware/SessionMiddleware.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/rukh",
-  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=2 -DSQLITE_THREADSAFE=1 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -O3 -Winvalid-pch -include /home/pair/stuff/HttpServer/build/release/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/StaticMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/StaticMiddleware.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/rukh",
+  "command": "/usr/bin/c++ -DRUKH_ENABLE_SQLITE -DSPDLOG_ACTIVE_LEVEL=0 -DSQLITE_THREADSAFE=2 -I/home/pair/stuff/HttpServer/rukh/include -I/home/pair/stuff/HttpServer/rukh/external -I/home/pair/stuff/HttpServer/rukh/external/sqlite3 -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -Winvalid-pch -include /home/pair/stuff/HttpServer/build/debug/rukh/CMakeFiles/rukh.dir/cmake_pch.hxx -o CMakeFiles/rukh.dir/src/middleware/StaticMiddleware.cpp.o -c /home/pair/stuff/HttpServer/rukh/src/middleware/StaticMiddleware.cpp",
   "file": "/home/pair/stuff/HttpServer/rukh/src/middleware/StaticMiddleware.cpp",
   "output": "rukh/CMakeFiles/rukh.dir/src/middleware/StaticMiddleware.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/app",
-  "command": "/usr/bin/c++ -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -o CMakeFiles/server.dir/main.cpp.o -c /home/pair/stuff/HttpServer/app/main.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/app",
+  "command": "/usr/bin/c++ -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/main.cpp.o -c /home/pair/stuff/HttpServer/app/main.cpp",
   "file": "/home/pair/stuff/HttpServer/app/main.cpp",
   "output": "app/CMakeFiles/server.dir/main.cpp.o"
 },
 {
-  "directory": "/home/pair/stuff/HttpServer/build/release/app",
-  "command": "/usr/bin/c++ -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/release/rukh/liburing_ext-prefix/include -O3 -DNDEBUG -std=gnu++23 -o CMakeFiles/server.dir/src/routes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes.cpp",
+  "directory": "/home/pair/stuff/HttpServer/build/debug/app",
+  "command": "/usr/bin/c++ -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/debug/rukh/liburing_ext-prefix/include -g -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes.cpp",
   "file": "/home/pair/stuff/HttpServer/app/src/routes.cpp",
   "output": "app/CMakeFiles/server.dir/src/routes.cpp.o"
 }

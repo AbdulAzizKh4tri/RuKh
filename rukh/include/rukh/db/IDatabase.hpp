@@ -3,12 +3,13 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <string>
 #include <sys/types.h>
 #include <unordered_map>
 #include <variant>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace rukh::db {
 
@@ -52,6 +53,12 @@ struct QueryResult {
   size_t affectedRows; // for non SELECT queries
   std::vector<Row> rows;
   std::shared_ptr<std::unordered_map<std::string, size_t>> columns;
+
+  QueryResult operator+=(const QueryResult &other) {
+    affectedRows += other.affectedRows;
+    rows.insert(rows.end(), other.rows.begin(), other.rows.end());
+    return *this;
+  }
 };
 
 struct DatabaseError {

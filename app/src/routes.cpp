@@ -1,6 +1,7 @@
 #include <cstdlib>
-#include <nlohmann/json.hpp>
 #include <stdexcept>
+
+#include <nlohmann/json.hpp>
 
 #include <rukh/AsyncFileReader.hpp>
 #include <rukh/AsyncFileWriter.hpp>
@@ -8,16 +9,19 @@
 #include <rukh/HttpResponse.hpp>
 #include <rukh/MultipartParser.hpp>
 #include <rukh/ThreadPool.hpp>
-#include <rukh/orm/Mapper.hpp>
+
+#include <rukh/db/IDatabase.hpp>
+#include <rukh/orm/SelectQuery.hpp>
 
 #include "models/User.hpp"
 #include "routes.hpp"
-#include "rukh/db/IDatabase.hpp"
 
 using json = nlohmann::json;
 using namespace rukh;
 
 void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool *threadPool, db::IDatabase *db) {
+
+  models::User::db = db;
 
   router.get("/", [&errorFactory](const HttpRequest &request) -> Task<Response> {
     auto name = request.getQueryParam("name");
@@ -646,88 +650,38 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
   //   - maxAge: Filter users with age <= maxAge
   //   - orderBy: Sort results (name, email, age, created_at; default: name)
   router.get("/tests/db/select", [threadPool, db](const HttpRequest &request) -> Task<Response> {
-    std::string whereClause = "1=1";
-    std::vector<db::DbValue> params;
-
-    // Optional: Filter by name (case-insensitive substring match)
     std::string nameFilter = request.getQueryParam("name");
-    if (!nameFilter.empty()) {
-      whereClause += " AND name LIKE ?";
-      params.push_back(db::DbValue{"%" + nameFilter + "%"});
-    }
-
-    // Optional: Filter by email (exact match)
     std::string emailFilter = request.getQueryParam("email");
-    if (!emailFilter.empty()) {
-      whereClause += " AND email = ?";
-      params.push_back(db::DbValue{emailFilter});
-    }
-
-    // Optional: Filter by minimum age
     std::string minAgeStr = request.getQueryParam("minAge");
-    if (!minAgeStr.empty()) {
-      try {
-        int64_t minAge = std::stoll(minAgeStr);
-        whereClause += " AND age >= ?";
-        params.push_back(db::DbValue{minAge});
-      } catch (...) {
-        auto res = HttpResponse(400, "application/json", json{{"error", "invalid minAge parameter"}}.dump());
-        res.headers.setHeaderLower("content-type", "application/json");
-        co_return res;
-      }
-    }
-
-    // Optional: Filter by maximum age
     std::string maxAgeStr = request.getQueryParam("maxAge");
-    if (!maxAgeStr.empty()) {
-      try {
-        int64_t maxAge = std::stoll(maxAgeStr);
-        whereClause += " AND age <= ?";
-        params.push_back(db::DbValue{maxAge});
-      } catch (...) {
-        auto res = HttpResponse(400, "application/json", json{{"error", "invalid maxAge parameter"}}.dump());
-        res.headers.setHeaderLower("content-type", "application/json");
-        co_return res;
-      }
-    }
-
-    // Optional: Sort results (default: name)
     std::string orderBy = request.getQueryParam("orderBy");
-    if (orderBy.empty())
-      orderBy = "name";
-    // Validate orderBy to prevent SQL injection
-    if (orderBy != "name" && orderBy != "email" && orderBy != "age" && orderBy != "created_at") {
-      auto res = HttpResponse(400, "application/json", json{{"error", "invalid orderBy parameter"}}.dump());
-      res.headers.setHeaderLower("content-type", "application/json");
-      co_return res;
-    }
 
-    std::string queryStr = "SELECT * FROM users WHERE " + whereClause + " ORDER BY " + orderBy + ";";
+    auto query = models::User::all();
+    if (not nameFilter.empty())
+      query.where({"name", "like", "%" + request.getQueryParam("name") + "%"});
+    if (not emailFilter.empty())
+      query.andWhere({"email", "=", request.getQueryParam("email")});
+    if (not minAgeStr.empty())
+      query.andWhere({"age", ">=", request.getQueryParam("minAge")});
+    if (not maxAgeStr.empty())
+      query.andWhere({"age", "<=", request.getQueryParam("maxAge")});
+    if (not orderBy.empty())
+      query.orderBy(orderBy);
 
     // Execute query in thread pool to avoid blocking the event loop
-    std::expected<db::QueryResult, db::DatabaseError> result =
-        co_await threadPool->submit([db, queryStr, params]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db->executeQuery(queryStr, params);
-        });
+    auto users = co_await threadPool->submit(
+        [db, &query]() -> std::optional<std::vector<models::User>> { return query.get(db); });
 
-    if (not result) {
-      db::DatabaseError err = result.error();
-      auto res = HttpResponse(500, json{{"error", err.message}}.dump());
+    if (not users) {
+      auto res = HttpResponse(500, json{{"error", "Database error"}}.dump());
       res.headers.setHeaderLower("content-type", "application/json");
       co_return res;
     }
 
-    auto queryResult = result.value();
-
     json arr = json::array();
-    auto users = hydrate<models::User>(queryResult);
-    for (auto &user : users) {
+    for (auto &user : *users) {
       arr.push_back(user.toJson());
       SPDLOG_INFO("User: {}", user.toString());
-    }
-
-    if (queryResult.rows.size() == 0) {
-      co_return HttpResponse(200, "application/json", json::array().dump());
     }
 
     // Build response as array of user objects
@@ -750,24 +704,71 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     if (!body.contains("name") || !body["name"].is_string())
       co_return HttpResponse(400, "application/json", json{{"error", "name is required"}}.dump());
 
-    std::string name = body["name"].get<std::string>();
-    db::DbValue email = body.contains("email") && body["email"].is_string()
-                            ? db::DbValue{body["email"].get<std::string>()}
-                            : db::DbValue{nullptr};
-    db::DbValue age = body.contains("age") && body["age"].is_number_integer() ? db::DbValue{body["age"].get<int64_t>()}
-                                                                              : db::DbValue{nullptr};
-
-    std::string sql = "INSERT INTO users (name, email, age) VALUES (?, ?, ?);";
-    std::vector<db::DbValue> params = {name, email, age};
+    models::User user;
+    user.name = body["name"].get<std::string>();
+    user.email = body.contains("email") ? body["email"].get<std::string>() : "";
+    user.age = body.contains("age") ? body["age"].get<int64_t>() : 0;
+    user.password = body.contains("password") ? body["password"].get<std::string>() : "";
 
     // Execute insert in thread pool to avoid blocking the event loop
-    auto result = co_await threadPool->submit([db, sql, params]() -> std::expected<db::QueryResult, db::DatabaseError> {
-      return db->executeQuery(sql, params);
-    });
+    auto result = co_await threadPool->submit([db, &user]() -> bool { return user.save(); });
 
-    if (!result)
-      co_return HttpResponse(500, "application/json", json{{"error", result.error().message}}.dump());
+    if (not result)
+      co_return HttpResponse(500, "application/json", json{{"error", "Insert failed"}}.dump());
 
-    co_return HttpResponse(201, "application/json", json{{"inserted", result->affectedRows}}.dump());
+    co_return HttpResponse(201, "application/json", json{{"created", "Insert successful"}}.dump());
+  });
+
+  router.post("/tests/db/update", [threadPool, db](HttpRequest &request) -> Task<Response> {
+    auto body = co_await request.jsonBody();
+    if (body.is_discarded())
+      co_return HttpResponse(400, "application/json", json{{"error", "invalid JSON"}}.dump());
+
+    if (not body.contains("id"))
+      co_return HttpResponse(400, "application/json", json{{"error", "id is required"}}.dump());
+
+    auto id = body["id"].get<models::User::pk>();
+
+    auto userOpt =
+        co_await threadPool->submit([db, id]() -> std::optional<models::User> { return models::User::find(id); });
+    if (not userOpt) {
+      co_return HttpResponse(404, "application/json", json{{"error", "User not found"}}.dump());
+    }
+    auto user = *userOpt;
+
+    user.name = body.contains("name") ? body["name"].get<std::string>() : "";
+    user.email = body.contains("email") ? body["email"].get<std::string>() : "";
+    user.age = body.contains("age") ? body["age"].get<int64_t>() : 0;
+    user.password = body.contains("password") ? body["password"].get<std::string>() : "";
+
+    // Execute update in thread pool to avoid blocking the event loop
+    auto result = co_await threadPool->submit([db, &user]() -> bool { return user.save(); });
+
+    if (not result)
+      co_return HttpResponse(500, "application/json", json{{"error", "Update failed"}}.dump());
+
+    co_return HttpResponse(200, "application/json", json{{"updated", "Update successful"}}.dump());
+  });
+
+  router.post("/tests/db/delete", [threadPool, db](HttpRequest &request) -> Task<Response> {
+    auto body = co_await request.jsonBody();
+    if (body.is_discarded())
+      co_return HttpResponse(400, "application/json", json{{"error", "invalid JSON"}}.dump());
+
+    if (not body.contains("id"))
+      co_return HttpResponse(400, "application/json", json{{"error", "id is required"}}.dump());
+
+    auto id = body["id"].get<models::User::pk>();
+    auto user =
+        co_await threadPool->submit([db, id]() -> std::optional<models::User> { return models::User::find(id); });
+    if (not user) {
+      co_return HttpResponse(404, "application/json", json{{"error", "User not found"}}.dump());
+    }
+
+    if (not user->destroy()) {
+      co_return HttpResponse(500, "application/json", json{{"error", "Delete failed"}}.dump());
+    }
+
+    co_return HttpResponse(200, "application/json", json{{"deleted", "Delete successful"}}.dump());
   });
 }
