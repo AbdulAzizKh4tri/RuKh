@@ -19,11 +19,29 @@ public:
 
   static Task<std::optional<Model>> find(pkType pkVal) {
     Column<pkType, Model> pkColumn = Model::pkColumn();
-    co_return co_await SelectQuery<Model>().where({pkColumn.name, "=", pkVal}).first(Model::db);
+    co_return co_await SelectQuery<Model>().where({pkColumn.name, "=", pkVal}).first();
   }
 
   static SelectQuery<Model> all() { return SelectQuery<Model>(); }
-  static SelectQuery<Model> filter(Predicate p) { return SelectQuery<Model>().where(p); }
+  static SelectQuery<Model> filter(const Predicate &p) { return SelectQuery<Model>().where(p); }
+
+  static Task<std::pair<size_t, std::vector<Model>>> bulkInsert(const std::vector<Model> &objs) {
+    InsertQuery<Model> query;
+    co_return co_await query.execute(objs, true);
+  }
+
+  static Task<std::pair<size_t, std::vector<Model>>> bulkUpdate(const Model &newObj, const std::vector<std::string> &columns,
+                                                                const Predicate &p) {
+    UpdateQuery<Model> query;
+    for (auto &col : columns)
+      query.column(col);
+    co_return co_await query.where(p).execute(newObj, true);
+  }
+
+  static Task<std::pair<size_t, std::vector<Model>>> bulkDestroy(const Predicate &p) {
+    DeleteQuery<Model> query;
+    co_return co_await query.where(p).execute(true);
+  }
 
   Task<bool> save() {
     if (persisted_)
@@ -36,7 +54,7 @@ public:
     Model *self = static_cast<Model *>(this);
     InsertQuery<Model> query;
     std::vector<Model> inputObjs{*self};
-    auto [rowsAffected, objs] = co_await query.execute(Model::db, inputObjs, true);
+    auto [rowsAffected, objs] = co_await query.execute(inputObjs, true);
     if (rowsAffected > 0)
       self->id = objs[0].id;
     setPersisted();
@@ -47,7 +65,7 @@ public:
     auto pkColumn = Model::pkColumn();
     Model *self = static_cast<Model *>(this);
     Predicate p(pkColumn.name, "=", self->*pkColumn.fieldPtr);
-    auto [rowsAffected, _] = co_await UpdateQuery<Model>().where(p).execute(Model::db, *self);
+    auto [rowsAffected, _] = co_await UpdateQuery<Model>().where(p).execute(*self);
     co_return rowsAffected > 0;
   }
 
@@ -55,7 +73,7 @@ public:
     auto pkColumn = Model::pkColumn();
     Model *self = static_cast<Model *>(this);
     Predicate p(pkColumn.name, "=", self->*pkColumn.fieldPtr);
-    auto [rowsAffected, _] = co_await DeleteQuery<Model>().where(p).execute(Model::db);
+    auto [rowsAffected, _] = co_await DeleteQuery<Model>().where(p).execute();
     co_return rowsAffected > 0;
   }
 

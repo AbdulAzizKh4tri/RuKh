@@ -6,19 +6,21 @@
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
-#include <rukh/orm/Hydrator.hpp>
 #include <rukh/orm/Predicate.hpp>
+#include <rukh/orm/hydrators.hpp>
 
 namespace rukh::orm {
 
 template <typename Model> class InsertQuery {
 public:
-  Task<std::pair<size_t, std::vector<Model>>> execute(rukh::db::IDatabase *db, const std::vector<Model> &objs,
-                                                      bool returning = false) {
+  Task<std::pair<size_t, std::vector<Model>>> execute(const std::vector<Model> &objs, bool returning = false) {
+    if (objs.empty())
+      co_return std::make_pair(0, std::vector<Model>());
+
     buildInsertSqlAndSetParams(objs, returning);
 
     auto queryResult = co_await Model::threadPool->submit(
-        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
+        [this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db_->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
@@ -30,6 +32,7 @@ public:
   }
 
 private:
+  db::IDatabase *db_ = Model::db;
   std::string sql_;
   std::vector<rukh::db::DbValue> params_;
 
@@ -60,11 +63,12 @@ private:
             auto handle = [&](auto &&c) {
               if (Model::pkAutoIncrement && c.name == Model::pkColumn().name)
                 return;
+              db::DbValue columnValue = db::toDbValue(obj.*c.fieldPtr);
               if (not first)
                 oss << ", ";
               first = false;
               oss << "?";
-              params_.push_back(obj.*c.fieldPtr);
+              params_.push_back(columnValue);
             };
             (handle(col), ...);
           },

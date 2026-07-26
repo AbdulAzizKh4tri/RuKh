@@ -1,16 +1,33 @@
 #pragma once
 
 #include <rukh/Exceptions.hpp>
+#include <rukh/concepts.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Column.hpp>
 
+namespace rukh::orm {
+
 template <typename Model, typename FieldT>
-bool hydrateOne(Model &obj, const rukh::orm::Column<FieldT, Model> &col, const rukh::db::Row &row) {
-  auto val = row.as<FieldT>(col.name); // std::optional<FieldT>
-  if (not val)
-    return false; // couldn't find column or wrong type
-  obj.*(col.fieldPtr) = std::move(*val);
-  return true;
+bool hydrateOne(Model &obj, const Column<FieldT, Model> &col, const db::Row &row) {
+  if constexpr (OptionalT<FieldT>) {
+    if (row.isNull(col.name)) {
+      obj.*(col.fieldPtr) = std::nullopt;
+      return true;
+    }
+    auto val = row.as<typename FieldT::value_type>(col.name);
+    if (not val) {
+      return false;
+    }
+    obj.*(col.fieldPtr) = *val;
+    return true;
+  } else {
+    auto val = row.as<FieldT>(col.name);
+    if (not val) {
+      return false;
+    }
+    obj.*(col.fieldPtr) = std::move(*val);
+    return true;
+  }
 }
 
 template <typename Model> Model hydrate(const rukh::db::Row &row) {
@@ -52,3 +69,5 @@ template <typename Model> std::vector<Model> hydrate(std::vector<rukh::db::Row> 
   }
   return result;
 }
+
+} // namespace rukh::orm

@@ -6,20 +6,20 @@
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
-#include <rukh/orm/Hydrator.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/WhereClause.hpp>
+#include <rukh/orm/hydrators.hpp>
 
 namespace rukh::orm {
 
 template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>> {
 public:
-  Task<std::pair<size_t, std::vector<Model>>> execute(rukh::db::IDatabase *db, const Model &obj,
-                                                      bool returning = false) {
+  Task<std::pair<size_t, std::vector<Model>>> execute(const Model &obj, bool returning = false) {
+
     buildUpdateSqlAndSetParams(obj, returning);
 
     auto queryResult = co_await Model::threadPool->submit(
-        [db, this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db->executeQuery(sql_, params_); });
+        [this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db_->executeQuery(sql_, params_); });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
@@ -36,6 +36,7 @@ public:
   }
 
 private:
+  db::IDatabase *db_ = Model::db;
   std::string sql_;
   std::vector<std::string> columns_;
   std::vector<rukh::db::DbValue> params_;
@@ -44,11 +45,14 @@ private:
     sql_ = sqlInit;
     params_.clear();
 
-    sql_ += modelColumnValueUpdateListString(obj);
+    sql_ += modelUpdateValueList(obj);
 
     if (this->wherePredicate) {
       sql_ += " WHERE ";
       sql_ += Predicate::resolvePredicates(*this->wherePredicate, params_);
+    } else {
+      throw rukh::OrmException("No where clause when Updating: " + Model::tableName +
+                               ". use where({{true}}) if you want to update all");
     }
 
     if (returning)
@@ -57,7 +61,7 @@ private:
     sql_ += ';';
   }
 
-  std::string modelColumnValueUpdateListString(const Model &obj) {
+  std::string modelUpdateValueList(const Model &obj) {
     std::ostringstream oss;
     bool first = true;
     std::apply(
@@ -68,12 +72,13 @@ private:
                 not columns_.empty() && std::find(columns_.begin(), columns_.end(), c.name) == columns_.end();
             if (isSkippedPk || notSelected)
               return;
+            db::DbValue columnValue = db::toDbValue(obj.*c.fieldPtr);
 
             if (not first)
               oss << ", ";
             first = false;
             oss << c.name << " = ?";
-            params_.push_back(obj.*c.fieldPtr);
+            params_.push_back(columnValue);
           };
           (handle(col), ...);
         },

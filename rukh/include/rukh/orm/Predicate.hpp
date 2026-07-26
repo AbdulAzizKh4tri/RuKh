@@ -2,17 +2,25 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/db/IDatabase.hpp>
+#include <rukh/orm/Column.hpp>
 
 namespace rukh::orm {
 
 struct Predicate {
-  enum class PredicateType { LEAF, AND, OR } predicateType;
+  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE } predicateType;
   static constexpr std::string validOps[] = {"=", "!=", ">", "<", ">=", "<=", "LIKE", "IN"};
 
   std::string column, op;          // only used if
   std::vector<db::DbValue> values; // Kind::Leaf
 
   std::vector<Predicate> children; // used if And/Or
+
+  Predicate(bool val) {
+    if (val)
+      predicateType = PredicateType::TRUE;
+    else
+      predicateType = PredicateType::FALSE;
+  }
 
   Predicate(const std::string &col, const std::string &op, const db::DbValue &val)
       : predicateType(PredicateType::LEAF), column(col) {
@@ -59,7 +67,7 @@ struct Predicate {
     return p;
   }
 
-  static std::string resolvePredicates(Predicate p, std::vector<db::DbValue> &out_params) {
+  static std::string resolvePredicates(const Predicate &p, std::vector<db::DbValue> &out_params) {
     if (p.predicateType == Predicate::PredicateType::LEAF) {
       std::string predicateString = " ";
       if (p.values.size() == 1) {
@@ -77,6 +85,10 @@ struct Predicate {
         predicateString += " ) ";
       }
       return predicateString;
+    } else if (p.predicateType == Predicate::PredicateType::TRUE) {
+      return "1 = 1";
+    } else if (p.predicateType == Predicate::PredicateType::FALSE) {
+      return "1 = 0";
     }
 
     std::string s = "(";

@@ -670,7 +670,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       query.orderBy(orderBy);
 
     // Execute query in thread pool to avoid blocking the event loop
-    auto users = co_await query.get(db);
+    auto users = co_await query.get();
 
     if (not users) {
       auto res = HttpResponse(500, json{{"error", "Database error"}}.dump());
@@ -686,6 +686,95 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     // Build response as array of user objects
     co_return HttpResponse(200, "application/json", arr.dump());
+  });
+
+  router.get("/tests/db/full_test", [threadPool, db](const HttpRequest &request) -> Task<Response> {
+    auto fail = [](const std::string &step, const std::string &detail) {
+      SPDLOG_ERROR("[full_test] FAILED at '{}': {}", step, detail);
+      return HttpResponse(500, "application/json", json{{"error", step}, {"detail", detail}}.dump());
+    };
+
+    auto query = models::User::all();
+
+    // --- 0. Start from a known-empty table so the test is idempotent ---
+    co_await models::User::bulkDestroy({true});
+    auto startCount = co_await query.count();
+    if (startCount != 0)
+      co_return fail("cleanup", "expected 0 rows, got " + std::to_string(startCount));
+
+    // --- 1. Single insert, including a nullable field left unset ---
+    models::User alice;
+    alice.name = "Alice";
+    alice.email = "alice@example.com";
+    alice.age = std::nullopt;
+    alice.password = "secret";
+    alice.createdAt = 124;
+
+    if (not co_await alice.save())
+      co_return fail("single insert", "save() returned false");
+    if (alice.id <= 0)
+      co_return fail("single insert", "id not populated after insert");
+
+    // --- 2. Single find, verify nullable round-trips as empty ---
+    auto found = co_await models::User::find(alice.id);
+    if (not found)
+      co_return fail("single find", "find() returned nullopt");
+    if (found->age.has_value())
+      co_return fail("single find", "age should be null, got " + std::to_string(*found->age));
+    if (found->name != "Alice")
+      co_return fail("single find", "name mismatch: " + found->name.value_or("<unknown>"));
+
+    // --- 3. Single update: set a previously-null field, null out a previously-set one ---
+    alice = *found;
+    alice.age = 20;
+    alice.password = std::nullopt;
+    if (not co_await alice.save())
+      co_return fail("single update", "save() returned false");
+
+    found = co_await models::User::find(alice.id);
+    if (not found or found->age != 20)
+      co_return fail("single update", "age not updated");
+    if (found->password.has_value())
+      co_return fail("single update", "password should be null after update");
+
+    // --- 4. Single destroy ---
+    if (not co_await alice.destroy())
+      co_return fail("single destroy", "destroy() returned false");
+    if (auto c = co_await query.count(); c != 0)
+      co_return fail("single destroy", "expected 0 rows, got " + std::to_string(c));
+
+    // --- 5. Bulk insert ---
+    std::vector<models::User> batch;
+    batch.push_back({.name = "Alice", .email = "alice@example.com", .createdAt = 124});
+    batch.push_back({.name = "Bob", .email = "bob@example.com", .createdAt = 123});
+
+    auto [insertedCount, insertedRows] = co_await models::User::bulkInsert(batch);
+    if (insertedCount != 2)
+      co_return fail("bulk insert", "expected 2 rows, got " + std::to_string(insertedCount));
+
+    // --- 6. Bulk update, verify it actually applied ---
+    models::User patch;
+    patch.name = "x";
+    patch.password = "1234";
+    auto [updatedCount, updatedRows] = co_await models::User::bulkUpdate(patch, {"name", "password"}, {true});
+    if (updatedCount != 2)
+      co_return fail("bulk update", "expected 2 rows, got " + std::to_string(updatedCount));
+
+    auto afterUpdate = co_await query.get();
+    if (not afterUpdate)
+      co_return fail("bulk update", "get() failed");
+    for (auto &u : *afterUpdate)
+      if (u.name != "x")
+        co_return fail("bulk update", "row id " + std::to_string(u.id) + " not updated");
+
+    // --- 7. Bulk destroy, verify table is empty again ---
+    auto [destroyedCount, destroyedRows] = co_await models::User::bulkDestroy({true});
+    if (destroyedCount != 2)
+      co_return fail("bulk destroy", "expected 2 rows, got " + std::to_string(destroyedCount));
+    if (auto c = co_await query.count(); c != 0)
+      co_return fail("bulk destroy", "expected 0 rows, got " + std::to_string(c));
+
+    co_return HttpResponse(200, "application/json", json{{"message", "all assertions passed"}}.dump());
   });
 
   // POST /tests/db/insert

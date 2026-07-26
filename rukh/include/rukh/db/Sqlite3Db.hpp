@@ -107,7 +107,6 @@ public:
         result.rows.push_back(std::move(row));
         first = false;
       } else if (rc == SQLITE_DONE) {
-        result.affectedRows = sqlite3_changes(db);
         break;
       } else if (rc == SQLITE_BUSY) {
         return std::unexpected(DatabaseError{DatabaseError::ErrorType::DB_BUSY, "Database is busy"});
@@ -115,6 +114,8 @@ public:
         throw DatabaseException("SQL error: " + std::string(sqlite3_errmsg(db)));
       }
     }
+
+    result.affectedRows = sqlite3_changes(db);
     return result;
   }
 
