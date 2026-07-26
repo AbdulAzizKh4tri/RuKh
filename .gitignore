@@ -11,4 +11,5 @@ external/
 *.mp4
 *.webm
 *.gif
+*/test.db-*
 tetherIP.hpp
