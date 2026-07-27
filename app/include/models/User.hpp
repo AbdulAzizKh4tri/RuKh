@@ -38,13 +38,6 @@ struct User : ActiveRecord<User, int64_t> {
         Column{"email", &User::email}, Column{"password", &User::password}, Column{"created_at", &User::createdAt}};
   }
 
-  template <auto FieldPtr> static constexpr std::string columnNameOf() {
-    std::string result;
-    std::apply([&](auto &&...col) { ((col.fieldPtr == FieldPtr ? (result = col.name, void()) : void()), ...); },
-               columns());
-    return result;
-  }
-
   std::string toString() const {
     return std::to_string(id) + ": " + name.value_or("null") + " " + email.value_or("null") + " " +
            std::to_string(age.value_or(0)) + " " + password.value_or("null");

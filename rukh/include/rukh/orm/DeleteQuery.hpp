@@ -12,7 +12,7 @@
 
 namespace rukh::orm {
 
-template <typename Model> class DeleteQuery : public WhereClause<DeleteQuery<Model>> {
+template <typename Model> class DeleteQuery : public WhereClause<Model, DeleteQuery<Model>> {
 public:
   Task<std::pair<size_t, std::vector<Model>>> execute(bool returning = false) {
 
@@ -29,6 +29,13 @@ public:
     co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }
 
+  DeleteQuery<Model> &reset() {
+    this->whereChanged = true;
+    this->wherePredicate = std::nullopt;
+    params_.clear();
+    return *this;
+  }
+
 private:
   db::IDatabase *db_ = Model::db;
   std::string sql_;
@@ -40,7 +47,7 @@ private:
 
     if (this->wherePredicate) {
       sql_ += " WHERE ";
-      sql_ += Predicate::resolvePredicates(*this->wherePredicate, params_);
+      sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, params_);
     } else {
       throw rukh::OrmException("No where clause when deleting: " + Model::tableName +
                                ". use where({{true}}) if you want to delete all");

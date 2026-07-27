@@ -12,7 +12,7 @@
 
 namespace rukh::orm {
 
-template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>> {
+template <typename Model> class UpdateQuery : public WhereClause<Model, UpdateQuery<Model>> {
 public:
   Task<std::pair<size_t, std::vector<Model>>> execute(const Model &obj, bool returning = false) {
 
@@ -35,6 +35,14 @@ public:
     return *this;
   }
 
+  UpdateQuery<Model> &reset() {
+    this->whereChanged = true;
+    this->wherePredicate = std::nullopt;
+    columns_.clear();
+    params_.clear();
+    return *this;
+  }
+
 private:
   db::IDatabase *db_ = Model::db;
   std::string sql_;
@@ -49,7 +57,7 @@ private:
 
     if (this->wherePredicate) {
       sql_ += " WHERE ";
-      sql_ += Predicate::resolvePredicates(*this->wherePredicate, params_);
+      sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, params_);
     } else {
       throw rukh::OrmException("No where clause when Updating: " + Model::tableName +
                                ". use where({{true}}) if you want to update all");

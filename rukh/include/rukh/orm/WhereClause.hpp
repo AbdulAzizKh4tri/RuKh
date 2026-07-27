@@ -6,9 +6,9 @@
 
 namespace rukh::orm {
 
-template <typename Derived> class WhereClause {
+template <typename Model, typename Derived> class WhereClause {
 public:
-  Derived &where(const Predicate &p) {
+  Derived &where(const Predicate<Model> &p) {
     whereChanged = true;
     if (not wherePredicate.has_value())
       wherePredicate = p;
@@ -17,12 +17,12 @@ public:
     return static_cast<Derived &>(*this);
   }
 
-  Derived &andWhere(const Predicate &p) {
+  Derived &andWhere(const Predicate<Model> &p) {
     whereChanged = true;
     return where(p);
   }
 
-  Derived &orWhere(const Predicate &p) {
+  Derived &orWhere(const Predicate<Model> &p) {
     whereChanged = true;
     if (not wherePredicate.has_value())
       wherePredicate = p;
@@ -33,7 +33,7 @@ public:
 
 protected:
   bool whereChanged = true;
-  std::optional<Predicate> wherePredicate = std::nullopt;
+  std::optional<Predicate<Model>> wherePredicate = std::nullopt;
 };
 
 } // namespace rukh::orm
