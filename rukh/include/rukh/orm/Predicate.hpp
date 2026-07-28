@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rukh/db/DbTypes.hpp"
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
@@ -18,7 +19,6 @@ enum class Operator {
   GREATER_OR_EQUAL,
   LESSER_OR_EQUAL,
   LIKE,
-  I_LIKE,
   IN,
   NOT_IN,
   IS_NULL,
@@ -26,8 +26,8 @@ enum class Operator {
   BETWEEN
 };
 
-static constexpr std::string_view opStrings[] = {"=",    "!=", ">",      "<",       ">=",          "<=",     "LIKE",
-                                                 "LIKE", "IN", "NOT IN", "IS NULL", "IS NOT NULL", "BETWEEN"};
+static constexpr std::string_view opStrings[] = {
+    "=", "!=", ">", "<", ">=", "<=", "LIKE", "IN", "NOT IN", "IS NULL", "IS NOT NULL", "BETWEEN"};
 constexpr std::string_view to_string(Operator op) { return opStrings[static_cast<std::size_t>(op)]; }
 
 constexpr bool isGroupOperator(Operator op) {
@@ -42,15 +42,18 @@ constexpr bool isGroupOperator(Operator op) {
 }
 
 template <typename Model> struct Predicate {
-  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE } predicateType;
+  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE, STRING } predicateType;
 
-  std::string column;
+  std::string column, customString;
   Operator op;                     // only used if
   std::vector<db::DbValue> values; // Kind::Leaf
                                    //
   std::vector<Predicate> children; // used if And/Or
 
   //===============CONSTRUCTORS===============
+
+  Predicate(const std::string &str, const std::vector<db::DbValue> &values)
+      : predicateType(PredicateType::STRING), customString(str), values(values) {}
 
   Predicate(bool val) {
     if (val)
@@ -128,135 +131,149 @@ template <typename Model> struct Predicate {
   static Predicate<Model> falsePredicate() { return Predicate(false); }
 
   static Predicate<Model> in(const std::string &col, const std::vector<db::DbValue> &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
     return Predicate(col, Operator::IN, val);
   }
-  static Predicate<Model> notIn(const std::string &col, const std::vector<db::DbValue> &val) {
-    return Predicate<Model>(col, Operator::NOT_IN, val);
-  }
-
-  static Predicate<Model> equals(const std::string &col, const db::DbValue &val) {
-    return Predicate(col, Operator::EQUALS, val);
-  }
-
-  static Predicate<Model> notEquals(const std::string &col, const db::DbValue &val) {
-    return Predicate(col, Operator::NOT_EQUALS, val);
-  }
-
-  static Predicate<Model> greater(const std::string &col, const db::DbValue &val) {
-    return Predicate(col, Operator::GREATER, val);
-  }
-
-  static Predicate<Model> lesser(const std::string &col, const db::DbValue &val) {
-    return Predicate(col, Operator::LESSER, val);
-  }
-
-  static Predicate<Model> greaterOrEqual(const std::string &col, const db::DbValue &val) {
-    return Predicate(col, Operator::GREATER_OR_EQUAL, val);
-  }
-
-  static Predicate<Model> lesserOrEqual(const std::string &col, const db::DbValue &val) {
-    return Predicate(col, Operator::LESSER_OR_EQUAL, val);
-  }
-
-  static Predicate<Model> like(const std::string &col, const db::DbValue &val) {
-    if (not std::holds_alternative<std::string>(val))
-      throw rukh::OrmException("Predicate Construction: like() only supports strings");
-    return Predicate(col, Operator::LIKE, val);
-  }
-
-  static Predicate<Model> ilike(const std::string &col, const db::DbValue &val) {
-    if (not std::holds_alternative<std::string>(val))
-      throw rukh::OrmException("Predicate Construction: ilike() only supports strings");
-    return Predicate(col, Operator::I_LIKE, val);
-  }
-
-  static Predicate<Model> contains(const std::string &col, const db::DbValue &val) {
-    if (not std::holds_alternative<std::string>(val))
-      throw rukh::OrmException("Predicate Construction: contains() only supports strings");
-    return Predicate(col, Operator::LIKE, val);
-  }
-
-  static Predicate<Model> iContains(const std::string &col, const db::DbValue &val) {
-    if (not std::holds_alternative<std::string>(val))
-      throw rukh::OrmException("Predicate Construction: iContains() only supports strings");
-    return Predicate(col, Operator::I_LIKE, val);
-  }
-
-  static Predicate<Model> startsWith(const std::string &col, const db::DbValue &val) {
-    if (auto valStr = std::get_if<std::string>(&val))
-      return Predicate(col, Operator::LIKE, *valStr + '&');
-
-    throw rukh::OrmException("Predicate Construction: startsWith() only supports strings");
-  }
-
-  static Predicate<Model> endsWith(const std::string &col, const db::DbValue &val) {
-    if (auto valStr = std::get_if<std::string>(&val))
-      return Predicate(col, Operator::LIKE, '%' + *valStr);
-
-    throw rukh::OrmException("Predicate Construction: endsWith() only supports strings");
-  }
-
-  static Predicate<Model> between(const std::string &col, const db::DbValue &val1, const db::DbValue &val2) {
-    return Predicate<Model>(col, Operator::BETWEEN, {val1, val2});
-  }
-
   template <typename FieldT> static Predicate<Model> in(FieldT Model::*fieldPtr, const std::vector<db::DbValue> &val) {
     return in(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> notIn(const std::string &col, const std::vector<db::DbValue> &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate<Model>(col, Operator::NOT_IN, val);
+  }
   template <typename FieldT>
   static Predicate<Model> notIn(FieldT Model::*fieldPtr, const std::vector<db::DbValue> &val) {
     return notIn(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> equals(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate(col, Operator::EQUALS, val);
+  }
   template <typename FieldT> static Predicate<Model> equals(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return equals(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> notEquals(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate(col, Operator::NOT_EQUALS, val);
+  }
   template <typename FieldT> static Predicate<Model> notEquals(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return notEquals(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> greater(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate(col, Operator::GREATER, val);
+  }
   template <typename FieldT> static Predicate<Model> greater(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return greater(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> lesser(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate(col, Operator::LESSER, val);
+  }
   template <typename FieldT> static Predicate<Model> lesser(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return lesser(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> greaterOrEqual(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate(col, Operator::GREATER_OR_EQUAL, val);
+  }
   template <typename FieldT> static Predicate<Model> greaterOrEqual(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return greaterOrEqual(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> lesserOrEqual(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate(col, Operator::LESSER_OR_EQUAL, val);
+  }
   template <typename FieldT> static Predicate<Model> lesserOrEqual(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return lesserOrEqual(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> like(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    if (not std::holds_alternative<std::string>(val))
+      throw rukh::OrmException("Predicate Construction: like() only supports strings");
+    return Predicate(col, Operator::LIKE, val);
+  }
   template <typename FieldT> static Predicate<Model> like(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return like(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> ilike(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    if (auto valStr = std::get_if<std::string>(&val))
+      return Predicate(" LOWER(" + col + ") LIKE ? ESCAPE '\\'", toLowerCase(*valStr));
+    throw rukh::OrmException("Predicate Construction: ilike() only supports strings");
+  }
   template <typename FieldT> static Predicate<Model> ilike(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return ilike(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> contains(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    if (auto valStr = std::get_if<std::string>(&val))
+      return Predicate(col, Operator::LIKE, '%' + *valStr + '%');
+    throw rukh::OrmException("Predicate Construction: contains() only supports strings");
+  }
   template <typename FieldT> static Predicate<Model> contains(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return contains(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> iContains(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    if (auto valStr = std::get_if<std::string>(&val))
+      return Predicate("LOWER(" + col + ") LIKE ? ESCAPE '\\'", '%' + toLowerCase(*valStr) + '%');
+    throw rukh::OrmException("Predicate Construction: iContains() only supports strings");
+  }
   template <typename FieldT> static Predicate<Model> iContains(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return iContains(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> startsWith(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    if (auto valStr = std::get_if<std::string>(&val))
+      return Predicate(col, Operator::LIKE, *valStr + '%');
+    throw rukh::OrmException("Predicate Construction: startsWith() only supports strings");
+  }
   template <typename FieldT> static Predicate<Model> startsWith(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return startsWith(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> endsWith(const std::string &col, const db::DbValue &val) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    if (auto valStr = std::get_if<std::string>(&val))
+      return Predicate(col, Operator::LIKE, '%' + *valStr);
+    throw rukh::OrmException("Predicate Construction: endsWith() only supports strings");
+  }
   template <typename FieldT> static Predicate<Model> endsWith(FieldT Model::*fieldPtr, const db::DbValue &val) {
     return endsWith(Model::columnNameOf(fieldPtr), val);
   }
 
+  static Predicate<Model> between(const std::string &col, const db::DbValue &val1, const db::DbValue &val2) {
+    if (not Model::isValidColumnName(col))
+      throw rukh::OrmException("Predicate Construction: Invalid column name.");
+    return Predicate<Model>(col, Operator::BETWEEN, {val1, val2});
+  }
   template <typename FieldT>
   static Predicate<Model> between(FieldT Model::*fieldPtr, const db::DbValue &val1, const db::DbValue &val2) {
     return between(Model::columnNameOf(fieldPtr), val1, val2);
@@ -269,13 +286,6 @@ template <typename Model> struct Predicate {
       if (p.values.empty()) {
         predicateString += p.column + " " + std::string(to_string(p.op));
       } else if (p.values.size() == 1) {
-        if (p.op == Operator::I_LIKE) {
-          predicateString += "LOWER(" + (p.column) + ") LIKE LOWER(?) ";
-          predicateString += " ESCAPE '\\' ";
-          out_params.push_back(p.values[0]);
-          return predicateString;
-        }
-
         out_params.push_back(p.values[0]);
         predicateString += p.column + " " + std::string(to_string(p.op)) + " ? ";
 
@@ -301,10 +311,13 @@ template <typename Model> struct Predicate {
         predicateString += " ) ";
       }
       return predicateString;
+    } else if (p.predicateType == Predicate::PredicateType::STRING) {
+      out_params.insert(out_params.end(), p.values.begin(), p.values.end());
+      return ' ' + p.customString + ' ';
     } else if (p.predicateType == Predicate::PredicateType::TRUE) {
-      return "1 = 1";
+      return " TRUE ";
     } else if (p.predicateType == Predicate::PredicateType::FALSE) {
-      return "1 = 0";
+      return " FALSE ";
     }
 
     std::string s = "(";

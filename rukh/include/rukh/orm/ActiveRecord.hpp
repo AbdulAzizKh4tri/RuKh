@@ -4,6 +4,7 @@
 
 #include <rukh/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
+#include <rukh/db/ITransaction.hpp>
 
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
@@ -19,63 +20,72 @@ template <typename Model, typename pkType> class ActiveRecord {
 public:
   using pk = pkType;
 
-  static Task<std::optional<Model>> find(pkType pkVal) {
+  static Task<std::optional<Model>> find(pkType pkVal, db::ITransaction *transaction = nullptr) {
     Column<pkType, Model> pkColumn = Model::pkColumn();
-    co_return co_await SelectQuery<Model>().where(Predicate<Model>::equals(pkColumn.fieldPtr, pkVal)).first();
+    co_return co_await SelectQuery<Model>()
+        .where(Predicate<Model>::equals(pkColumn.fieldPtr, pkVal))
+        .first(transaction);
   }
 
   static SelectQuery<Model> all() { return SelectQuery<Model>(); }
   static SelectQuery<Model> filter(const Predicate<Model> &p) { return SelectQuery<Model>().where(p); }
 
-  static Task<std::pair<size_t, std::vector<Model>>> bulkInsert(const std::vector<Model> &objs) {
+  static Task<std::pair<size_t, std::vector<Model>>> bulkInsert(const std::vector<Model> &objs,
+                                                                db::ITransaction *transaction = nullptr) {
     InsertQuery<Model> query;
-    co_return co_await query.execute(objs, true);
+    co_return co_await query.execute(objs, transaction, true);
   }
 
-  static Task<std::pair<size_t, std::vector<Model>>>
-  bulkUpdate(const Model &newObj, const std::vector<std::string> &columns, const Predicate<Model> &p) {
+  static Task<std::pair<size_t, std::vector<Model>>> bulkUpdate(const Model &newObj,
+                                                                const std::vector<std::string> &columns,
+                                                                const Predicate<Model> &p,
+                                                                db::ITransaction *transaction = nullptr) {
     UpdateQuery<Model> query;
     for (auto &col : columns)
       query.column(col);
-    co_return co_await query.where(p).execute(newObj, true);
+    co_return co_await query.where(p).execute(newObj, transaction, true);
   }
 
-  static Task<std::pair<size_t, std::vector<Model>>> bulkDestroy(const Predicate<Model> &p) {
+  static Task<std::pair<size_t, std::vector<Model>>> bulkDestroy(const Predicate<Model> &p,
+                                                                 db::ITransaction *transaction = nullptr) {
     DeleteQuery<Model> query;
-    co_return co_await query.where(p).execute(true);
+    co_return co_await query.where(p).execute(transaction, true);
   }
 
-  Task<bool> save() {
+  Task<bool> save(db::ITransaction *transaction = nullptr) {
+    // if called inside a transaction that is later rolled back, this object's persisted_/id will not reflect that — do
+    // not reuse a model object after a rollback without re-fetching it.
+
     if (persisted_)
-      co_return co_await update();
+      co_return co_await update(transaction);
     else
-      co_return co_await insert();
+      co_return co_await insert(transaction);
   }
 
-  Task<bool> insert() {
+  Task<bool> insert(db::ITransaction *transaction = nullptr) {
     Model *self = static_cast<Model *>(this);
     InsertQuery<Model> query;
     std::vector<Model> inputObjs{*self};
-    auto [rowsAffected, objs] = co_await query.execute(inputObjs, true);
+    auto [rowsAffected, objs] = co_await query.execute(inputObjs, transaction, true);
     if (rowsAffected > 0)
       self->id = objs[0].id;
     setPersisted();
     co_return rowsAffected > 0;
   }
 
-  Task<bool> update() {
+  Task<bool> update(db::ITransaction *transaction = nullptr) {
     auto pkColumn = Model::pkColumn();
     Model *self = static_cast<Model *>(this);
     Predicate p(pkColumn.fieldPtr, Operator::EQUALS, self->*pkColumn.fieldPtr);
-    auto [rowsAffected, _] = co_await UpdateQuery<Model>().where(p).execute(*self);
+    auto [rowsAffected, _] = co_await UpdateQuery<Model>().where(p).execute(*self, transaction);
     co_return rowsAffected > 0;
   }
 
-  Task<bool> destroy() {
+  Task<bool> destroy(db::ITransaction *transaction = nullptr) {
     auto pkColumn = Model::pkColumn();
     Model *self = static_cast<Model *>(this);
     Predicate p(pkColumn.fieldPtr, Operator::EQUALS, self->*pkColumn.fieldPtr);
-    auto [rowsAffected, _] = co_await DeleteQuery<Model>().where(p).execute();
+    auto [rowsAffected, _] = co_await DeleteQuery<Model>().where(p).execute(transaction);
     co_return rowsAffected > 0;
   }
 
@@ -117,6 +127,7 @@ public:
   }
 
   void setPersisted() { persisted_ = true; }
+  void resetPersisted() { persisted_ = false; }
 
 private:
   bool persisted_ = false;

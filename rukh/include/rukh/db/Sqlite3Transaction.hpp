@@ -1,63 +1,39 @@
 #pragma once
 
-#include "rukh/db/ITransaction.hpp"
-#include <cstdint>
-#include <memory>
-#include <spdlog/spdlog.h>
-#include <sqlite3.h>
-#include <string>
-#include <unordered_map>
-
 #include <rukh/Exceptions.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
-#include <rukh/db/Sqlite3Transaction.hpp>
+#include <rukh/db/ITransaction.hpp>
+#include <rukh/db/Sqlite3Db.hpp>
 #include <rukh/db/Sqlite3Types.hpp>
+#include <spdlog/spdlog.h>
 
 namespace rukh::db {
 // TODO: handle exec() errors
 
-const int SQLITE3_BUSY_TIMEOUT = 5000; // ms to wait on SQLITE_BUSY instead of failing immediately
-
-class Sqlite3Db : public IDatabase {
+class Sqlite3Transaction : public ITransaction {
 public:
-  Sqlite3Db(const std::string &filename, int poolSize = 4) {
-    for (int i = 0; i < poolSize; i++) {
-      sqlite3 *db;
-      int rc = sqlite3_open_v2(filename.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
-      if (rc) {
-        if (db)
-          sqlite3_close(db);
-        throw DatabaseException("Can't open database");
-      }
-
-      sqlite3_busy_timeout(db, SQLITE3_BUSY_TIMEOUT);
-
-      auto conn = new Connection();
-      conn->dbConnection = db;
-      connectionQueue_.addConnection(conn);
-    }
-
-    Connection *conn = acquireConnection();
-    sqlite3_exec(conn->dbConnection, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
-    releaseConnection(conn);
+  Sqlite3Transaction(Connection *conn) : conn_(conn) {
+    if (not begin("DEFERRED"))
+      throw DatabaseException("Failed to begin transaction");
   }
 
   std::expected<QueryResult, DatabaseError> executeQuery(const std::string &sql,
-                                                         const std::vector<DbValue> &params = {}) override {
-    Connection *conn = acquireConnection();
+                                                         const std::vector<DbValue> params = {}) override {
+    if (isTransactionEnded())
+      throw DatabaseException("Transaction already ended");
 
-    ConnectionReleaseGuard connectionGuard{conn, &connectionQueue_};
-    sqlite3 *db = conn->dbConnection;
-    std::unordered_map<std::string, sqlite3_stmt *> &statements = conn->statements;
+    TransactionLockGuard guard{this};
+    sqlite3 *dbConnection = conn_->dbConnection;
+    std::unordered_map<std::string, sqlite3_stmt *> &statements = conn_->statements;
 
     sqlite3_stmt *stmt;
     if (statements.contains(sql)) {
       stmt = statements[sql];
     } else {
-      int rc = sqlite3_prepare_v3(db, sql.c_str(), -1, SQLITE_PREPARE_PERSISTENT, &stmt, nullptr);
+      int rc = sqlite3_prepare_v3(dbConnection, sql.c_str(), -1, SQLITE_PREPARE_PERSISTENT, &stmt, nullptr);
       if (rc != SQLITE_OK) {
-        std::string err = sqlite3_errmsg(db);
+        std::string err = sqlite3_errmsg(dbConnection);
         SPDLOG_ERROR("SQL error: {}", err);
         return std::unexpected(DatabaseError{DatabaseError::ErrorType::QUERY_ERROR, err});
       }
@@ -116,39 +92,92 @@ public:
       } else if (rc == SQLITE_BUSY) {
         return std::unexpected(DatabaseError{DatabaseError::ErrorType::DB_BUSY, "Database is busy"});
       } else {
-        throw DatabaseException("SQL error: " + std::string(sqlite3_errmsg(db)));
+        throw DatabaseException("SQL error: " + std::string(sqlite3_errmsg(dbConnection)));
       }
     }
 
-    result.affectedRows = sqlite3_changes(db);
+    result.affectedRows = sqlite3_changes(dbConnection);
     return result;
   }
 
-  std::unique_ptr<ITransaction> startTransaction() override {
-    return std::make_unique<Sqlite3Transaction>(acquireConnection());
-  };
+  bool begin(const std::string &mode) override {
+    if (isTransactionEnded())
+      throw DatabaseException("Transaction already ended");
 
-  void endTransaction(std::unique_ptr<ITransaction> transaction) override {
-    if (transaction == nullptr) {
-      SPDLOG_WARN("Attempted to end null Transaction");
-      return;
+    std::string sql = "BEGIN TRANSACTION " + mode + ";";
+    TransactionLockGuard guard{this};
+    char *errMsg = nullptr;
+    int rc = sqlite3_exec(conn_->dbConnection, sql.c_str(), nullptr, nullptr, &errMsg);
+    if (rc != SQLITE_OK) {
+      SPDLOG_ERROR("SQLite error ({}): {}", rc, errMsg ? errMsg : "Unknown error");
+      sqlite3_free(errMsg);
+      return false;
     }
-
-    Sqlite3Transaction *t = dynamic_cast<Sqlite3Transaction *>(transaction.get());
-    if (t == nullptr) {
-      SPDLOG_ERROR("endTransaction() called with a Transaction not created by Sqlite3Db");
-      return;
-    }
-
-    releaseConnection(t->getConnection());
-    transaction.reset();
+    return true;
   }
 
-  Connection *acquireConnection() { return connectionQueue_.acquire(); }
-  void releaseConnection(Connection *conn) { connectionQueue_.release(conn); }
+  bool commit() override {
+    if (isTransactionEnded()) {
+      SPDLOG_WARN("Attempted to commit ended Transaction");
+      return false;
+    }
+    TransactionLockGuard guard{this};
+    char *errMsg = nullptr;
+    int rc = sqlite3_exec(conn_->dbConnection, "COMMIT;", nullptr, nullptr, &errMsg);
+    if (rc != SQLITE_OK) {
+      SPDLOG_ERROR("SQLite error ({}): {}", rc, errMsg ? errMsg : "Unknown error");
+      sqlite3_free(errMsg);
+      return false;
+    }
+    ended_ = true;
+    return true;
+  }
+
+  bool rollback() override {
+    if (isTransactionEnded()) {
+      SPDLOG_WARN("Attempted to rollback ended Transaction");
+      return false;
+    }
+    TransactionLockGuard guard{this};
+    char *errMsg = nullptr;
+    int rc = sqlite3_exec(conn_->dbConnection, "ROLLBACK;", nullptr, nullptr, &errMsg);
+    if (rc != SQLITE_OK) {
+      SPDLOG_ERROR("SQLite error ({}): {}", rc, errMsg ? errMsg : "Unknown error");
+      sqlite3_free(errMsg);
+      return false;
+    }
+    ended_ = true;
+    return true;
+  }
+
+  bool isTransactionEnded() const override { return ended_; }
+
+  Connection *getConnection() { return conn_; }
 
 private:
-  ConnectionQueue connectionQueue_;
+  Connection *conn_;
+  std::atomic<bool> busy_;
+  std::mutex mutex_;
+  std::condition_variable cv_;
+  bool ended_ = false;
+
+  struct TransactionLockGuard {
+    Sqlite3Transaction *t;
+    TransactionLockGuard(Sqlite3Transaction *t) : t(t) { t->acquireTransaction(); }
+    ~TransactionLockGuard() { t->releaseTransaction(); }
+  };
+
+  void acquireTransaction() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    cv_.wait(lock, [this] { return not busy_; });
+    busy_ = true;
+  }
+
+  void releaseTransaction() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    busy_ = false;
+    cv_.notify_one();
+  }
 
   void bindQueryParam(sqlite3_stmt *stmt, int index, const std::vector<DbValue> &params) {
     if (std::holds_alternative<int64_t>(params[index])) {

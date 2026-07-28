@@ -11,6 +11,8 @@
 #include <rukh/ThreadPool.hpp>
 
 #include <rukh/db/IDatabase.hpp>
+#include <rukh/db/ITransaction.hpp>
+#include <rukh/db/ScopedTransaction.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/SelectQuery.hpp>
 
@@ -699,35 +701,111 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
   });
 
   router.get("/tests/db/full_test", [threadPool, db](const HttpRequest &request) -> Task<Response> {
+    using namespace models;
+    using P = Predicate<User>;
+
     auto fail = [](const std::string &step, const std::string &detail) {
       SPDLOG_ERROR("[full_test] FAILED at '{}': {}", step, detail);
       return HttpResponse(500, "application/json", json{{"error", step}, {"detail", detail}}.dump());
     };
 
-    auto query = models::User::all();
+    auto query = User::all();
+
+    User bob;
+    bob.name = "bob";
+    bob.email = "bob@example.com";
+    bob.age = std::nullopt;
+    bob.password = "secret";
+    bob.createdAt = 124;
+
+    {
+      db::ScopedTransaction transaction(db);
+      try {
+        co_await bob.save(*transaction);
+        if (not transaction->commit())
+          co_return fail("after bob save", "commit() returned false");
+      } catch (const std::exception &ex) {
+        if (not transaction->rollback())
+          co_return fail("after bob save", "rollback() returned false");
+      }
+    }
+
+    if ((co_await User::find(bob.id))->createdAt != 124)
+      co_return fail("after bob save", "expected createdAt to be 124");
+
+    bob.createdAt = 123;
+
+    {
+      db::ScopedTransaction transaction(db);
+      try {
+        co_await bob.save(*transaction);
+        if ((co_await User::find(bob.id))->createdAt != 124)
+          co_return fail("outside transaction, before Error", "expected createdAt to still be 124");
+
+        if ((co_await User::find(bob.id, *transaction))->createdAt != 123)
+          co_return fail("inside transaction, before Error", "expected createdAt to be 123");
+        throw std::runtime_error("test");
+        if (not transaction->commit())
+          co_return fail("inside transaction, after Error", "commit() returned false");
+      } catch (const std::exception &ex) {
+        if (not transaction->rollback())
+          co_return fail("inside transaction, after Error", "rollback() returned false");
+      }
+    }
+
+    if ((co_await User::find(bob.id))->createdAt != 124)
+      co_return fail("after transaction", "expected createdAt to be 124 due to rollback");
+
+    // --- Insert-then-rollback: demonstrates the documented persisted_/id staleness caveat ---
+    User carol;
+    carol.name = "carol";
+    carol.email = "carol@example.com";
+    carol.age = std::nullopt;
+    carol.password = "secret";
+    carol.createdAt = 125;
+
+    {
+      db::ScopedTransaction transaction(db);
+      try {
+        if (not co_await carol.save(*transaction))
+          co_return fail("carol insert", "save() returned false");
+        if (carol.id <= 0)
+          co_return fail("carol insert", "id not populated after insert inside transaction");
+
+        throw std::runtime_error("force rollback");
+      } catch (const std::exception &ex) {
+        if (not transaction->rollback())
+          co_return fail("carol insert rollback", "rollback() returned false");
+      }
+    }
+
+    // carol.id is still populated in memory even though the row never actually landed —
+    // this is the caveat: don't reuse carol without re-fetching after a rollback.
+    if (co_await User::find(carol.id))
+      co_return fail("carol insert rollback", "expected row to not exist after rollback, but find() succeeded");
+
+    User alice;
+    alice.name = "Alice";
+    alice.email = "alice@example.com";
+    alice.age = std::nullopt;
+    alice.password = "secret";
+    alice.createdAt = 124;
 
     try {
       // --- 0. Start from a known-empty table so the test is idempotent ---
-      co_await models::User::bulkDestroy({true});
+      co_await User::bulkDestroy({true});
       auto startCount = co_await query.count();
       if (startCount != 0)
         co_return fail("cleanup", "expected 0 rows, got " + std::to_string(startCount));
 
       // --- 1. Single insert, including a nullable field left unset ---
-      models::User alice;
-      alice.name = "Alice";
-      alice.email = "alice@example.com";
-      alice.age = std::nullopt;
-      alice.password = "secret";
-      alice.createdAt = 124;
-
       if (not co_await alice.save())
         co_return fail("single insert", "save() returned false");
       if (alice.id <= 0)
         co_return fail("single insert", "id not populated after insert");
 
       // --- 2. Single find, verify nullable round-trips as empty ---
-      auto found = co_await models::User::find(alice.id);
+      auto found = co_await User::find(alice.id);
       if (not found)
         co_return fail("single find", "find() returned nullopt");
       if (found->age.has_value())
@@ -742,7 +820,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       if (not co_await alice.save())
         co_return fail("single update", "save() returned false");
 
-      found = co_await models::User::find(alice.id);
+      found = co_await User::find(alice.id);
       if (not found or found->age != 20)
         co_return fail("single update", "age not updated");
       if (found->password.has_value())
@@ -755,19 +833,19 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
         co_return fail("single destroy", "expected 0 rows, got " + std::to_string(c));
 
       // --- 5. Bulk insert ---
-      std::vector<models::User> batch;
+      std::vector<User> batch;
       batch.push_back({.name = "Alice", .email = "alice@example.com", .createdAt = 124});
       batch.push_back({.name = "Bob", .email = "bob@example.com", .createdAt = 123});
 
-      auto [insertedCount, insertedRows] = co_await models::User::bulkInsert(batch);
+      auto [insertedCount, insertedRows] = co_await User::bulkInsert(batch);
       if (insertedCount != 2)
         co_return fail("bulk insert", "expected 2 rows, got " + std::to_string(insertedCount));
 
       // --- 6. Bulk update, verify it actually applied ---
-      models::User patch;
+      User patch;
       patch.name = "x";
       patch.password = "1234";
-      auto [updatedCount, updatedRows] = co_await models::User::bulkUpdate(patch, {"name", "password"}, {true});
+      auto [updatedCount, updatedRows] = co_await User::bulkUpdate(patch, {"name", "password"}, {true});
       if (updatedCount != 2)
         co_return fail("bulk update", "expected 2 rows, got " + std::to_string(updatedCount));
 
@@ -779,7 +857,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
           co_return fail("bulk update", "row id " + std::to_string(u.id) + " not updated");
 
       // --- 7. Bulk destroy, verify table is empty again ---
-      auto [destroyedCount, destroyedRows] = co_await models::User::bulkDestroy({true});
+      auto [destroyedCount, destroyedRows] = co_await User::bulkDestroy({true});
       if (destroyedCount != 2)
         co_return fail("bulk destroy", "expected 2 rows, got " + std::to_string(destroyedCount));
       if (auto c = co_await query.count(); c != 0)

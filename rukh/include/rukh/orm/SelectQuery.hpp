@@ -1,14 +1,16 @@
 #pragma once
 
-#include "rukh/orm/UpdateQuery.hpp"
 #include <optional>
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
+#include <rukh/db/ITransaction.hpp>
+#include <rukh/db/helpers.hpp>
 #include <rukh/orm/DeleteQuery.hpp>
 #include <rukh/orm/Predicate.hpp>
+#include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
 
@@ -68,7 +70,7 @@ public:
     return groupBy(Model::columnNameOf(fieldPtr));
   }
 
-  Task<int64_t> count(bool distinct = false) {
+  Task<int64_t> count(db::ITransaction *transaction = nullptr, bool distinct = false) {
     std::string countCol = distinct ? "DISTINCT COUNT(*)" : "COUNT(*)";
     std::string countSql = "SELECT " + countCol + " FROM " + Model::tableName + " ";
     std::vector<db::DbValue> countParams;
@@ -79,8 +81,8 @@ public:
     }
 
     auto queryResult = co_await Model::threadPool->submit(
-        [this, countSql, countParams]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db_->executeQuery(countSql, countParams);
+        [this, countSql, countParams, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
+          return db::dispatch(db_, transaction, countSql, countParams);
         });
 
     if (not queryResult) {
@@ -92,7 +94,8 @@ public:
     co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
-  template <typename FieldT> Task<int64_t> count(const std::string &col, bool distinct = false) {
+  template <typename FieldT>
+  Task<int64_t> count(const std::string &col, db::ITransaction *transaction = nullptr, bool distinct = false) {
     if (not Model::validColumnNames().contains(col))
       throw rukh::OrmException("Failed to add column to groupBy: unknown column '" + col + "' on " + Model::tableName);
 
@@ -106,8 +109,8 @@ public:
     }
 
     auto queryResult = co_await Model::threadPool->submit(
-        [this, countSql, countParams]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db_->executeQuery(countSql, countParams);
+        [this, countSql, countParams, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
+          return db::dispatch(db_, transaction, countSql, countParams);
         });
 
     if (not queryResult) {
@@ -119,14 +122,17 @@ public:
     co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
-  template <typename FieldT> Task<int64_t> count(FieldT Model::*fieldPtr, bool distinct = false) {
-    co_return count(Model::columnNameOf(fieldPtr), distinct);
+  template <typename FieldT>
+  Task<int64_t> count(FieldT Model::*fieldPtr, db::ITransaction *transaction = nullptr, bool distinct = false) {
+    co_return count(Model::columnNameOf(fieldPtr), distinct, transaction);
   }
 
-  Task<std::optional<std::vector<Model>>> get() {
+  Task<std::optional<std::vector<Model>>> get(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
-    auto queryResult = co_await Model::threadPool->submit(
-        [this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db_->executeQuery(sql_, params_); });
+    auto queryResult =
+        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
+          return db::dispatch(db_, transaction, sql_, params_);
+        });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
@@ -137,15 +143,17 @@ public:
     co_return hydrate<Model>(*queryResult);
   }
 
-  Task<std::optional<Model>> first() {
+  Task<std::optional<Model>> first(db::ITransaction *transaction = nullptr) {
     changed = true;
     std::optional<size_t> oldLimit = limit_;
     limit_ = 1;
     buildSelectSqlAndSetParams();
     limit_ = oldLimit;
 
-    auto queryResult = co_await Model::threadPool->submit(
-        [this]() -> std::expected<db::QueryResult, db::DatabaseError> { return db_->executeQuery(sql_, params_); });
+    auto queryResult =
+        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
+          return db::dispatch(db_, transaction, sql_, params_);
+        });
 
     if (not queryResult) {
       SPDLOG_ERROR("Error executing query: {}", sql_);
@@ -159,12 +167,12 @@ public:
     co_return hydrate<Model>(queryResult->rows[0]);
   }
 
-  Task<bool> exists() {
+  Task<bool> exists(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
 
     auto queryResult =
-        co_await Model::threadPool->submit([this]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db_->executeQuery("SELECT EXISTS (" + sql_ + ")", params_);
+        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
+          return db::dispatch(db_, transaction, "SELECT EXISTS (" + sql_ + ")", params_);
         });
 
     if (not queryResult) {
@@ -176,20 +184,20 @@ public:
     co_return queryResult->rows.size() > 0;
   }
 
-  Task<std::pair<size_t, std::vector<Model>>> update(bool returning) {
+  Task<std::pair<size_t, std::vector<Model>>> update(db::ITransaction *transaction = nullptr, bool returning = false) {
     UpdateQuery<Model> updateQuery;
     for (auto &col : columns_) {
       updateQuery.column(col);
     }
-    co_return co_await updateQuery.where(this->wherePredicate).execute(returning);
+    co_return co_await updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
+        .execute(returning, transaction);
   }
 
-  Task<std::pair<size_t, std::vector<Model>>> destroy(bool returning) {
-    co_return co_await DeleteQuery<Model>().where(this->wherePredicate).execute(returning);
+  Task<std::pair<size_t, std::vector<Model>>> destroy(db::ITransaction *transaction = nullptr, bool returning = false) {
+    co_return co_await DeleteQuery<Model>()
+        .where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
+        .execute(returning, transaction);
   }
-
-  std::vector<rukh::db::DbValue> getParams() const { return params_; }
-  std::string getSql() const { return sql_; }
 
   SelectQuery<Model> &reset() {
     changed = true;
@@ -270,8 +278,6 @@ private:
     if (offset_) {
       sql_ += " OFFSET " + std::to_string(offset_.value());
     }
-
-    SPDLOG_DEBUG("SELECT Query: {}", sql_);
   }
 };
 
