@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 #include <rukh/concepts.hpp>
+#include <string>
 
 namespace rukh::db {
 
@@ -33,7 +34,7 @@ template <typename T> DbValue toDbValue(const T &v) {
   }
 }
 
-inline std::string toString(const DbValue &v) {
+inline std::string dbValueToString(const DbValue &v) {
   if (std::holds_alternative<std::string>(v))
     return std::get<std::string>(v);
 
@@ -70,6 +71,14 @@ public:
 
   std::vector<DbValue> values;
   std::shared_ptr<std::unordered_map<std::string, size_t>> columns;
+
+  std::string toString() const {
+    std::string s;
+    for (size_t i = 0; i < values.size(); i++) {
+      s += dbValueToString(values[i]) + " ";
+    }
+    return s;
+  }
 };
 
 struct QueryResult {

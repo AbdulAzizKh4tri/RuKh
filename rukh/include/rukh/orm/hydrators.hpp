@@ -49,8 +49,7 @@ template <typename Model> Model hydrate(const rukh::db::Row &row) {
       Model::columns());
 
   if (not ok) {
-    auto rowId = *(row.as<int64_t>(Model::pkColumn().name));
-    throw rukh::OrmException("Failed to hydrate row: " + obj.tableName + ": " + std::to_string(rowId));
+    throw rukh::OrmException("Failed to hydrate row: " + obj.tableName + ": " + row.toString());
   }
 
   obj.setPersisted();

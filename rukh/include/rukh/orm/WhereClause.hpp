@@ -17,10 +17,7 @@ public:
     return static_cast<Derived &>(*this);
   }
 
-  Derived &andWhere(const Predicate<Model> &p) {
-    whereChanged = true;
-    return where(p);
-  }
+  Derived &andWhere(const Predicate<Model> &p) { return where(p); }
 
   Derived &orWhere(const Predicate<Model> &p) {
     whereChanged = true;

@@ -126,6 +126,8 @@ public:
     return validColumnNames().find(name) != validColumnNames().end();
   }
 
+  static constexpr bool isPkColumn(const std::string &name) { return Model::pkColumn().name == name; }
+
   void setPersisted() { persisted_ = true; }
   void resetPersisted() { persisted_ = false; }
 

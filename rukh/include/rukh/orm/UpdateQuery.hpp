@@ -80,9 +80,9 @@ private:
     std::apply(
         [&](auto &&...col) {
           auto handle = [&](auto &&c) {
-            bool isSkippedPk = Model::pkAutoIncrement && c.name == Model::pkColumn().name;
+            bool isSkippedPk = Model::pkAutoIncrement and Model::isPkColumn(c.name);
             bool notSelected =
-                not columns_.empty() && std::find(columns_.begin(), columns_.end(), c.name) == columns_.end();
+                not columns_.empty() and std::find(columns_.begin(), columns_.end(), c.name) == columns_.end();
             if (isSkippedPk || notSelected)
               return;
             db::DbValue columnValue = db::toDbValue(obj.*c.fieldPtr);
