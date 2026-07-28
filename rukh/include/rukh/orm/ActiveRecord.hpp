@@ -21,7 +21,7 @@ public:
   using pk = pkType;
 
   static Task<std::optional<Model>> find(pkType pkVal, db::ITransaction *transaction = nullptr) {
-    Column<pkType, Model> pkColumn = Model::pkColumn();
+    Column<Model, pkType> pkColumn = Model::pkColumn();
     co_return co_await SelectQuery<Model>()
         .where(Predicate<Model>::equals(pkColumn.fieldPtr, pkVal))
         .first(transaction);

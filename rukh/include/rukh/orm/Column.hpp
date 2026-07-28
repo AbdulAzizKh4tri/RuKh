@@ -4,9 +4,9 @@
 
 namespace rukh::orm {
 
-template <typename FieldT, typename Model> struct Column {
-  std::string name;
+template <typename Model, typename FieldT> struct Column {
   FieldT Model::*fieldPtr;
+  std::string name;
 };
 
 } // namespace rukh::orm

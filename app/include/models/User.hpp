@@ -30,12 +30,12 @@ struct User : ActiveRecord<User, int64_t> {
   std::optional<std::string> password;
   int64_t createdAt;
 
-  static constexpr rukh::orm::Column<pk, User> pkColumn() { return rukh::orm::Column<pk, User>{"id", &User::id}; }
+  static constexpr rukh::orm::Column<User, pk> pkColumn() { return rukh::orm::Column<User, pk>{&User::id, "id"}; }
 
   static constexpr auto columns() {
     return std::tuple{
-        Column{"id", &User::id},       Column{"age", &User::age},           Column{"name", &User::name},
-        Column{"email", &User::email}, Column{"password", &User::password}, Column{"created_at", &User::createdAt}};
+        Column{&User::id, "id"},       Column{&User::age, "age"},           Column{&User::name, "name"},
+        Column{&User::email, "email"}, Column{&User::password, "password"}, Column{&User::createdAt, "created_at"}};
   }
 
   std::string toString() const {

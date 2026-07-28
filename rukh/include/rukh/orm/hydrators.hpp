@@ -1,5 +1,7 @@
 #pragma once
 
+#include <spdlog/spdlog.h>
+
 #include <rukh/Exceptions.hpp>
 #include <rukh/concepts.hpp>
 #include <rukh/db/IDatabase.hpp>
@@ -8,7 +10,7 @@
 namespace rukh::orm {
 
 template <typename Model, typename FieldT>
-bool hydrateOne(Model &obj, const Column<FieldT, Model> &col, const db::Row &row) {
+bool hydrateOne(Model &obj, const Column<Model, FieldT> &col, const db::Row &row) {
   if constexpr (OptionalT<FieldT>) {
     if (row.isNull(col.name)) {
       obj.*(col.fieldPtr) = std::nullopt;
@@ -16,6 +18,7 @@ bool hydrateOne(Model &obj, const Column<FieldT, Model> &col, const db::Row &row
     }
     auto val = row.as<typename FieldT::value_type>(col.name);
     if (not val) {
+      SPDLOG_ERROR("Failed to hydrate column: {}", col.name);
       return false;
     }
     obj.*(col.fieldPtr) = *val;
@@ -47,7 +50,7 @@ template <typename Model> Model hydrate(const rukh::db::Row &row) {
 
   if (not ok) {
     auto rowId = *(row.as<int64_t>(Model::pkColumn().name));
-    throw rukh::OrmException("Failed to hydrate row: " + obj.tableName + " " + std::to_string(rowId));
+    throw rukh::OrmException("Failed to hydrate row: " + obj.tableName + ": " + std::to_string(rowId));
   }
 
   obj.setPersisted();
