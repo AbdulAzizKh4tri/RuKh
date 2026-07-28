@@ -84,17 +84,20 @@ struct QueryResult {
   }
 };
 
+enum class DbErrorType {
+  CONNECTION_FAILED,
+  CONSTRAINT_VIOLATION,
+  DB_BUSY,
+  DUPLICATE_KEY,
+  OTHER,
+  TOO_BIG,
+  TRANSACTION_ENDED,
+  TRANSACTION_ERROR,
+  QUERY_ERROR
+};
+
 struct DatabaseError {
-  enum class ErrorType {
-    CONSTRAINT_VIOLATION,
-    DUPLICATE_KEY,
-    TRANSACTION_COMMITTED,
-    CONNECTION_FAILED,
-    QUERY_ERROR,
-    DB_BUSY,
-    OTHER
-  };
-  ErrorType type;
+  DbErrorType type;
   std::string message;
 };
 

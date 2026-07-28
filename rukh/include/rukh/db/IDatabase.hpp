@@ -23,7 +23,7 @@ public:
     return executeQuery(sql, std::vector<DbValue>{std::forward<Args>(args)...});
   }
 
-  virtual std::unique_ptr<ITransaction> startTransaction() = 0;
+  virtual std::expected<std::unique_ptr<ITransaction>, DatabaseError> startTransaction() = 0;
   virtual void endTransaction(std::unique_ptr<ITransaction> transaction) = 0;
 };
 

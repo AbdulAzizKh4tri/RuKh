@@ -1,16 +1,16 @@
 #pragma once
 
-#include "rukh/db/ITransaction.hpp"
-#include <cstdint>
+#include <expected>
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
 #include <string>
-#include <unordered_map>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
+#include <rukh/db/ITransaction.hpp>
+#include <rukh/db/Sqlite3QueryExecutor.hpp>
 #include <rukh/db/Sqlite3Transaction.hpp>
 #include <rukh/db/Sqlite3Types.hpp>
 
@@ -23,18 +23,18 @@ class Sqlite3Db : public IDatabase {
 public:
   Sqlite3Db(const std::string &filename, int poolSize = 4) {
     for (int i = 0; i < poolSize; i++) {
-      sqlite3 *db;
-      int rc = sqlite3_open_v2(filename.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
+      sqlite3 *dbConnection;
+      int rc = sqlite3_open_v2(filename.c_str(), &dbConnection, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
       if (rc) {
-        if (db)
-          sqlite3_close(db);
+        if (dbConnection)
+          sqlite3_close(dbConnection);
         throw DatabaseException("Can't open database");
       }
 
-      sqlite3_busy_timeout(db, SQLITE3_BUSY_TIMEOUT);
+      sqlite3_busy_timeout(dbConnection, SQLITE3_BUSY_TIMEOUT);
 
       auto conn = new Connection();
-      conn->dbConnection = db;
+      conn->dbConnection = dbConnection;
       connectionQueue_.addConnection(conn);
     }
 
@@ -46,86 +46,19 @@ public:
   std::expected<QueryResult, DatabaseError> executeQuery(const std::string &sql,
                                                          const std::vector<DbValue> &params = {}) override {
     Connection *conn = acquireConnection();
-
     ConnectionReleaseGuard connectionGuard{conn, &connectionQueue_};
-    sqlite3 *db = conn->dbConnection;
-    std::unordered_map<std::string, sqlite3_stmt *> &statements = conn->statements;
 
-    sqlite3_stmt *stmt;
-    if (statements.contains(sql)) {
-      stmt = statements[sql];
-    } else {
-      int rc = sqlite3_prepare_v3(db, sql.c_str(), -1, SQLITE_PREPARE_PERSISTENT, &stmt, nullptr);
-      if (rc != SQLITE_OK) {
-        std::string err = sqlite3_errmsg(db);
-        SPDLOG_ERROR("SQL error: {}", err);
-        return std::unexpected(DatabaseError{DatabaseError::ErrorType::QUERY_ERROR, err});
-      }
-      statements[sql] = stmt;
-    }
-    StatementResetGuard statementGuard(stmt);
-
-    for (int i = 0; i < (int)params.size(); i++)
-      bindQueryParam(stmt, i, params);
-
-    QueryResult result;
-    result.columns = std::make_shared<std::unordered_map<std::string, size_t>>();
-    bool first = true;
-
-    while (true) {
-      int rc = sqlite3_step(stmt);
-      if (rc == SQLITE_ROW) {
-        Row row;
-        int colCount = sqlite3_column_count(stmt);
-        for (int i = 0; i < colCount; i++) {
-          if (first) {
-            const char *name = sqlite3_column_name(stmt, i);
-            (*result.columns)[name ? name : ""] = i;
-          }
-          switch (sqlite3_column_type(stmt, i)) {
-          case SQLITE_INTEGER:
-            row.values.push_back(sqlite3_column_int64(stmt, i));
-            break;
-          case SQLITE_FLOAT:
-            row.values.push_back(sqlite3_column_double(stmt, i));
-            break;
-          case SQLITE_TEXT: {
-            const unsigned char *text = sqlite3_column_text(stmt, i);
-            row.values.push_back(text ? reinterpret_cast<const char *>(text) : "");
-          } break;
-          case SQLITE_BLOB: {
-            const void *blob = sqlite3_column_blob(stmt, i);
-            int size = sqlite3_column_bytes(stmt, i);
-            std::vector<unsigned char> data;
-            if (blob && size > 0) {
-              const unsigned char *p = reinterpret_cast<const unsigned char *>(blob);
-              data.assign(p, p + size);
-            }
-            row.values.push_back(data);
-          } break;
-          case SQLITE_NULL:
-            row.values.push_back(nullptr);
-            break;
-          }
-        }
-        row.columns = result.columns;
-        result.rows.push_back(std::move(row));
-        first = false;
-      } else if (rc == SQLITE_DONE) {
-        break;
-      } else if (rc == SQLITE_BUSY) {
-        return std::unexpected(DatabaseError{DatabaseError::ErrorType::DB_BUSY, "Database is busy"});
-      } else {
-        throw DatabaseException("SQL error: " + std::string(sqlite3_errmsg(db)));
-      }
-    }
-
-    result.affectedRows = sqlite3_changes(db);
-    return result;
+    return Sqlite3QueryExecutor::executeOnConnection(conn, sql, params);
   }
 
-  std::unique_ptr<ITransaction> startTransaction() override {
-    return std::make_unique<Sqlite3Transaction>(acquireConnection());
+  std::expected<std::unique_ptr<ITransaction>, DatabaseError> startTransaction() override {
+    Connection *conn = acquireConnection();
+    auto t = Sqlite3Transaction::createTransaction(conn);
+    if (not t) {
+      releaseConnection(conn);
+      return std::unexpected(t.error());
+    }
+    return std::move(*t);
   };
 
   void endTransaction(std::unique_ptr<ITransaction> transaction) override {
@@ -149,21 +82,6 @@ public:
 
 private:
   ConnectionQueue connectionQueue_;
-
-  void bindQueryParam(sqlite3_stmt *stmt, int index, const std::vector<DbValue> &params) {
-    if (std::holds_alternative<int64_t>(params[index])) {
-      sqlite3_bind_int64(stmt, index + 1, std::get<int64_t>(params[index]));
-    } else if (std::holds_alternative<double>(params[index])) {
-      sqlite3_bind_double(stmt, index + 1, std::get<double>(params[index]));
-    } else if (std::holds_alternative<std::string>(params[index])) {
-      sqlite3_bind_text(stmt, index + 1, std::get<std::string>(params[index]).c_str(), -1, SQLITE_STATIC);
-    } else if (std::holds_alternative<std::vector<unsigned char>>(params[index])) {
-      sqlite3_bind_blob(stmt, index + 1, std::get<std::vector<unsigned char>>(params[index]).data(),
-                        std::get<std::vector<unsigned char>>(params[index]).size(), SQLITE_STATIC);
-    } else {
-      sqlite3_bind_null(stmt, index + 1);
-    }
-  }
 };
 
 } // namespace rukh::db
