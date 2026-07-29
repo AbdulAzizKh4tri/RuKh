@@ -1,10 +1,12 @@
 #pragma once
 
+#include "rukh/orm/Column.hpp"
 #include <cstddef>
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
+#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/helpers.hpp>
@@ -77,12 +79,23 @@ private:
     std::apply(
         [&](auto &&...col) {
           auto handle = [&](auto &&c) {
-            bool isSkippedPk = Model::pkAutoIncrement and Model::isPkColumn(c.dbName);
             bool notSelected =
                 not columns_.empty() and std::find(columns_.begin(), columns_.end(), c.dbName) == columns_.end();
-            if (isSkippedPk || notSelected)
+            if (c.isPrimaryKey or notSelected or columnShouldBeSkipped(c.autoUpdateMode))
               return;
-            db::DbValue columnValue = db::toDbValue(obj.*c.fieldPtr);
+
+            db::DbValue columnValue;
+
+            switch (c.autoUpdateMode) {
+            case AutoUpdate::OFF:
+              columnValue = db::toDbValue(obj.*c.fieldPtr);
+              break;
+            case AutoUpdate::CUSTOM:
+              columnValue = (obj.*c.customUpdator)();
+              break;
+            default:
+              throw OrmException("Unknown Auto Update type");
+            }
 
             if (not first)
               oss << ", ";
@@ -96,6 +109,8 @@ private:
     oss << " ";
     return oss.str();
   }
+
+  static inline const bool columnShouldBeSkipped(AutoUpdate policy) { return policy == AutoUpdate::DB_SIDE; }
 
   static inline std::string sqlInit = "Update " + Model::tableName + " SET ";
 };

@@ -18,6 +18,7 @@ template <typename T> DbValue toDbValueImpl(const std::optional<T> &v) {
   return v ? toDbValueImpl(*v) : DbValue{nullptr};
 }
 
+inline DbValue toDbValueImpl(DbValue v) { return v; }
 inline DbValue toDbValueImpl(bool v) { return static_cast<int64_t>(v); }
 inline DbValue toDbValueImpl(float v) { return static_cast<double>(v); }
 inline DbValue toDbValueImpl(double v) { return v; }

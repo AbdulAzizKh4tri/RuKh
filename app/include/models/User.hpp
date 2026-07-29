@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include <rukh/ThreadPool.hpp>
+#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/ActiveRecord.hpp>
 #include <rukh/orm/Column.hpp>
@@ -17,8 +18,6 @@ struct User : ActiveRecord<User, int64_t> {
 
   static constexpr std::string tableName = "users";
   static constexpr std::string modelName = "User";
-  static constexpr bool pkAutoIncrement = true;
-  static PkType getNextPk() { return {}; }
 
   inline static rukh::db::IDatabase *db = nullptr;
   inline static rukh::ThreadPool *threadPool = nullptr;
@@ -30,13 +29,21 @@ struct User : ActiveRecord<User, int64_t> {
   std::optional<std::string> password;
   int64_t createdAt;
 
+  rukh::db::DbValue getNowTime() const {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
+  }
+
   static constexpr auto columns() {
-    return std::tuple{Column{.fieldPtr = &User::id, .dbName = "id", .isPrimaryKey = true},
+    return std::tuple{Column{.fieldPtr = &User::id,
+                             .dbName = "id",
+                             .isPrimaryKey = true,
+                             .autoGenerateMode = AutoGenerate::DB_INCREMENT},
                       Column{&User::email, "email"},
                       Column{&User::name, "name"},
                       Column{&User::age, "age"},
                       Column{&User::password, "password"},
-                      Column{&User::createdAt, "created_at"}};
+                      Column{.fieldPtr = &User::createdAt, .dbName = "created_at"}};
   }
 
   std::string toString() const {

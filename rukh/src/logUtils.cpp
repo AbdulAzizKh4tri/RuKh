@@ -1,5 +1,6 @@
 #include <rukh/logUtils.hpp>
 
+#include <spdlog/common.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 
@@ -11,7 +12,7 @@ void configureLog(bool on, std::string file) {
     return;
   }
 
-  spdlog::set_level(spdlog::level::debug);
+  spdlog::set_level(spdlog::level::trace);
 
   if (file != "") {
     auto fileLogger = spdlog::basic_logger_mt("server", file, true);

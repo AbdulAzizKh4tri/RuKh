@@ -1,5 +1,6 @@
 #pragma once
 
+#include <expected>
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
 
@@ -49,11 +50,13 @@ public:
     for (int i = 0; i < (int)params.size(); i++)
       bindQueryParam(stmt, i, params);
 
+#if SPDLOG_ACTIVE_LEVEL <= SPDLOG_LEVEL_TRACE
     const char *rawSQL = sqlite3_expanded_sql(stmt);
     if (rawSQL) {
-      SPDLOG_DEBUG(rawSQL);
+      SPDLOG_TRACE(rawSQL);
       sqlite3_free((void *)rawSQL); // must free it
     }
+#endif
 
     QueryResult result;
     result.columns = std::make_shared<std::unordered_map<std::string, size_t>>();

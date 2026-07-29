@@ -5,9 +5,11 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
+#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/helpers.hpp>
+#include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/hydrators.hpp>
 
@@ -63,9 +65,22 @@ private:
       std::apply(
           [&](auto &&...col) {
             auto handle = [&](auto &&c) {
-              if (Model::pkAutoIncrement and Model::isPkColumn(c.dbName))
+              if (columnShouldBeSkipped(c.autoGenerateMode))
                 return;
-              db::DbValue columnValue = db::toDbValue(obj.*c.fieldPtr);
+
+              db::DbValue columnValue;
+
+              switch (c.autoGenerateMode) {
+              case AutoGenerate::OFF:
+                columnValue = db::toDbValue(obj.*c.fieldPtr);
+                break;
+              case AutoGenerate::CUSTOM:
+                columnValue = (obj.*c.customGenerator)();
+                break;
+              default:
+                throw OrmException("Unknown AutoGeneration type");
+              }
+
               if (not first)
                 oss << ", ";
               first = false;
@@ -87,8 +102,9 @@ private:
       std::apply(
           [&](auto &&...col) {
             auto handle = [&](auto &&c) {
-              if (Model::pkAutoIncrement and Model::isPkColumn(c.dbName))
+              if (columnShouldBeSkipped(c.autoGenerateMode))
                 return;
+
               str += (first ? (first = false, "") : ", ") + c.dbName;
             };
             (handle(col), ...);
@@ -98,6 +114,11 @@ private:
     }();
     return cached;
   }
+
+  static inline const bool columnShouldBeSkipped(AutoGenerate policy) {
+    return policy == AutoGenerate::DB_INCREMENT or policy == AutoGenerate::DEFAULT or policy == AutoGenerate::DB_NOW;
+  }
+
   static inline std::string sqlInit = "INSERT INTO " + Model::tableName + " (" + modelColumnListString() + ") ";
 };
 
