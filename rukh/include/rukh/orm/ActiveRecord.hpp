@@ -1,7 +1,5 @@
 #pragma once
 
-#include <unordered_set>
-
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
 
@@ -99,7 +97,14 @@ public:
   }
 
   static constexpr bool isValidColumnName(const std::string &name) {
-    return validColumnNames().find(name) != validColumnNames().end();
+    return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, Model::columns());
+  }
+
+  static constexpr auto pkColumns() {
+    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(slot<I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
+    return result;
   }
 
   static constexpr bool isPkColumn(const std::string &name) {
@@ -195,12 +200,6 @@ public:
     }(std::make_index_sequence<pkArity>{});
   }
 
-  static constexpr auto pkColumns() {
-    return []<std::size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat(slot<I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
-  }
-
   void setPersisted() { persisted_ = true; }
   void resetPersisted() { persisted_ = false; }
 
@@ -208,15 +207,6 @@ private:
   bool persisted_ = false;
 
   //==============================HELPERS==============================
-  static constexpr std::unordered_set<std::string> &validColumnNames() {
-    static std::unordered_set<std::string> names = [] {
-      std::unordered_set<std::string> s;
-      std::apply([&](auto &&...col) { (s.insert(col.dbName), ...); }, Model::columns());
-      return s;
-    }();
-    return names;
-  }
-
   template <std::size_t I> static constexpr auto slot() {
     if constexpr (std::get<I>(Model::columns()).isPrimaryKey)
       return std::tuple{std::get<I>(Model::columns())};

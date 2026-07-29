@@ -18,7 +18,7 @@ struct User : ActiveRecord<User, int64_t> {
   static constexpr std::string tableName = "users";
   static constexpr std::string modelName = "User";
   static constexpr bool pkAutoIncrement = true;
-  static PkType getNextPk() { return {0}; }
+  static PkType getNextPk() { return {}; }
 
   inline static rukh::db::IDatabase *db = nullptr;
   inline static rukh::ThreadPool *threadPool = nullptr;
