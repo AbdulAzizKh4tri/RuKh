@@ -10,13 +10,15 @@
 #include <rukh/db/helpers.hpp>
 #include <rukh/orm/DeleteQuery.hpp>
 #include <rukh/orm/Predicate.hpp>
+#include <rukh/orm/QueryBase.hpp>
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
 
 namespace rukh::orm {
 
-template <typename Model> class SelectQuery : public WhereClause<Model, SelectQuery<Model>> {
+template <typename Model>
+class SelectQuery : public WhereClause<Model, SelectQuery<Model>>, public QueryBase<Model, SelectQuery<Model>> {
 public:
   SelectQuery &field(const std::string &column) {
     if (not Model::isValidColumnName(column))
@@ -81,11 +83,7 @@ public:
       countSql += Predicate<Model>::resolvePredicates(*this->wherePredicate, countParams);
     }
 
-    auto queryResult = co_await Model::threadPool->submit(
-        [this, countSql, countParams, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db::dispatch(db_, transaction, countSql, countParams);
-        });
-
+    auto queryResult = co_await this->dispatch(transaction, countSql, countParams);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -108,11 +106,7 @@ public:
       countSql += Predicate<Model>::resolvePredicates(*this->wherePredicate, countParams);
     }
 
-    auto queryResult = co_await Model::threadPool->submit(
-        [this, countSql, countParams, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db::dispatch(db_, transaction, countSql, countParams);
-        });
-
+    auto queryResult = co_await this->dispatch(transaction, countSql, countParams);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -127,11 +121,7 @@ public:
 
   Task<std::expected<std::vector<Model>, db::DatabaseError>> get(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
-    auto queryResult =
-        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db::dispatch(db_, transaction, sql_, params_);
-        });
-
+    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -146,11 +136,7 @@ public:
     limit_ = oldLimit;
     changed = true;
 
-    auto queryResult =
-        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db::dispatch(db_, transaction, sql_, params_);
-        });
-
+    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -163,11 +149,7 @@ public:
   Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
 
-    auto queryResult =
-        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db::dispatch(db_, transaction, "SELECT EXISTS (" + sql_ + ")", params_);
-        });
-
+    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -198,7 +180,7 @@ public:
     this->whereChanged = true;
     this->wherePredicate = std::nullopt;
     columns_.clear();
-    params_.clear();
+    this->params_.clear();
     orderBy_.clear();
     groupBy_.clear();
     limit_ = std::nullopt;
@@ -207,11 +189,10 @@ public:
   }
 
 private:
-  db::IDatabase *db_ = Model::db;
   std::string sql_;
   bool changed = true;
   std::vector<std::string> columns_;
-  std::vector<rukh::db::DbValue> params_;
+  std::vector<db::DbValue> params_;
   std::vector<std::pair<std::string, bool>> orderBy_;
   std::vector<std::string> groupBy_;
   std::optional<size_t> limit_;
@@ -224,53 +205,53 @@ private:
     changed = false;
     this->whereChanged = false;
 
-    sql_ = "SELECT ";
+    this->sql_ = "SELECT ";
     if (columns_.empty()) {
-      sql_ += "*";
+      this->sql_ += "*";
     } else {
-      sql_ += columns_.at(0);
+      this->sql_ += columns_.at(0);
     }
 
     for (size_t i = 1; i < columns_.size(); i++) {
-      sql_ += ", ";
-      sql_ += columns_.at(i);
+      this->sql_ += ", ";
+      this->sql_ += columns_.at(i);
     }
 
-    sql_ += " FROM " + Model::tableName + " ";
+    this->sql_ += " FROM " + Model::tableName + " ";
 
     if (this->wherePredicate) {
-      sql_ += " WHERE ";
-      sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, params_);
+      this->sql_ += " WHERE ";
+      this->sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, this->params_);
     }
 
     if (!groupBy_.empty()) {
-      sql_ += " GROUP BY ";
-      sql_ += groupBy_.at(0);
+      this->sql_ += " GROUP BY ";
+      this->sql_ += groupBy_.at(0);
       for (size_t i = 1; i < groupBy_.size(); i++) {
-        sql_ += ", ";
-        sql_ += groupBy_.at(i);
+        this->sql_ += ", ";
+        this->sql_ += groupBy_.at(i);
       }
     }
 
     if (!orderBy_.empty()) {
-      sql_ += " ORDER BY ";
-      sql_ += orderBy_.at(0).first;
+      this->sql_ += " ORDER BY ";
+      this->sql_ += orderBy_.at(0).first;
       if (orderBy_.at(0).second)
-        sql_ += " DESC";
+        this->sql_ += " DESC";
       for (size_t i = 1; i < orderBy_.size(); i++) {
-        sql_ += ", ";
-        sql_ += orderBy_.at(i).first;
+        this->sql_ += ", ";
+        this->sql_ += orderBy_.at(i).first;
         if (orderBy_.at(i).second)
-          sql_ += " DESC";
+          this->sql_ += " DESC";
       }
     }
 
     if (limit_) {
-      sql_ += " LIMIT " + std::to_string(limit_.value());
+      this->sql_ += " LIMIT " + std::to_string(limit_.value());
     }
 
     if (offset_) {
-      sql_ += " OFFSET " + std::to_string(offset_.value());
+      this->sql_ += " OFFSET " + std::to_string(offset_.value());
     }
   }
 };

@@ -11,11 +11,12 @@
 #include <rukh/db/helpers.hpp>
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
+#include <rukh/orm/QueryBase.hpp>
 #include <rukh/orm/hydrators.hpp>
 
 namespace rukh::orm {
 
-template <typename Model> class InsertQuery {
+template <typename Model> class InsertQuery : public QueryBase<Model, InsertQuery<Model>> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const std::vector<Model> &objs, db::ITransaction *transaction = nullptr, bool returning = false) {
@@ -24,10 +25,7 @@ public:
 
     buildInsertSqlAndSetParams(objs, returning);
 
-    auto queryResult =
-        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db::dispatch(db_, transaction, sql_, params_);
-        });
+    auto queryResult = co_await this->dispatch(transaction, sql_, params_);
 
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
@@ -36,7 +34,6 @@ public:
   }
 
 private:
-  db::IDatabase *db_ = Model::db;
   std::string sql_;
   std::vector<rukh::db::DbValue> params_;
 

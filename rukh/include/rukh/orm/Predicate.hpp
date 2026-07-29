@@ -44,7 +44,9 @@ constexpr bool isGroupOperator(Operator op) {
 template <typename Model> struct Predicate {
   enum class PredicateType { LEAF, AND, OR, TRUE, FALSE, STRING } predicateType;
 
-  std::string column, customString;
+  std::string column;
+  std::string customString;
+
   Operator op;                     // only used if
   std::vector<db::DbValue> values; // Kind::Leaf
                                    //

@@ -11,21 +11,20 @@
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/helpers.hpp>
 #include <rukh/orm/Predicate.hpp>
+#include <rukh/orm/QueryBase.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
 
 namespace rukh::orm {
 
-template <typename Model> class DeleteQuery : public WhereClause<Model, DeleteQuery<Model>> {
+template <typename Model>
+class DeleteQuery : public WhereClause<Model, DeleteQuery<Model>>, public QueryBase<Model, DeleteQuery<Model>> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(db::ITransaction *transaction = nullptr, bool returning = false) {
 
     buildDeleteSqlAndSetParams(returning);
-    auto queryResult =
-        co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
-          return db::dispatch(db_, transaction, sql_, params_);
-        });
+    auto queryResult = co_await this->dispatch(transaction, sql_, params_);
 
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
@@ -41,7 +40,6 @@ public:
   }
 
 private:
-  db::IDatabase *db_ = Model::db;
   std::string sql_;
   std::vector<rukh::db::DbValue> params_;
 
