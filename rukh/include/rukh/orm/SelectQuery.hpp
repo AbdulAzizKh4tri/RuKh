@@ -206,6 +206,8 @@ private:
     this->whereChanged = false;
 
     this->sql_ = "SELECT ";
+    params_.clear();
+
     if (columns_.empty()) {
       this->sql_ += "*";
     } else {

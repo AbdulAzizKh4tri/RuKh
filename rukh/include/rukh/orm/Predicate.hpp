@@ -337,6 +337,7 @@ template <typename Model> struct Predicate {
     std::string s = "(";
     if (p.children.size() != 2)
       throw rukh::OrmException("Non-leaf predicate with wrong number of children");
+
     s += resolvePredicates(p.children[0], out_params);
     if (p.predicateType == Predicate::PredicateType::AND)
       s += " AND ";
@@ -347,7 +348,7 @@ template <typename Model> struct Predicate {
     return s;
   }
 
-  std::string toString() {
+  std::string toString() const {
     std::string predicateString = "( ";
 
     if (predicateType == Predicate::PredicateType::LEAF) {
