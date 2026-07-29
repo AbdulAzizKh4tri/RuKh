@@ -218,7 +218,7 @@ template <typename Model> struct Predicate {
     if (not Model::isValidColumnName(col))
       throw rukh::OrmException("Predicate Construction: Invalid column name.");
     if (auto valStr = std::get_if<std::string>(&val))
-      return Predicate(" LOWER(" + col + ") LIKE ? ESCAPE '\\'", toLowerCase(*valStr));
+      return Predicate(" LOWER(" + col + ") LIKE LOWER(?) ESCAPE '\\'", *valStr);
     throw rukh::OrmException("Predicate Construction: ilike() only supports strings");
   }
   template <typename FieldT> static Predicate<Model> ilike(FieldT Model::*fieldPtr, const db::DbValue &val) {
@@ -240,7 +240,7 @@ template <typename Model> struct Predicate {
     if (not Model::isValidColumnName(col))
       throw rukh::OrmException("Predicate Construction: Invalid column name.");
     if (auto valStr = std::get_if<std::string>(&val))
-      return Predicate("LOWER(" + col + ") LIKE ? ESCAPE '\\'", '%' + toLowerCase(*valStr) + '%');
+      return Predicate("LOWER(" + col + ") LIKE LOWER(?) ESCAPE '\\'", '%' + *valStr + '%');
     throw rukh::OrmException("Predicate Construction: iContains() only supports strings");
   }
   template <typename FieldT> static Predicate<Model> iContains(FieldT Model::*fieldPtr, const db::DbValue &val) {
