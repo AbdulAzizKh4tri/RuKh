@@ -332,6 +332,39 @@ template <typename Model> struct Predicate {
     s += ")";
     return s;
   }
+
+  std::string toString() {
+    std::string predicateString = "( ";
+
+    if (predicateType == Predicate::PredicateType::LEAF) {
+      predicateString += column + " " + std::string(to_string(op)) + "{ ";
+      for (auto &val : values) {
+        predicateString += " " + db::dbValueToString(val);
+      }
+      predicateString += " })";
+      return predicateString;
+
+    } else if (predicateType == Predicate::PredicateType::STRING) {
+      predicateString += customString + ' ';
+    } else if (predicateType == Predicate::PredicateType::TRUE) {
+      return " TRUE ";
+    } else if (predicateType == Predicate::PredicateType::FALSE) {
+      return " FALSE ";
+    }
+
+    std::string s = "(";
+    if (children.size() != 2)
+      throw rukh::OrmException("Non-leaf predicate with wrong number of children");
+
+    s += this->toString(children[0]);
+    if (predicateType == Predicate::PredicateType::AND)
+      s += " AND ";
+    else if (predicateType == Predicate::PredicateType::OR)
+      s += " OR ";
+    s += this->toString(children[1]);
+    s += ")";
+    return s;
+  }
 };
 
 } // namespace rukh::orm

@@ -63,7 +63,7 @@ private:
       std::apply(
           [&](auto &&...col) {
             auto handle = [&](auto &&c) {
-              if (Model::pkAutoIncrement and Model::isPkColumn(c.name))
+              if (Model::pkAutoIncrement and Model::isPkColumn(c.dbName))
                 return;
               db::DbValue columnValue = db::toDbValue(obj.*c.fieldPtr);
               if (not first)
@@ -87,9 +87,9 @@ private:
       std::apply(
           [&](auto &&...col) {
             auto handle = [&](auto &&c) {
-              if (Model::pkAutoIncrement and Model::isPkColumn(c.name))
+              if (Model::pkAutoIncrement and Model::isPkColumn(c.dbName))
                 return;
-              str += (first ? (first = false, "") : ", ") + c.name;
+              str += (first ? (first = false, "") : ", ") + c.dbName;
             };
             (handle(col), ...);
           },

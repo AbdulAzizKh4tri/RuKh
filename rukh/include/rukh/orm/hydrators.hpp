@@ -12,19 +12,19 @@ namespace rukh::orm {
 template <typename Model, typename FieldT>
 bool hydrateOne(Model &obj, const Column<Model, FieldT> &col, const db::Row &row) {
   if constexpr (OptionalT<FieldT>) {
-    if (row.isNull(col.name)) {
+    if (row.isNull(col.dbName)) {
       obj.*(col.fieldPtr) = std::nullopt;
       return true;
     }
-    auto val = row.as<typename FieldT::value_type>(col.name);
+    auto val = row.as<typename FieldT::value_type>(col.dbName);
     if (not val) {
-      SPDLOG_ERROR("Failed to hydrate column: {}", col.name);
+      SPDLOG_ERROR("Failed to hydrate column: {}", col.dbName);
       return false;
     }
     obj.*(col.fieldPtr) = *val;
     return true;
   } else {
-    auto val = row.as<FieldT>(col.name);
+    auto val = row.as<FieldT>(col.dbName);
     if (not val) {
       return false;
     }

@@ -49,6 +49,12 @@ public:
     for (int i = 0; i < (int)params.size(); i++)
       bindQueryParam(stmt, i, params);
 
+    const char *rawSQL = sqlite3_expanded_sql(stmt);
+    if (rawSQL) {
+      SPDLOG_DEBUG(rawSQL);
+      sqlite3_free((void *)rawSQL); // must free it
+    }
+
     QueryResult result;
     result.columns = std::make_shared<std::unordered_map<std::string, size_t>>();
     bool first = true;

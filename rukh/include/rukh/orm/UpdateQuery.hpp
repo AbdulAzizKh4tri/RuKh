@@ -77,9 +77,9 @@ private:
     std::apply(
         [&](auto &&...col) {
           auto handle = [&](auto &&c) {
-            bool isSkippedPk = Model::pkAutoIncrement and Model::isPkColumn(c.name);
+            bool isSkippedPk = Model::pkAutoIncrement and Model::isPkColumn(c.dbName);
             bool notSelected =
-                not columns_.empty() and std::find(columns_.begin(), columns_.end(), c.name) == columns_.end();
+                not columns_.empty() and std::find(columns_.begin(), columns_.end(), c.dbName) == columns_.end();
             if (isSkippedPk || notSelected)
               return;
             db::DbValue columnValue = db::toDbValue(obj.*c.fieldPtr);
@@ -87,7 +87,7 @@ private:
             if (not first)
               oss << ", ";
             first = false;
-            oss << c.name << " = ?";
+            oss << c.dbName << " = ?";
             params_.push_back(columnValue);
           };
           (handle(col), ...);

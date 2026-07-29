@@ -738,6 +738,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
   // Optional JSON fields (only fields present in the body are changed):
   //   - name, email, age, password
   router.post("/tests/db/update", [threadPool, db](HttpRequest &request) -> Task<Response> {
+    using namespace models;
     auto body = co_await request.jsonBody();
     if (body.is_discarded())
       co_return HttpResponse(400, "application/json", json{{"error", "invalid JSON"}}.dump());
@@ -745,7 +746,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     if (not body.contains("id"))
       co_return HttpResponse(400, "application/json", json{{"error", "id is required"}}.dump());
 
-    auto id = body["id"].get<models::User::pk>();
+    auto id = body["id"].get<raw_field_t<User, &User::id>>();
+    auto email = body["email"].get<raw_field_t<User, &User::email>>();
 
     // find() now returns std::expected<std::optional<Model>, DatabaseError> — the outer
     // expected is a DB-error signal, the inner optional is "found or not".
@@ -778,6 +780,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
   // Required JSON fields:
   //   - id
   router.post("/tests/db/delete", [threadPool, db](HttpRequest &request) -> Task<Response> {
+    using namespace models;
     auto body = co_await request.jsonBody();
     if (body.is_discarded())
       co_return HttpResponse(400, "application/json", json{{"error", "invalid JSON"}}.dump());
@@ -785,7 +788,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     if (not body.contains("id"))
       co_return HttpResponse(400, "application/json", json{{"error", "id is required"}}.dump());
 
-    auto id = body["id"].get<models::User::pk>();
+    auto id = body["id"].get<raw_field_t<User, &User::id>>();
+    auto email = body["email"].get<raw_field_t<User, &User::email>>();
 
     auto findResult = co_await models::User::find(id);
     if (not findResult)
@@ -862,8 +866,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     // --- 5. Bulk insert ---
     co_await runner.run("bulk insert", []() -> Task<void> {
       std::vector<User> batch;
-      batch.push_back({.name = "Alice", .email = "alice@example.com", .createdAt = 124});
-      batch.push_back({.name = "Bob", .email = "bob@example.com", .createdAt = 123});
+      batch.push_back({.email = "alice@example.com", .name = "Alice", .createdAt = 124});
+      batch.push_back({.email = "bob@example.com", .name = "Bob", .createdAt = 123});
 
       auto [insertedCount, insertedRows] = unwrap(co_await User::bulkInsert(batch), "bulkInsert");
       expect(insertedCount == 2, "expected 2 rows, got " + std::to_string(insertedCount));

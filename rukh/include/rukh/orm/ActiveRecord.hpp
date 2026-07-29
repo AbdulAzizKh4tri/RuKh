@@ -5,6 +5,7 @@
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
 
+#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/Column.hpp>
@@ -16,23 +17,31 @@
 #include <rukh/orm/UpdateQuery.hpp>
 
 namespace rukh::orm {
+template <typename T> struct remove_optional {
+  using type = T;
+};
+template <typename T> struct remove_optional<std::optional<T>> {
+  using type = T;
+};
+template <typename T> using remove_optional_t = typename remove_optional<T>::type;
 
-template <typename Model, typename pkType> class ActiveRecord {
+template <typename Model, auto MemPtr> using field_t = std::remove_cvref_t<decltype(std::declval<Model>().*MemPtr)>;
+template <typename Model, auto MemPtr> using raw_field_t = remove_optional_t<field_t<Model, MemPtr>>;
+
+template <typename Model, typename... PkTypes> class ActiveRecord {
 public:
-  using pk = pkType;
+  static constexpr std::size_t pkArity = sizeof...(PkTypes);
+  using PkType = std::tuple<PkTypes...>;
 
-  static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(pkType pkVal,
+  static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(const PkType &pkVal,
                                                                            db::ITransaction *transaction = nullptr) {
-    Column<Model, pkType> pkColumn = Model::pkColumn();
-    co_return co_await SelectQuery<Model>()
-        .where(Predicate<Model>::equals(pkColumn.fieldPtr, pkVal))
-        .first(transaction);
+    co_return co_await SelectQuery<Model>().where(buildPkPredicate(pkVal)).first(transaction);
   }
 
   static Task<std::expected<Model, db::DatabaseError>> findOrCreate(Model obj,
                                                                     db::ITransaction *transaction = nullptr) {
-    Column<Model, pkType> pkColumn = Model::pkColumn();
-    auto findResult = co_await find(obj.*pkColumn.fieldPtr, transaction);
+    auto objPk = obj.getPrimaryKey();
+    auto findResult = co_await find(objPk, transaction);
     if (not findResult)
       co_return std::unexpected(findResult.error());
     if (auto userOpt = *findResult; userOpt) {
@@ -41,7 +50,7 @@ public:
     auto insertResult = co_await InsertQuery<Model>().execute({obj}, transaction, true);
     if (not insertResult) {
       if (insertResult.error().type == db::DbErrorType::DUPLICATE_KEY) {
-        auto refetch = co_await find(obj.*pkColumn.fieldPtr, transaction);
+        auto refetch = co_await find(objPk, transaction);
         if (not refetch)
           throw DatabaseException("Huh? Insert returned a duplicate key, but could not find the object");
 
@@ -89,6 +98,15 @@ public:
     co_return *result;
   }
 
+  static constexpr bool isValidColumnName(const std::string &name) {
+    return validColumnNames().find(name) != validColumnNames().end();
+  }
+
+  static constexpr bool isPkColumn(const std::string &name) {
+    auto cols = pkColumns();
+    return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, cols);
+  }
+
   Task<std::expected<Model, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
     // if called inside a transaction that is later rolled back, this object's persisted_/id will not reflect that — do
     // not reuse a model object after a rollback without re-fetching it.
@@ -118,24 +136,23 @@ public:
   }
 
   Task<std::expected<Model, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
-    auto pkColumn = Model::pkColumn();
+    Predicate p = buildPkPredicate(this->getPrimaryKey());
     Model *self = static_cast<Model *>(this);
-    Predicate p(pkColumn.fieldPtr, Operator::EQUALS, self->*pkColumn.fieldPtr);
-
     auto result = co_await UpdateQuery<Model>().where(p).execute(*self, transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
     auto [_, objs] = *result;
+
     if (objs.empty())
       throw DatabaseException("Failed to update object");
+
     *self = objs[0];
     co_return objs[0];
   }
 
   Task<std::expected<Model, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
-    auto pkColumn = Model::pkColumn();
+    Predicate p = buildPkPredicate(this->getPrimaryKey());
     Model *self = static_cast<Model *>(this);
-    Predicate p(pkColumn.fieldPtr, Operator::EQUALS, self->*pkColumn.fieldPtr);
     auto result = co_await DeleteQuery<Model>().where(p).execute(transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
@@ -157,7 +174,7 @@ public:
 
             if constexpr (std::is_same_v<ColPtr, ArgPtr>) {
               if (c.fieldPtr == fieldPtr) {
-                result = c.name;
+                result = c.dbName;
                 found = true;
               }
             }
@@ -170,25 +187,48 @@ public:
     return result;
   }
 
-  static constexpr std::unordered_set<std::string> &validColumnNames() {
-    static std::unordered_set<std::string> names = [] {
-      std::unordered_set<std::string> s;
-      std::apply([&](auto &&...col) { (s.insert(col.name), ...); }, Model::columns());
-      return s;
-    }();
-    return names;
+  PkType getPrimaryKey() const {
+    auto cols = pkColumns();
+    const Model *self = static_cast<const Model *>(this);
+    return [&, this]<std::size_t... I>(std::index_sequence<I...>) {
+      return PkType{(self->*std::get<I>(cols).fieldPtr)...};
+    }(std::make_index_sequence<pkArity>{});
   }
 
-  static constexpr bool isValidColumnName(const std::string &name) {
-    return validColumnNames().find(name) != validColumnNames().end();
+  static constexpr auto pkColumns() {
+    return []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(slot<I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
   }
-
-  static constexpr bool isPkColumn(const std::string &name) { return Model::pkColumn().name == name; }
 
   void setPersisted() { persisted_ = true; }
   void resetPersisted() { persisted_ = false; }
 
 private:
   bool persisted_ = false;
+
+  //==============================HELPERS==============================
+  static constexpr std::unordered_set<std::string> &validColumnNames() {
+    static std::unordered_set<std::string> names = [] {
+      std::unordered_set<std::string> s;
+      std::apply([&](auto &&...col) { (s.insert(col.dbName), ...); }, Model::columns());
+      return s;
+    }();
+    return names;
+  }
+
+  template <std::size_t I> static constexpr auto slot() {
+    if constexpr (std::get<I>(Model::columns()).isPrimaryKey)
+      return std::tuple{std::get<I>(Model::columns())};
+    else
+      return std::tuple<>{};
+  }
+
+  static Predicate<Model> buildPkPredicate(const PkType &pkVal) {
+    auto cols = Model::pkColumns();
+    return [&]<std::size_t... I>(std::index_sequence<I...>) {
+      return (Predicate<Model>::equals(std::get<I>(cols).fieldPtr, db::toDbValue(std::get<I>(pkVal))) && ...);
+    }(std::make_index_sequence<pkArity>{});
+  }
 };
 } // namespace rukh::orm
