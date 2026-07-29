@@ -139,11 +139,12 @@ public:
   }
 
   Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
-    changed = true;
     std::optional<size_t> oldLimit = limit_;
     limit_ = 1;
+    changed = true;
     buildSelectSqlAndSetParams();
     limit_ = oldLimit;
+    changed = true;
 
     auto queryResult =
         co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {

@@ -4,8 +4,8 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/core/utils.hpp>
-#include <rukh/db/IDatabase.hpp>
 #include <rukh/db/DbTypes.hpp>
+#include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/TypeHelpers.hpp>
 
@@ -54,6 +54,9 @@ template <typename Model> struct Predicate {
 
   Predicate(const std::string &str, const std::vector<db::DbValue> &values)
       : predicateType(PredicateType::STRING), customString(str), values(values) {}
+
+  Predicate(const std::string &str, const db::DbValue &values)
+      : predicateType(PredicateType::STRING), customString(str), values({values}) {}
 
   Predicate(bool val) {
     if (val)
@@ -354,7 +357,8 @@ template <typename Model> struct Predicate {
       return predicateString;
 
     } else if (predicateType == Predicate::PredicateType::STRING) {
-      predicateString += customString + ' ';
+      predicateString += customString + " )";
+      return predicateString;
     } else if (predicateType == Predicate::PredicateType::TRUE) {
       return " TRUE ";
     } else if (predicateType == Predicate::PredicateType::FALSE) {
@@ -365,12 +369,14 @@ template <typename Model> struct Predicate {
     if (children.size() != 2)
       throw rukh::OrmException("Non-leaf predicate with wrong number of children");
 
-    s += this->toString(children[0]);
+    s += children[0].toString();
+
     if (predicateType == Predicate::PredicateType::AND)
       s += " AND ";
     else if (predicateType == Predicate::PredicateType::OR)
       s += " OR ";
-    s += this->toString(children[1]);
+
+    s += children[1].toString();
     s += ")";
     return s;
   }

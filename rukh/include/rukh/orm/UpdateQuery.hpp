@@ -119,7 +119,7 @@ private:
 
   static inline const bool columnShouldBeSkipped(AutoUpdate policy) { return policy == AutoUpdate::DB_SIDE; }
 
-  static inline std::string sqlInit = "Update " + Model::tableName + " SET ";
+  static inline std::string sqlInit = "UPDATE " + Model::tableName + " SET ";
 };
 
 } // namespace rukh::orm
