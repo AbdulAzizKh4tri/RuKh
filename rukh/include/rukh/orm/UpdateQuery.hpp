@@ -1,6 +1,5 @@
 #pragma once
 
-#include "rukh/orm/Column.hpp"
 #include <cstddef>
 #include <spdlog/spdlog.h>
 
@@ -10,6 +9,7 @@
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/helpers.hpp>
+#include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
@@ -34,8 +34,15 @@ public:
     co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }
 
-  UpdateQuery &column(std::string col) {
-    columns_.push_back(col);
+  template <typename FieldPtr> UpdateQuery &field(FieldPtr fieldPtr) {
+    columns_.push_back(Model::columnNameOf(fieldPtr));
+    return *this;
+  }
+
+  UpdateQuery &field(std::string column) {
+    if (not Model::isValidColumnName(column))
+      throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + Model::tableName);
+    columns_.push_back(column);
     return *this;
   }
 

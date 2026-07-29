@@ -12,19 +12,10 @@
 #include <rukh/orm/DeleteQuery.hpp>
 #include <rukh/orm/InsertQuery.hpp>
 #include <rukh/orm/SelectQuery.hpp>
+#include <rukh/orm/TypeHelpers.hpp>
 #include <rukh/orm/UpdateQuery.hpp>
 
 namespace rukh::orm {
-template <typename T> struct remove_optional {
-  using type = T;
-};
-template <typename T> struct remove_optional<std::optional<T>> {
-  using type = T;
-};
-template <typename T> using remove_optional_t = typename remove_optional<T>::type;
-
-template <typename Model, auto MemPtr> using field_t = std::remove_cvref_t<decltype(std::declval<Model>().*MemPtr)>;
-template <typename Model, auto MemPtr> using raw_field_t = remove_optional_t<field_t<Model, MemPtr>>;
 
 template <typename Model, typename... PkTypes> class ActiveRecord {
 public:
@@ -73,12 +64,14 @@ public:
     co_return *result;
   }
 
+  template <typename FieldTuple>
   static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
-  bulkUpdate(const Model &newObj, const std::vector<std::string> &columns, const Predicate<Model> &p,
+  bulkUpdate(const Model &newObj, FieldTuple fields, const Predicate<Model> &p,
              db::ITransaction *transaction = nullptr) {
     UpdateQuery<Model> query;
-    for (auto &col : columns)
-      query.column(col);
+
+    std::apply([&](auto &&...col) { (query.field(col), ...); }, fields);
+
     auto result = co_await query.where(p).execute(newObj, transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
@@ -200,6 +193,29 @@ public:
     }(std::make_index_sequence<pkArity>{});
   }
 
+  template <typename FieldPtr> static Column<Model, FieldPtr> getColumnObject(FieldPtr Model::*fieldPtr) {
+    Column<Model, FieldPtr> result;
+    bool found = false;
+    std::apply(
+        [&](auto &&...col) {
+          auto check = [&](auto &&c) {
+            using ColPtr = std::remove_cvref_t<decltype(c.fieldPtr)>;
+            using ArgPtr = std::remove_cvref_t<decltype(fieldPtr)>;
+            if constexpr (std::is_same_v<ColPtr, ArgPtr>) {
+              if (c.fieldPtr == fieldPtr) {
+                result = c;
+                found = true;
+              }
+            }
+          };
+          (check(col), ...);
+        },
+        Model::columns());
+    if (not found)
+      throw OrmException("Field does not belong to Model");
+    return result;
+  }
+
   void setPersisted() { persisted_ = true; }
   void resetPersisted() { persisted_ = false; }
 
@@ -217,7 +233,7 @@ private:
   static Predicate<Model> buildPkPredicate(const PkType &pkVal) {
     auto cols = Model::pkColumns();
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
-      return (Predicate<Model>::equals(std::get<I>(cols).fieldPtr, db::toDbValue(std::get<I>(pkVal))) && ...);
+      return (Predicate<Model>::equals(std::get<I>(cols).fieldPtr, std::get<I>(pkVal)) && ...);
     }(std::make_index_sequence<pkArity>{});
   }
 };

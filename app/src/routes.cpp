@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -666,6 +667,12 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     std::string maxAgeStr = request.getQueryParam("maxAge");
     std::string orderBy = request.getQueryParam("orderBy");
 
+    std::optional<int64_t> minAge, maxAge;
+    if (not minAgeStr.empty())
+      minAge = std::stoi(minAgeStr);
+    if (not maxAgeStr.empty())
+      maxAge = std::stoi(maxAgeStr);
+
     auto query = User::all();
     if (not nameFilter.empty())
       query.where(P::contains(&User::name, nameFilter));
@@ -673,12 +680,12 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     if (not emailFilter.empty())
       query.andWhere(P::equals(&User::email, emailFilter));
 
-    if (not minAgeStr.empty() and not maxAgeStr.empty())
-      query.andWhere(P::between(&User::age, minAgeStr, maxAgeStr));
-    else if (not minAgeStr.empty())
-      query.andWhere(P::greaterOrEqual(&User::age, minAgeStr));
-    else if (not maxAgeStr.empty())
-      query.andWhere(P::lesserOrEqual(&User::age, maxAgeStr));
+    if (minAge and maxAge)
+      query.andWhere(P::between(&User::age, *minAge, *maxAge));
+    else if (minAge)
+      query.andWhere(P::greaterOrEqual(&User::age, *minAge));
+    else if (maxAge)
+      query.andWhere(P::lesserOrEqual(&User::age, *maxAge));
 
     if (not orderBy.empty() && User::isValidColumnName(orderBy))
       query.orderBy(orderBy);
@@ -879,7 +886,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       patch.name = "x";
       patch.password = "1234";
       auto [updatedCount, updatedRows] =
-          unwrap(co_await User::bulkUpdate(patch, {"name", "password"}, {true}), "bulkUpdate");
+          unwrap(co_await User::bulkUpdate(patch, std::tuple{&User::name, &User::password}, {true}), "bulkUpdate");
       expect(updatedCount == 2, "expected 2 rows, got " + std::to_string(updatedCount));
 
       auto afterUpdate = unwrap(co_await User::all().get(), "get");

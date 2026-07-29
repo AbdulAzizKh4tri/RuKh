@@ -18,7 +18,7 @@ namespace rukh::orm {
 
 template <typename Model> class SelectQuery : public WhereClause<Model, SelectQuery<Model>> {
 public:
-  SelectQuery &column(const std::string &column) {
+  SelectQuery &field(const std::string &column) {
     if (not Model::isValidColumnName(column))
       throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + Model::tableName);
     changed = true;
@@ -26,8 +26,8 @@ public:
     return *this;
   }
 
-  template <typename FieldT> SelectQuery &column(FieldT Model::*fieldPtr) {
-    return column(Model::columnNameOf(fieldPtr));
+  template <typename FieldT> SelectQuery &field(FieldT Model::*fieldPtr) {
+    return field(Model::columnNameOf(fieldPtr));
   }
 
   SelectQuery &orderBy(const std::string &order, bool desc = false) {
@@ -177,7 +177,9 @@ public:
   update(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
     UpdateQuery<Model> updateQuery;
     for (auto &col : columns_) {
-      updateQuery.column(col);
+      if (not Model::isValidColumnName(col))
+        throw rukh::OrmException("Failed to add column to query: unknown column '" + col + "' on " + Model::tableName);
+      updateQuery.field(col);
     }
     co_return co_await updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
         .execute(obj, transaction, returning);

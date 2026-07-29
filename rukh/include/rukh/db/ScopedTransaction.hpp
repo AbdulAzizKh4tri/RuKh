@@ -1,9 +1,10 @@
 #pragma once
 
-#include "rukh/Exceptions.hpp"
-#include "rukh/db/DbTypes.hpp"
 #include <memory>
+
 #include <rukh/db/IDatabase.hpp>
+#include <rukh/Exceptions.hpp>
+#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/ITransaction.hpp>
 
 namespace rukh::db {
