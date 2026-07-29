@@ -16,6 +16,7 @@
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/SelectQuery.hpp>
 
+#include "TestRunner.hpp"
 #include "models/User.hpp"
 #include "routes.hpp"
 
@@ -653,6 +654,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
   //   - minAge: Filter users with age >= minAge
   //   - maxAge: Filter users with age <= maxAge
   //   - orderBy: Sort results (name, email, age, created_at; default: name)
+
   router.get("/tests/db/select", [threadPool, db](const HttpRequest &request) -> Task<Response> {
     using namespace orm;
     using namespace models;
@@ -681,226 +683,60 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     if (not orderBy.empty() && User::isValidColumnName(orderBy))
       query.orderBy(orderBy);
 
-    // Execute query in thread pool to avoid blocking the event loop
+    // get() now returns std::expected<std::vector<Model>, DatabaseError> directly —
+    // no more optional-wrapping-a-vector.
     auto users = co_await query.get();
 
-    if (not users) {
-      auto res = HttpResponse(500, json{{"error", "Database error"}}.dump());
-      res.headers.setHeaderLower("content-type", "application/json");
-      co_return res;
-    }
+    if (not users)
+      co_return HttpResponse(500, "application/json", json{{"error", users.error().message}}.dump());
 
     json arr = json::array();
-    for (auto &user : *users) {
+    for (auto &user : *users)
       arr.push_back(user.toJson());
-      SPDLOG_INFO("User: {}", user.toString());
-    }
 
-    // Build response as array of user objects
     co_return HttpResponse(200, "application/json", arr.dump());
   });
 
-  router.get("/tests/db/full_test", [threadPool, db](const HttpRequest &request) -> Task<Response> {
-    using namespace models;
-    using P = Predicate<User>;
-
-    auto fail = [](const std::string &step, const std::string &detail) {
-      SPDLOG_ERROR("[full_test] FAILED at '{}': {}", step, detail);
-      return HttpResponse(500, "application/json", json{{"error", step}, {"detail", detail}}.dump());
-    };
-
-    auto query = User::all();
-
-    User bob;
-    bob.name = "bob";
-    bob.email = "bob@example.com";
-    bob.age = std::nullopt;
-    bob.password = "secret";
-    bob.createdAt = 124;
-
-    {
-      db::ScopedTransaction transaction(db);
-      try {
-        co_await bob.save(*transaction);
-        if (not transaction->commit())
-          co_return fail("after bob save", "commit() returned false");
-      } catch (const std::exception &ex) {
-        if (not transaction->rollback())
-          co_return fail("after bob save", "rollback() returned false");
-      }
-    }
-
-    if ((co_await User::find(bob.id))->createdAt != 124)
-      co_return fail("after bob save", "expected createdAt to be 124");
-
-    bob.createdAt = 123;
-
-    {
-      db::ScopedTransaction transaction(db);
-      try {
-        co_await bob.save(*transaction);
-        if ((co_await User::find(bob.id))->createdAt != 124)
-          co_return fail("outside transaction, before Error", "expected createdAt to still be 124");
-
-        if ((co_await User::find(bob.id, *transaction))->createdAt != 123)
-          co_return fail("inside transaction, before Error", "expected createdAt to be 123");
-        throw std::runtime_error("test");
-        if (not transaction->commit())
-          co_return fail("inside transaction, after Error", "commit() returned false");
-      } catch (const std::exception &ex) {
-        if (not transaction->rollback())
-          co_return fail("inside transaction, after Error", "rollback() returned false");
-      }
-    }
-
-    if ((co_await User::find(bob.id))->createdAt != 124)
-      co_return fail("after transaction", "expected createdAt to be 124 due to rollback");
-
-    // --- Insert-then-rollback: demonstrates the documented persisted_/id staleness caveat ---
-    User carol;
-    carol.name = "carol";
-    carol.email = "carol@example.com";
-    carol.age = std::nullopt;
-    carol.password = "secret";
-    carol.createdAt = 125;
-
-    {
-      db::ScopedTransaction transaction(db);
-      try {
-        if (not co_await carol.save(*transaction))
-          co_return fail("carol insert", "save() returned false");
-        if (carol.id <= 0)
-          co_return fail("carol insert", "id not populated after insert inside transaction");
-
-        throw std::runtime_error("force rollback");
-      } catch (const std::exception &ex) {
-        if (not transaction->rollback())
-          co_return fail("carol insert rollback", "rollback() returned false");
-      }
-    }
-
-    // carol.id is still populated in memory even though the row never actually landed —
-    // this is the caveat: don't reuse carol without re-fetching after a rollback.
-    if (co_await User::find(carol.id))
-      co_return fail("carol insert rollback", "expected row to not exist after rollback, but find() succeeded");
-
-    User alice;
-    alice.name = "Alice";
-    alice.email = "alice@example.com";
-    alice.age = std::nullopt;
-    alice.password = "secret";
-    alice.createdAt = 124;
-
-    try {
-      // --- 0. Start from a known-empty table so the test is idempotent ---
-      co_await User::bulkDestroy({true});
-      auto startCount = co_await query.count();
-      if (startCount != 0)
-        co_return fail("cleanup", "expected 0 rows, got " + std::to_string(startCount));
-
-      // --- 1. Single insert, including a nullable field left unset ---
-      if (not co_await alice.save())
-        co_return fail("single insert", "save() returned false");
-      if (alice.id <= 0)
-        co_return fail("single insert", "id not populated after insert");
-
-      // --- 2. Single find, verify nullable round-trips as empty ---
-      auto found = co_await User::find(alice.id);
-      if (not found)
-        co_return fail("single find", "find() returned nullopt");
-      if (found->age.has_value())
-        co_return fail("single find", "age should be null, got " + std::to_string(*found->age));
-      if (found->name != "Alice")
-        co_return fail("single find", "name mismatch: " + found->name.value_or("<unknown>"));
-
-      // --- 3. Single update: set a previously-null field, null out a previously-set one ---
-      alice = *found;
-      alice.age = 20;
-      alice.password = std::nullopt;
-      if (not co_await alice.save())
-        co_return fail("single update", "save() returned false");
-
-      found = co_await User::find(alice.id);
-      if (not found or found->age != 20)
-        co_return fail("single update", "age not updated");
-      if (found->password.has_value())
-        co_return fail("single update", "password should be null after update");
-
-      // --- 4. Single destroy ---
-      if (not co_await alice.destroy())
-        co_return fail("single destroy", "destroy() returned false");
-      if (auto c = co_await query.count(); c != 0)
-        co_return fail("single destroy", "expected 0 rows, got " + std::to_string(c));
-
-      // --- 5. Bulk insert ---
-      std::vector<User> batch;
-      batch.push_back({.name = "Alice", .email = "alice@example.com", .createdAt = 124});
-      batch.push_back({.name = "Bob", .email = "bob@example.com", .createdAt = 123});
-
-      auto [insertedCount, insertedRows] = co_await User::bulkInsert(batch);
-      if (insertedCount != 2)
-        co_return fail("bulk insert", "expected 2 rows, got " + std::to_string(insertedCount));
-
-      // --- 6. Bulk update, verify it actually applied ---
-      User patch;
-      patch.name = "x";
-      patch.password = "1234";
-      auto [updatedCount, updatedRows] = co_await User::bulkUpdate(patch, {"name", "password"}, {true});
-      if (updatedCount != 2)
-        co_return fail("bulk update", "expected 2 rows, got " + std::to_string(updatedCount));
-
-      auto afterUpdate = co_await query.get();
-      if (not afterUpdate)
-        co_return fail("bulk update", "get() failed");
-      for (auto &u : *afterUpdate)
-        if (u.name != "x")
-          co_return fail("bulk update", "row id " + std::to_string(u.id) + " not updated");
-
-      // --- 7. Bulk destroy, verify table is empty again ---
-      auto [destroyedCount, destroyedRows] = co_await User::bulkDestroy({true});
-      if (destroyedCount != 2)
-        co_return fail("bulk destroy", "expected 2 rows, got " + std::to_string(destroyedCount));
-      if (auto c = co_await query.count(); c != 0)
-        co_return fail("bulk destroy", "expected 0 rows, got " + std::to_string(c));
-
-    } catch (const std::exception &e) {
-      co_return fail("exception", e.what());
-    }
-
-    co_return HttpResponse(200, "application/json", json{{"message", "all assertions passed"}}.dump());
-  });
-
   // POST /tests/db/insert
-  // Inserts a new user record into the users table
   // Required JSON fields:
   //   - name: User's full name (string)
   // Optional JSON fields:
   //   - email: User's email address (string)
   //   - age: User's age (integer)
+  //   - password: (string)
+  // Fields omitted from the body are left null/default rather than coerced to "" or 0.
   router.post("/tests/db/insert", [threadPool, db](HttpRequest &request) -> Task<Response> {
     auto body = co_await request.jsonBody();
     if (body.is_discarded())
       co_return HttpResponse(400, "application/json", json{{"error", "invalid JSON"}}.dump());
 
-    // Validate required 'name' field
     if (!body.contains("name") || !body["name"].is_string())
       co_return HttpResponse(400, "application/json", json{{"error", "name is required"}}.dump());
 
     models::User user;
     user.name = body["name"].get<std::string>();
-    user.email = body.contains("email") ? body["email"].get<std::string>() : "";
-    user.age = body.contains("age") ? body["age"].get<int64_t>() : 0;
-    user.password = body.contains("password") ? body["password"].get<std::string>() : "";
+    if (body.contains("email"))
+      user.email = body["email"].get<std::string>();
+    if (body.contains("age"))
+      user.age = body["age"].get<int64_t>();
+    if (body.contains("password"))
+      user.password = body["password"].get<std::string>();
 
-    // Execute insert in thread pool to avoid blocking the event loop
+    // save() returns the DB-hydrated model (with id populated) — not a bool, and it
+    // does not mutate `user` in place.
     auto result = co_await user.save();
 
     if (not result)
-      co_return HttpResponse(500, "application/json", json{{"error", "Insert failed"}}.dump());
+      co_return HttpResponse(500, "application/json", json{{"error", result.error().message}}.dump());
 
-    co_return HttpResponse(201, "application/json", json{{"created", "Insert successful"}}.dump());
+    co_return HttpResponse(201, "application/json", result->toJson().dump());
   });
 
+  // POST /tests/db/update
+  // Required JSON fields:
+  //   - id
+  // Optional JSON fields (only fields present in the body are changed):
+  //   - name, email, age, password
   router.post("/tests/db/update", [threadPool, db](HttpRequest &request) -> Task<Response> {
     auto body = co_await request.jsonBody();
     if (body.is_discarded())
@@ -911,27 +747,36 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     auto id = body["id"].get<models::User::pk>();
 
-    auto userOpt = co_await models::User::find(id);
-
-    if (not userOpt) {
+    // find() now returns std::expected<std::optional<Model>, DatabaseError> — the outer
+    // expected is a DB-error signal, the inner optional is "found or not".
+    auto findResult = co_await models::User::find(id);
+    if (not findResult)
+      co_return HttpResponse(500, "application/json", json{{"error", findResult.error().message}}.dump());
+    if (not findResult->has_value())
       co_return HttpResponse(404, "application/json", json{{"error", "User not found"}}.dump());
-    }
-    auto user = *userOpt;
 
-    user.name = body.contains("name") ? body["name"].get<std::string>() : "";
-    user.email = body.contains("email") ? body["email"].get<std::string>() : "";
-    user.age = body.contains("age") ? body["age"].get<int64_t>() : 0;
-    user.password = body.contains("password") ? body["password"].get<std::string>() : "";
+    auto user = **findResult;
 
-    // Execute update in thread pool to avoid blocking the event loop
+    if (body.contains("name"))
+      user.name = body["name"].get<std::string>();
+    if (body.contains("email"))
+      user.email = body["email"].get<std::string>();
+    if (body.contains("age"))
+      user.age = body["age"].get<int64_t>();
+    if (body.contains("password"))
+      user.password = body["password"].get<std::string>();
+
     auto result = co_await user.save();
 
     if (not result)
-      co_return HttpResponse(500, "application/json", json{{"error", "Update failed"}}.dump());
+      co_return HttpResponse(500, "application/json", json{{"error", result.error().message}}.dump());
 
-    co_return HttpResponse(200, "application/json", json{{"updated", "Update successful"}}.dump());
+    co_return HttpResponse(200, "application/json", result->toJson().dump());
   });
 
+  // POST /tests/db/delete
+  // Required JSON fields:
+  //   - id
   router.post("/tests/db/delete", [threadPool, db](HttpRequest &request) -> Task<Response> {
     auto body = co_await request.jsonBody();
     if (body.is_discarded())
@@ -941,16 +786,181 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       co_return HttpResponse(400, "application/json", json{{"error", "id is required"}}.dump());
 
     auto id = body["id"].get<models::User::pk>();
-    auto user = co_await models::User::find(id);
 
-    if (not user) {
+    auto findResult = co_await models::User::find(id);
+    if (not findResult)
+      co_return HttpResponse(500, "application/json", json{{"error", findResult.error().message}}.dump());
+    if (not findResult->has_value())
       co_return HttpResponse(404, "application/json", json{{"error", "User not found"}}.dump());
-    }
 
-    if (not co_await user->destroy()) {
-      co_return HttpResponse(500, "application/json", json{{"error", "Delete failed"}}.dump());
-    }
+    auto user = **findResult;
+    auto destroyResult = co_await user.destroy();
+    if (not destroyResult)
+      co_return HttpResponse(500, "application/json", json{{"error", destroyResult.error().message}}.dump());
 
-    co_return HttpResponse(200, "application/json", json{{"deleted", "Delete successful"}}.dump());
+    co_return HttpResponse(200, "application/json", json{{"deleted", destroyResult->toJson()}}.dump());
+  });
+
+  // GET /tests/db/full_test
+  // Runs a fixed sequence of ORM checks. Each step is isolated: a failure records that
+  // step as failed and the suite continues. Response is a JSON summary with a per-step
+  // pass/fail + detail, and an overall `allPassed`.
+  router.get("/tests/db/full_test", [threadPool, db](const HttpRequest &request) -> Task<Response> {
+    using namespace models;
+    using namespace testutil;
+    using P = Predicate<User>;
+
+    TestRunner runner;
+
+    // --- 0. Start from a known-empty table so the suite is idempotent ---
+    co_await runner.run("cleanup", [db]() -> Task<void> {
+      unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
+      auto count = unwrap(co_await User::all().count(), "count");
+      expect(count == 0, "expected 0 rows after cleanup, got " + std::to_string(count));
+    });
+
+    // --- 1. Single insert, including a nullable field left unset ---
+    User alice;
+    alice.name = "Alice";
+    alice.email = "alice@example.com";
+    alice.age = std::nullopt;
+    alice.password = "secret";
+    alice.createdAt = 124;
+
+    co_await runner.run("single insert", [&alice]() -> Task<void> {
+      // save() doesn't mutate `alice` in place — capture the returned, DB-hydrated model.
+      alice = unwrap(co_await alice.save(), "save");
+      expect(alice.id > 0, "id not populated after insert");
+    });
+
+    // --- 2. Single find, verify nullable round-trips as empty ---
+    co_await runner.run("single find", [&alice]() -> Task<void> {
+      auto found = unwrap(co_await User::find(alice.id), "find");
+      expect(found.has_value(), "find() returned nullopt");
+      expect(not found->age.has_value(), "age should be null, got " + std::to_string(found->age.value_or(-1)));
+      expect(found->name == "Alice", "name mismatch: " + found->name.value_or("<unknown>"));
+    });
+
+    // --- 3. Single update: set a previously-null field, null out a previously-set one ---
+    co_await runner.run("single update", [&alice]() -> Task<void> {
+      alice.age = 20;
+      alice.password = std::nullopt;
+      alice = unwrap(co_await alice.save(), "save");
+
+      auto found = unwrap(co_await User::find(alice.id), "find");
+      expect(found.has_value() && found->age == 20, "age not updated");
+      expect(not found->password.has_value(), "password should be null after update");
+    });
+
+    // --- 4. Single destroy ---
+    co_await runner.run("single destroy", [&alice]() -> Task<void> {
+      unwrap(co_await alice.destroy(), "destroy");
+      auto count = unwrap(co_await User::all().count(), "count");
+      expect(count == 0, "expected 0 rows after destroy, got " + std::to_string(count));
+    });
+
+    // --- 5. Bulk insert ---
+    co_await runner.run("bulk insert", []() -> Task<void> {
+      std::vector<User> batch;
+      batch.push_back({.name = "Alice", .email = "alice@example.com", .createdAt = 124});
+      batch.push_back({.name = "Bob", .email = "bob@example.com", .createdAt = 123});
+
+      auto [insertedCount, insertedRows] = unwrap(co_await User::bulkInsert(batch), "bulkInsert");
+      expect(insertedCount == 2, "expected 2 rows, got " + std::to_string(insertedCount));
+    });
+
+    // --- 6. Bulk update, verify it actually applied ---
+    co_await runner.run("bulk update", []() -> Task<void> {
+      User patch;
+      patch.name = "x";
+      patch.password = "1234";
+      auto [updatedCount, updatedRows] =
+          unwrap(co_await User::bulkUpdate(patch, {"name", "password"}, {true}), "bulkUpdate");
+      expect(updatedCount == 2, "expected 2 rows, got " + std::to_string(updatedCount));
+
+      auto afterUpdate = unwrap(co_await User::all().get(), "get");
+      for (auto &u : afterUpdate)
+        expect(u.name == "x", "row id " + std::to_string(u.id) + " not updated");
+    });
+
+    // --- 7. Bulk destroy, verify table is empty again ---
+    co_await runner.run("bulk destroy", []() -> Task<void> {
+      auto [destroyedCount, destroyedRows] = unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
+      expect(destroyedCount == 2, "expected 2 rows, got " + std::to_string(destroyedCount));
+      auto count = unwrap(co_await User::all().count(), "count");
+      expect(count == 0, "expected 0 rows, got " + std::to_string(count));
+    });
+
+    // --- 8. Transaction commit ---
+    User bob;
+    bob.name = "bob";
+    bob.email = "bob@example.com";
+    bob.age = std::nullopt;
+    bob.password = "secret";
+    bob.createdAt = 124;
+
+    co_await runner.run("transaction commit", [db, &bob]() -> Task<void> {
+      db::ScopedTransaction transaction(db);
+      bob = unwrap(co_await bob.save(*transaction), "save");
+      expect(transaction->commit(), "commit() returned false");
+
+      auto found = unwrap(co_await User::find(bob.id), "find");
+      expect(found.has_value() && found->createdAt == 124, "expected createdAt to be 124 after commit");
+    });
+
+    // --- 9. Transaction rollback: change visible inside txn, invisible outside, reverted after rollback ---
+    co_await runner.run("transaction rollback", [db, &bob]() -> Task<void> {
+      bob.createdAt = 123;
+      {
+        db::ScopedTransaction transaction(db);
+        // Deliberately not reassigning `bob` here — the outer variable must keep
+        // representing the pre-transaction state for the "outside" check below.
+        unwrap(co_await bob.save(*transaction), "save inside transaction");
+
+        auto outside = unwrap(co_await User::find(bob.id), "find outside transaction");
+        expect(outside.has_value() && outside->createdAt == 124,
+               "expected createdAt to still be 124 outside the transaction");
+
+        auto inside = unwrap(co_await User::find(bob.id, *transaction), "find inside transaction");
+        expect(inside.has_value() && inside->createdAt == 123, "expected createdAt to be 123 inside the transaction");
+
+        expect(transaction->rollback(), "rollback() returned false");
+      }
+
+      auto found = unwrap(co_await User::find(bob.id), "find");
+      expect(found.has_value() && found->createdAt == 124, "expected createdAt to be 124 due to rollback");
+    });
+
+    // --- 10. Insert-then-rollback: demonstrates the documented persisted_/id staleness caveat ---
+    co_await runner.run("insert then rollback", [db]() -> Task<void> {
+      User carol;
+      carol.name = "carol";
+      carol.email = "carol@example.com";
+      carol.age = std::nullopt;
+      carol.password = "secret";
+      carol.createdAt = 125;
+
+      int64_t carolId = 0;
+      {
+        db::ScopedTransaction transaction(db);
+        auto saved = unwrap(co_await carol.save(*transaction), "save");
+        carolId = saved.id;
+        expect(carolId > 0, "id not populated after insert inside transaction");
+        expect(transaction->rollback(), "rollback() returned false");
+      }
+
+      // carolId was populated by the insert even though the row never actually landed —
+      // this is the caveat: any in-memory copy from before a rollback is stale.
+      auto found = unwrap(co_await User::find(carolId), "find after rollback");
+      expect(not found.has_value(), "expected row to not exist after rollback, but find() succeeded");
+    });
+
+    // --- 11. Leave the table empty for the next run ---
+    co_await runner.run("final cleanup",
+                        []() -> Task<void> { unwrap(co_await User::bulkDestroy({true}), "bulkDestroy"); });
+
+    json summary = runner.toJson();
+    int status = summary["allPassed"].get<bool>() ? 200 : 500;
+    co_return HttpResponse(status, "application/json", summary.dump(2));
   });
 }

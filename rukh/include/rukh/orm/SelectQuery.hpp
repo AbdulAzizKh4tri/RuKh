@@ -70,7 +70,8 @@ public:
     return groupBy(Model::columnNameOf(fieldPtr));
   }
 
-  Task<int64_t> count(db::ITransaction *transaction = nullptr, bool distinct = false) {
+  Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr,
+                                                        bool distinct = false) {
     std::string countCol = distinct ? "DISTINCT COUNT(*)" : "COUNT(*)";
     std::string countSql = "SELECT " + countCol + " FROM " + Model::tableName + " ";
     std::vector<db::DbValue> countParams;
@@ -85,19 +86,18 @@ public:
           return db::dispatch(db_, transaction, countSql, countParams);
         });
 
-    if (not queryResult) {
-      SPDLOG_ERROR("Error executing query: {}", countSql);
-      SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      co_return -1;
-    }
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
 
     co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
   template <typename FieldT>
-  Task<int64_t> count(const std::string &col, db::ITransaction *transaction = nullptr, bool distinct = false) {
+  Task<std::expected<int64_t, db::DatabaseError>> count(const std::string &col, db::ITransaction *transaction = nullptr,
+                                                        bool distinct = false) {
     if (not Model::validColumnNames().contains(col))
-      throw rukh::OrmException("Failed to add column to groupBy: unknown column '" + col + "' on " + Model::tableName);
+      co_return std::unexpected(
+          {db::DbErrorType::INVALID_COLUMN, "Unknown column '" + col + "' on " + Model::tableName});
 
     std::string countCol = distinct ? "DISTINCT COUNT(" + col + ")" : "COUNT(" + col + ")";
     std::string countSql = "SELECT " + countCol + " FROM " + Model::tableName + " ";
@@ -113,37 +113,32 @@ public:
           return db::dispatch(db_, transaction, countSql, countParams);
         });
 
-    if (not queryResult) {
-      SPDLOG_ERROR("Error executing query: {}", countSql);
-      SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      co_return -1;
-    }
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
 
     co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
   template <typename FieldT>
-  Task<int64_t> count(FieldT Model::*fieldPtr, db::ITransaction *transaction = nullptr, bool distinct = false) {
-    co_return count(Model::columnNameOf(fieldPtr), distinct, transaction);
+  Task<std::expected<int64_t, db::DatabaseError>>
+  count(FieldT Model::*fieldPtr, db::ITransaction *transaction = nullptr, bool distinct = false) {
+    co_return co_await count(Model::columnNameOf(fieldPtr), transaction, distinct);
   }
 
-  Task<std::optional<std::vector<Model>>> get(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<std::vector<Model>, db::DatabaseError>> get(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
     auto queryResult =
         co_await Model::threadPool->submit([this, transaction]() -> std::expected<db::QueryResult, db::DatabaseError> {
           return db::dispatch(db_, transaction, sql_, params_);
         });
 
-    if (not queryResult) {
-      SPDLOG_ERROR("Error executing query: {}", sql_);
-      SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      co_return std::nullopt;
-    }
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
 
     co_return hydrate<Model>(*queryResult);
   }
 
-  Task<std::optional<Model>> first(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
     changed = true;
     std::optional<size_t> oldLimit = limit_;
     limit_ = 1;
@@ -155,11 +150,8 @@ public:
           return db::dispatch(db_, transaction, sql_, params_);
         });
 
-    if (not queryResult) {
-      SPDLOG_ERROR("Error executing query: {}", sql_);
-      SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      co_return std::nullopt;
-    }
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
 
     if (queryResult->rows.empty())
       co_return std::nullopt;
@@ -167,7 +159,7 @@ public:
     co_return hydrate<Model>(queryResult->rows[0]);
   }
 
-  Task<bool> exists(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
 
     auto queryResult =
@@ -175,28 +167,27 @@ public:
           return db::dispatch(db_, transaction, "SELECT EXISTS (" + sql_ + ")", params_);
         });
 
-    if (not queryResult) {
-      SPDLOG_ERROR("Error executing query: {}", sql_);
-      SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      co_return false;
-    }
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
 
     co_return queryResult->rows.size() > 0;
   }
 
-  Task<std::pair<size_t, std::vector<Model>>> update(db::ITransaction *transaction = nullptr, bool returning = false) {
+  Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  update(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
     UpdateQuery<Model> updateQuery;
     for (auto &col : columns_) {
       updateQuery.column(col);
     }
     co_return co_await updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
-        .execute(returning, transaction);
+        .execute(obj, transaction, returning);
   }
 
-  Task<std::pair<size_t, std::vector<Model>>> destroy(db::ITransaction *transaction = nullptr, bool returning = false) {
+  Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  destroy(db::ITransaction *transaction = nullptr, bool returning = false) {
     co_return co_await DeleteQuery<Model>()
         .where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
-        .execute(returning, transaction);
+        .execute(transaction, returning);
   }
 
   SelectQuery<Model> &reset() {

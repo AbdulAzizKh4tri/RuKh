@@ -1,6 +1,8 @@
 #pragma once
 
+#include "rukh/db/DbTypes.hpp"
 #include <cstddef>
+#include <expected>
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
@@ -16,7 +18,8 @@ namespace rukh::orm {
 
 template <typename Model> class DeleteQuery : public WhereClause<Model, DeleteQuery<Model>> {
 public:
-  Task<std::pair<size_t, std::vector<Model>>> execute(db::ITransaction *transaction = nullptr, bool returning = false) {
+  Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  execute(db::ITransaction *transaction = nullptr, bool returning = false) {
 
     buildDeleteSqlAndSetParams(returning);
     auto queryResult =
@@ -24,11 +27,8 @@ public:
           return db::dispatch(db_, transaction, sql_, params_);
         });
 
-    if (not queryResult) {
-      SPDLOG_ERROR("Error executing query: {}", sql_);
-      SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      co_return {0, {}};
-    }
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
 
     co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }

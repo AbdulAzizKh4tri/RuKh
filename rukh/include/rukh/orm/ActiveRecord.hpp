@@ -2,10 +2,11 @@
 
 #include <unordered_set>
 
+#include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
+
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
-
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
 
@@ -20,39 +21,75 @@ template <typename Model, typename pkType> class ActiveRecord {
 public:
   using pk = pkType;
 
-  static Task<std::optional<Model>> find(pkType pkVal, db::ITransaction *transaction = nullptr) {
+  static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(pkType pkVal,
+                                                                           db::ITransaction *transaction = nullptr) {
     Column<Model, pkType> pkColumn = Model::pkColumn();
     co_return co_await SelectQuery<Model>()
         .where(Predicate<Model>::equals(pkColumn.fieldPtr, pkVal))
         .first(transaction);
   }
 
+  static Task<std::expected<Model, db::DatabaseError>> findOrCreate(Model obj,
+                                                                    db::ITransaction *transaction = nullptr) {
+    Column<Model, pkType> pkColumn = Model::pkColumn();
+    auto findResult = co_await find(obj.*pkColumn.fieldPtr, transaction);
+    if (not findResult)
+      co_return std::unexpected(findResult.error());
+    if (auto userOpt = *findResult; userOpt) {
+      co_return *userOpt;
+    }
+    auto insertResult = co_await InsertQuery<Model>().execute({obj}, transaction, true);
+    if (not insertResult) {
+      if (insertResult.error().type == db::DbErrorType::DUPLICATE_KEY) {
+        auto refetch = co_await find(obj.*pkColumn.fieldPtr, transaction);
+        if (not refetch)
+          throw DatabaseException("Huh? Insert returned a duplicate key, but could not find the object");
+
+        co_return *refetch;
+      } else {
+        co_return std::unexpected(insertResult.error());
+      }
+    }
+    auto [_, objs] = *insertResult;
+    co_return objs[0];
+  }
+
   static SelectQuery<Model> all() { return SelectQuery<Model>(); }
   static SelectQuery<Model> filter(const Predicate<Model> &p) { return SelectQuery<Model>().where(p); }
 
-  static Task<std::pair<size_t, std::vector<Model>>> bulkInsert(const std::vector<Model> &objs,
-                                                                db::ITransaction *transaction = nullptr) {
-    InsertQuery<Model> query;
-    co_return co_await query.execute(objs, transaction, true);
+  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  bulkInsert(const std::vector<Model> &objs, db::ITransaction *transaction = nullptr) {
+    auto result = co_await InsertQuery<Model>().execute(objs, transaction, true);
+    if (not result)
+      co_return std::unexpected(result.error());
+
+    co_return *result;
   }
 
-  static Task<std::pair<size_t, std::vector<Model>>> bulkUpdate(const Model &newObj,
-                                                                const std::vector<std::string> &columns,
-                                                                const Predicate<Model> &p,
-                                                                db::ITransaction *transaction = nullptr) {
+  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  bulkUpdate(const Model &newObj, const std::vector<std::string> &columns, const Predicate<Model> &p,
+             db::ITransaction *transaction = nullptr) {
     UpdateQuery<Model> query;
     for (auto &col : columns)
       query.column(col);
-    co_return co_await query.where(p).execute(newObj, transaction, true);
+    auto result = co_await query.where(p).execute(newObj, transaction, true);
+    if (not result)
+      co_return std::unexpected(result.error());
+
+    co_return *result;
   }
 
-  static Task<std::pair<size_t, std::vector<Model>>> bulkDestroy(const Predicate<Model> &p,
-                                                                 db::ITransaction *transaction = nullptr) {
+  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  bulkDestroy(const Predicate<Model> &p, db::ITransaction *transaction = nullptr) {
     DeleteQuery<Model> query;
-    co_return co_await query.where(p).execute(transaction, true);
+    auto result = co_await query.where(p).execute(transaction, true);
+    if (not result)
+      co_return std::unexpected(result.error());
+
+    co_return *result;
   }
 
-  Task<bool> save(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<Model, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
     // if called inside a transaction that is later rolled back, this object's persisted_/id will not reflect that — do
     // not reuse a model object after a rollback without re-fetching it.
 
@@ -62,31 +99,51 @@ public:
       co_return co_await insert(transaction);
   }
 
-  Task<bool> insert(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<Model, db::DatabaseError>> insert(db::ITransaction *transaction = nullptr) {
     Model *self = static_cast<Model *>(this);
     InsertQuery<Model> query;
     std::vector<Model> inputObjs{*self};
-    auto [rowsAffected, objs] = co_await query.execute(inputObjs, transaction, true);
-    if (rowsAffected > 0)
-      self->id = objs[0].id;
+
+    auto result = co_await query.execute(inputObjs, transaction, true);
+    if (not result)
+      co_return std::unexpected(result.error());
+
+    auto [_, objs] = *result;
+    if (objs.empty())
+      throw DatabaseException("Failed to insert object");
+
+    *self = objs[0];
     setPersisted();
-    co_return rowsAffected > 0;
+    co_return objs[0];
   }
 
-  Task<bool> update(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<Model, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
     auto pkColumn = Model::pkColumn();
     Model *self = static_cast<Model *>(this);
     Predicate p(pkColumn.fieldPtr, Operator::EQUALS, self->*pkColumn.fieldPtr);
-    auto [rowsAffected, _] = co_await UpdateQuery<Model>().where(p).execute(*self, transaction);
-    co_return rowsAffected > 0;
+
+    auto result = co_await UpdateQuery<Model>().where(p).execute(*self, transaction, true);
+    if (not result)
+      co_return std::unexpected(result.error());
+    auto [_, objs] = *result;
+    if (objs.empty())
+      throw DatabaseException("Failed to update object");
+    *self = objs[0];
+    co_return objs[0];
   }
 
-  Task<bool> destroy(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<Model, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
     auto pkColumn = Model::pkColumn();
     Model *self = static_cast<Model *>(this);
     Predicate p(pkColumn.fieldPtr, Operator::EQUALS, self->*pkColumn.fieldPtr);
-    auto [rowsAffected, _] = co_await DeleteQuery<Model>().where(p).execute(transaction);
-    co_return rowsAffected > 0;
+    auto result = co_await DeleteQuery<Model>().where(p).execute(transaction, true);
+    if (not result)
+      co_return std::unexpected(result.error());
+    auto [_, objs] = *result;
+    if (objs.empty())
+      throw DatabaseException("Failed to delete object");
+    *self = objs[0];
+    co_return objs[0];
   }
 
   template <typename FieldT> static std::string columnNameOf(FieldT Model::*fieldPtr) {

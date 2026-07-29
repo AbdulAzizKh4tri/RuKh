@@ -16,8 +16,8 @@ namespace rukh::orm {
 
 template <typename Model> class UpdateQuery : public WhereClause<Model, UpdateQuery<Model>> {
 public:
-  Task<std::pair<size_t, std::vector<Model>>> execute(const Model &obj, db::ITransaction *transaction = nullptr,
-                                                      bool returning = false) {
+  Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  execute(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
 
     buildUpdateSqlAndSetParams(obj, returning);
 
@@ -26,11 +26,8 @@ public:
           return db::dispatch(db_, transaction, sql_, params_);
         });
 
-    if (not queryResult) {
-      SPDLOG_ERROR("Error executing query: {}", sql_);
-      SPDLOG_ERROR("DatabaseError: {}", queryResult.error().message);
-      co_return std::make_pair(0, std::vector<Model>{obj});
-    }
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
 
     co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }
