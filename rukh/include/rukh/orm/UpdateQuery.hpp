@@ -8,7 +8,6 @@
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
-#include <rukh/db/helpers.hpp>
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/QueryBase.hpp>

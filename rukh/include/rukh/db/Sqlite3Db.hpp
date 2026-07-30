@@ -7,6 +7,7 @@
 #include <string>
 
 #include <rukh/Exceptions.hpp>
+#include <rukh/ThreadPool.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
@@ -21,8 +22,9 @@ const int SQLITE3_BUSY_TIMEOUT = 5000; // ms to wait on SQLITE_BUSY instead of f
 
 class Sqlite3Db : public IDatabase {
 public:
-  Sqlite3Db(const std::string &filename, int poolSize = 4) {
-    for (int i = 0; i < poolSize; i++) {
+  Sqlite3Db(const std::string &filename, ThreadPool *threadPool, size_t ConnectionPoolSize = 4)
+      : threadPool_(threadPool) {
+    for (int i = 0; i < ConnectionPoolSize; i++) {
       sqlite3 *dbConnection;
       int rc = sqlite3_open_v2(filename.c_str(), &dbConnection, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
       if (rc) {
@@ -43,38 +45,46 @@ public:
     releaseConnection(conn);
   }
 
-  std::expected<QueryResult, DatabaseError> executeQuery(const std::string &sql,
-                                                         const std::vector<DbValue> &params = {}) override {
+  Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
+                                                               const std::vector<DbValue> &params = {}) override {
     Connection *conn = acquireConnection();
     ConnectionReleaseGuard connectionGuard{conn, &connectionQueue_};
 
-    return Sqlite3QueryExecutor::executeOnConnection(conn, sql, params);
+    co_return co_await threadPool_->submit([&, this]() -> std::expected<db::QueryResult, db::DatabaseError> {
+      return Sqlite3QueryExecutor::executeOnConnection(conn, sql, params);
+    });
   }
 
-  std::expected<std::unique_ptr<ITransaction>, DatabaseError> startTransaction() override {
+  std::expected<std::unique_ptr<ITransaction>, DatabaseError> acquireTransaction() override {
     Connection *conn = acquireConnection();
-    auto t = Sqlite3Transaction::createTransaction(conn);
-    if (not t) {
+
+    auto abandonFn = [this, conn] {
+      char *errMsg = nullptr;
+      sqlite3_exec(conn->dbConnection, "ROLLBACK;", nullptr, nullptr, &errMsg);
+      if (errMsg)
+        sqlite3_free(errMsg);
       releaseConnection(conn);
-      return std::unexpected(t.error());
-    }
-    return std::move(*t);
+    };
+
+    auto t = std::make_unique<Sqlite3Transaction>(conn, threadPool_, abandonFn);
+
+    return std::move(t);
   };
 
-  void endTransaction(std::unique_ptr<ITransaction> transaction) override {
+  void releaseTransaction(ITransaction *transaction) override {
     if (transaction == nullptr) {
       SPDLOG_WARN("Attempted to end null Transaction");
       return;
     }
 
-    Sqlite3Transaction *t = dynamic_cast<Sqlite3Transaction *>(transaction.get());
+    Sqlite3Transaction *t = dynamic_cast<Sqlite3Transaction *>(transaction);
+
     if (t == nullptr) {
-      SPDLOG_ERROR("endTransaction() called with a Transaction not created by Sqlite3Db");
+      SPDLOG_ERROR("Sqlite3Db::endTransaction() called with a Transaction not created by Sqlite3Db");
       return;
     }
 
     releaseConnection(t->getConnection());
-    transaction.reset();
   }
 
   Connection *acquireConnection() { return connectionQueue_.acquire(); }
@@ -82,6 +92,7 @@ public:
 
 private:
   ConnectionQueue connectionQueue_;
+  ThreadPool *threadPool_;
 };
 
 } // namespace rukh::db

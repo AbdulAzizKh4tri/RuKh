@@ -11,9 +11,11 @@
 #include <rukh/MultipartParser.hpp>
 #include <rukh/ThreadPool.hpp>
 
+#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/ScopedTransaction.hpp>
+
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/SelectQuery.hpp>
 
@@ -25,9 +27,6 @@ using json = nlohmann::json;
 using namespace rukh;
 
 void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool *threadPool, db::IDatabase *db) {
-
-  models::User::db = db;
-  models::User::threadPool = threadPool;
 
   router.get("/", [&errorFactory](const HttpRequest &request) -> Task<Response> {
     auto name = request.getQueryParam("name");
@@ -912,8 +911,10 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     co_await runner.run("transaction commit", [db, &bob]() -> Task<void> {
       db::ScopedTransaction transaction(db);
-      bob = unwrap(co_await bob.save(*transaction), "save");
-      expect(transaction->commit(), "commit() returned false");
+      co_await transaction.begin();
+      bob = unwrap(co_await bob.save(&transaction), "save");
+      auto res = co_await transaction.commit();
+      expect(res, "commit() returned false");
 
       auto found = unwrap(co_await User::find(bob.id), "find");
       expect(found.has_value() && found->createdAt == 124, "expected createdAt to be 124 after commit");
@@ -924,18 +925,21 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       bob.createdAt = 123;
       {
         db::ScopedTransaction transaction(db);
+        co_await transaction.begin();
         // Deliberately not reassigning `bob` here — the outer variable must keep
         // representing the pre-transaction state for the "outside" check below.
-        unwrap(co_await bob.save(*transaction), "save inside transaction");
+
+        auto res = co_await bob.save(&transaction);
+        unwrap(res, "save inside transaction");
 
         auto outside = unwrap(co_await User::find(bob.id), "find outside transaction");
         expect(outside.has_value() && outside->createdAt == 124,
                "expected createdAt to still be 124 outside the transaction");
 
-        auto inside = unwrap(co_await User::find(bob.id, *transaction), "find inside transaction");
+        auto inside = unwrap(co_await User::find(bob.id, &transaction), "find inside transaction");
         expect(inside.has_value() && inside->createdAt == 123, "expected createdAt to be 123 inside the transaction");
 
-        expect(transaction->rollback(), "rollback() returned false");
+        expect(co_await transaction.rollback(), "rollback() returned false");
       }
 
       auto found = unwrap(co_await User::find(bob.id), "find");
@@ -954,12 +958,12 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       int64_t carolId = 0;
       {
         db::ScopedTransaction transaction(db);
-        auto saved = unwrap(co_await carol.save(*transaction), "save");
+        co_await transaction.begin();
+        auto saved = unwrap(co_await carol.save(&transaction), "save");
         carolId = saved.id;
         expect(carolId > 0, "id not populated after insert inside transaction");
-        expect(transaction->rollback(), "rollback() returned false");
+        expect(co_await transaction.rollback(), "rollback() returned false");
       }
-
       // carolId was populated by the insert even though the row never actually landed —
       // this is the caveat: any in-memory copy from before a rollback is stale.
       auto found = unwrap(co_await User::find(carolId), "find after rollback");
@@ -973,5 +977,53 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     json summary = runner.toJson();
     int status = summary["allPassed"].get<bool>() ? 200 : 500;
     co_return HttpResponse(status, "application/json", summary.dump(2));
+  });
+
+  router.get("/tests/db/random", [threadPool, db](const HttpRequest &request) -> Task<Response> {
+    using namespace models;
+    using namespace testutil;
+    using P = Predicate<User>;
+
+    User user1{.email = "user1@example.com", .name = "user1", .age = 1, .password = "secret"};
+    User user2{.email = "user2@example.com", .name = "user2", .age = 2, .password = "secret"};
+    User user3{.email = "user3@example.com", .name = "user3", .age = 3, .password = "secret"};
+    User user4{.email = "user4@example.com", .name = "user4", .age = 4, .password = "secret"};
+
+    std::vector<User> users{user1, user2, user3, user4};
+
+    co_await User::bulkInsert(users);
+    auto query = User::filter(P::equals(&User::email, "user1@example.com"));
+
+    auto us = *co_await query.get();
+    for (auto user : us) {
+      SPDLOG_DEBUG(user.toString());
+    }
+
+    query.orWhere(P::equals(&User::email, "user2@example.com"));
+
+    us = *co_await query.get();
+    for (auto user : us) {
+      SPDLOG_DEBUG(user.toString());
+    }
+
+    query.where(P::like(&User::name, "user%"));
+
+    us = *co_await query.get();
+    for (auto user : us) {
+      SPDLOG_DEBUG(user.toString());
+    }
+
+    query.where(P::iContains(&User::name, "User"));
+
+    us = *co_await query.get();
+    for (auto user : us) {
+      SPDLOG_DEBUG(user.toString());
+    }
+
+    json res = json::array();
+
+    co_await User::bulkDestroy(P::truePredicate());
+
+    co_return HttpResponse(200, "application/json", res.dump(2));
   });
 }

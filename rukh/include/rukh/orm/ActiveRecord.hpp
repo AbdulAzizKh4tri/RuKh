@@ -42,7 +42,6 @@ public:
         auto refetch = co_await find(objPk, transaction);
         if (not refetch)
           throw DatabaseException("Huh? Insert returned a duplicate key, but could not find the object");
-
         co_return *refetch;
       } else {
         co_return std::unexpected(insertResult.error());
@@ -60,7 +59,6 @@ public:
     auto result = co_await InsertQuery<Model>().execute(objs, transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
-
     co_return *result;
   }
 
@@ -69,13 +67,10 @@ public:
   bulkUpdate(const Model &newObj, FieldTuple fields, const Predicate<Model> &p,
              db::ITransaction *transaction = nullptr) {
     UpdateQuery<Model> query;
-
     std::apply([&](auto &&...col) { (query.field(col), ...); }, fields);
-
     auto result = co_await query.where(p).execute(newObj, transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
-
     co_return *result;
   }
 
@@ -85,24 +80,7 @@ public:
     auto result = co_await query.where(p).execute(transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
-
     co_return *result;
-  }
-
-  static constexpr bool isValidColumnName(const std::string &name) {
-    return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, Model::columns());
-  }
-
-  static constexpr auto pkColumns() {
-    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat(slot<I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
-    return result;
-  }
-
-  static constexpr bool isPkColumn(const std::string &name) {
-    auto cols = pkColumns();
-    return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, cols);
   }
 
   Task<std::expected<Model, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
@@ -191,6 +169,22 @@ public:
     return [&, this]<std::size_t... I>(std::index_sequence<I...>) {
       return PkType{(self->*std::get<I>(cols).fieldPtr)...};
     }(std::make_index_sequence<pkArity>{});
+  }
+
+  static constexpr bool isValidColumnName(const std::string &name) {
+    return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, Model::columns());
+  }
+
+  static constexpr auto pkColumns() {
+    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(slot<I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
+    return result;
+  }
+
+  static constexpr bool isPkColumn(const std::string &name) {
+    auto cols = pkColumns();
+    return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, cols);
   }
 
   template <typename FieldPtr> static Column<Model, FieldPtr> getColumnObject(FieldPtr Model::*fieldPtr) {

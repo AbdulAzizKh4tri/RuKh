@@ -53,7 +53,7 @@ public:
 #if SPDLOG_ACTIVE_LEVEL <= SPDLOG_LEVEL_TRACE
     const char *rawSQL = sqlite3_expanded_sql(stmt);
     if (rawSQL) {
-      SPDLOG_TRACE("SQL: {}",rawSQL);
+      SPDLOG_TRACE("SQL: {}", rawSQL);
       sqlite3_free((void *)rawSQL); // must free it
     }
 #endif

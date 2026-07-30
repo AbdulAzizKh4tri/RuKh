@@ -9,6 +9,7 @@
 #include <rukh/ThreadPool.hpp>
 #include <rukh/db/Sqlite3Db.hpp>
 #include <rukh/logUtils.hpp>
+#include <rukh/orm/OrmConfig.hpp>
 
 #include "include/errors.hpp"
 #include "include/middlewares.hpp"
@@ -42,10 +43,14 @@ int main() {
   size_t threadPoolSize = N * 2;
   ThreadPool threadPool(threadPoolSize);
 
-  auto db_path = std::filesystem::path(__FILE__).parent_path() / "test.db";
-  db::IDatabase *db = new db::Sqlite3Db(db_path, threadPoolSize);
+  size_t connectionPoolSize = threadPoolSize;
 
-  registerRoutes(router, getErrorFactory(), &threadPool, db);
+  auto db_path = std::filesystem::path(__FILE__).parent_path() / "test.db";
+  db::IDatabase *db = new db::Sqlite3Db(db_path, &threadPool, connectionPoolSize);
+
+  orm::OrmConfig::db = db;
+
+  registerRoutes(router, getErrorFactory(), &threadPool);
 
   auto cert_path = std::filesystem::path(__FILE__).parent_path() / "cert.pem";
   auto key_path = std::filesystem::path(__FILE__).parent_path() / "key.pem";

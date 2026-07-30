@@ -2,6 +2,7 @@
 
 #include <expected>
 
+#include <rukh/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 
 namespace rukh::db {
@@ -10,12 +11,13 @@ class ITransaction {
 public:
   virtual ~ITransaction() = default;
 
-  virtual bool begin(const std::string &mode) = 0;
-  virtual bool commit() = 0;
-  virtual bool rollback() = 0;
+  virtual Task<std::expected<QueryResult, DatabaseError>> begin(const std::string &mode = "DEFERRED") = 0;
+  virtual Task<std::expected<QueryResult, DatabaseError>> commit() = 0;
+  virtual Task<std::expected<QueryResult, DatabaseError>> rollback() = 0;
+  virtual void abandon() = 0;
 
-  virtual std::expected<QueryResult, DatabaseError> executeQuery(const std::string &query,
-                                                                 const std::vector<DbValue> params = {}) = 0;
+  virtual Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &query,
+                                                                       const std::vector<DbValue> params = {}) = 0;
 
   virtual bool isTransactionEnded() const = 0;
 };

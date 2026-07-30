@@ -10,6 +10,7 @@
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/ActiveRecord.hpp>
 #include <rukh/orm/Column.hpp>
+#include <rukh/orm/OrmConfig.hpp>
 
 namespace models {
 using namespace rukh::orm;
@@ -18,9 +19,6 @@ struct User : ActiveRecord<User, int64_t> {
 
   static constexpr std::string tableName = "users";
   static constexpr std::string modelName = "User";
-
-  inline static rukh::db::IDatabase *db = nullptr;
-  inline static rukh::ThreadPool *threadPool = nullptr;
 
   int64_t id;
   std::optional<std::string> email;

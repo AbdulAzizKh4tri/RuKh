@@ -2,6 +2,8 @@
 
 #include <condition_variable>
 #include <sqlite3.h>
+#include <unordered_map>
+#include <vector>
 
 struct StatementResetGuard {
   sqlite3_stmt *&s;

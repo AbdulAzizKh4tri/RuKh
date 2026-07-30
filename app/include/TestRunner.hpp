@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <rukh/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
+#include <spdlog/spdlog.h>
 
 using json = nlohmann::json;
 
@@ -52,6 +53,14 @@ private:
 };
 
 // Throws on failure; use inside a step lambda passed to TestRunner::run.
+inline void expect(std::expected<rukh::db::QueryResult, rukh::db::DatabaseError> cond, const std::string &msg) {
+
+  if (not cond) {
+    SPDLOG_ERROR("{}", cond.error().message);
+    throw std::runtime_error(msg);
+  }
+}
+
 inline void expect(bool cond, const std::string &msg) {
   if (not cond)
     throw std::runtime_error(msg);
