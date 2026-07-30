@@ -18,7 +18,6 @@ using namespace rukh::orm;
 struct User : ActiveRecord<User, int64_t> {
 
   static constexpr std::string tableName = "users";
-  static constexpr std::string modelName = "User";
 
   int64_t id;
   std::optional<std::string> email;
@@ -42,22 +41,6 @@ struct User : ActiveRecord<User, int64_t> {
                       Column{&User::age, "age"},
                       Column{&User::password, "password"},
                       Column{.fieldPtr = &User::createdAt, .dbName = "created_at"}};
-  }
-
-  std::string toString() const {
-    return std::to_string(id) + ": " + name.value_or("null") + " " + email.value_or("null") + " " +
-           std::to_string(age.value_or(0)) + " " + password.value_or("null");
-  }
-
-  nlohmann::json toJson() const {
-    nlohmann::json j;
-    j["id"] = id;
-    j["name"] = name.value_or("null");
-    j["email"] = email.value_or("null");
-    j["age"] = age.value_or(0);
-    j["password"] = password.value_or("null");
-
-    return j;
   }
 };
 

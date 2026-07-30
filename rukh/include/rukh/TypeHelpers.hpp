@@ -4,6 +4,9 @@
 #include <type_traits>
 #include <utility>
 
+template <typename T>
+concept OptionalT = requires { typename T::value_type; } && std::same_as<T, std::optional<typename T::value_type>>;
+
 template <typename T> struct remove_optional {
   using type = T;
 };

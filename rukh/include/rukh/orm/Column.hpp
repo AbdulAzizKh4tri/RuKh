@@ -1,24 +1,30 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/db/DbTypes.hpp>
 
 namespace rukh::orm {
 
 enum struct AutoGenerate { OFF, DB_INCREMENT, DEFAULT, DB_NOW, CUSTOM };
 enum struct AutoUpdate { OFF, DB_SIDE, CUSTOM };
+enum struct JsonSerializationMode { OFF, AUTO, CUSTOM };
 
 template <typename Model, typename FieldT> struct Column {
-  FieldT Model::*fieldPtr;
-  std::string dbName;
-  bool isPrimaryKey = false;
-  AutoGenerate autoGenerateMode = AutoGenerate::OFF;
-  db::DbValue defaultValue = nullptr;
-  db::DbValue (Model::*customGenerator)() const = nullptr;
+  FieldT Model::*const fieldPtr;
+  const std::string_view dbName;
+  const bool isPrimaryKey = false;
 
-  AutoUpdate autoUpdateMode = AutoUpdate::OFF;
-  db::DbValue (Model::*customUpdator)() const = nullptr;
+  const AutoGenerate autoGenerateMode = AutoGenerate::OFF;
+  const db::DbValue defaultValue = nullptr;
+  db::DbValue (Model::*const customGenerator)() const = nullptr;
+
+  const AutoUpdate autoUpdateMode = AutoUpdate::OFF;
+  db::DbValue (Model::*const customUpdator)() const = nullptr;
+
+  const JsonSerializationMode jsonSerializationMode = JsonSerializationMode::AUTO;
+  std::optional<nlohmann::json> (*const jsonSerializer)(const FieldT &) = nullptr;
 };
 
 } // namespace rukh::orm

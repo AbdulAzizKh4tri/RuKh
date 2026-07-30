@@ -93,7 +93,7 @@ private:
 
   static inline const std::string &modelColumnListString() {
     static const std::string cached = [] {
-      std::string str;
+      std::ostringstream oss;
       bool first = true;
       std::apply(
           [&](auto &&...col) {
@@ -101,12 +101,12 @@ private:
               if (columnShouldBeSkipped(c.autoGenerateMode))
                 return;
 
-              str += (first ? (first = false, "") : ", ") + c.dbName;
+              oss << (first ? (first = false, "") : ", ") << c.dbName;
             };
             (handle(col), ...);
           },
           Model::columns());
-      return str;
+      return oss.str();
     }();
     return cached;
   }

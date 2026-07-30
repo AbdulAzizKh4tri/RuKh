@@ -12,7 +12,7 @@
 #include <rukh/orm/DeleteQuery.hpp>
 #include <rukh/orm/InsertQuery.hpp>
 #include <rukh/orm/SelectQuery.hpp>
-#include <rukh/orm/TypeHelpers.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/orm/UpdateQuery.hpp>
 
 namespace rukh::orm {
@@ -208,6 +208,41 @@ public:
     if (not found)
       throw OrmException("Field does not belong to Model");
     return result;
+  }
+
+  std::string toString(const int indent = -1) const { return toJson().dump(indent); }
+
+  nlohmann::json toJson() const {
+    nlohmann::json j;
+    const Model *self = static_cast<const Model *>(this);
+    std::apply(
+        [&](auto &&...cols) {
+          auto addToJ = [self, &j](auto &&col) {
+            using FieldType = std::remove_cvref_t<decltype(self->*col.fieldPtr)>;
+
+            if (col.jsonSerializationMode == JsonSerializationMode::OFF)
+              return;
+
+            if (col.jsonSerializationMode == JsonSerializationMode::CUSTOM) {
+              if (auto result = col.jsonSerializer(self->*col.fieldPtr))
+                j[col.dbName] = *result;
+              // nullopt from the serializer -> omit the key
+              return;
+            }
+
+            if constexpr (OptionalT<FieldType>) {
+              // optional field
+              if (self->*col.fieldPtr)
+                j[col.dbName] = *(self->*col.fieldPtr);
+            } else {
+              // non-optional field
+              j[col.dbName] = self->*col.fieldPtr;
+            }
+          };
+          (addToJ(cols), ...);
+        },
+        Model::columns());
+    return j;
   }
 
   void setPersisted() { persisted_ = true; }

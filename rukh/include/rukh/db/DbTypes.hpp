@@ -1,7 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <rukh/concepts.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <string>
 
 namespace rukh::db {
@@ -52,9 +52,17 @@ inline std::string dbValueToString(const DbValue &v) {
   return {};
 }
 
+struct StringHash {
+  // NOTE: Don't know what this does, but it works
+
+  // TODO: understand it
+  using is_transparent = void; // opts into heterogeneous lookup
+  std::size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
+};
+
 class Row {
 public:
-  template <typename T> std::optional<T> as(const std::string &col) const {
+  template <typename T> std::optional<T> as(const std::string_view col) const {
     auto it = columns->find(col);
     if (it == columns->end())
       return std::nullopt;
@@ -67,15 +75,24 @@ public:
     return val ? std::make_optional(*val) : std::nullopt;
   }
 
-  bool isNull(const std::string &col) const {
-    return std::holds_alternative<std::nullptr_t>(values[(*columns).at(col)]);
+  bool isNull(std::string_view col) const {
+    auto it = columns->find(col);
+    if (it == columns->end())
+      throw std::out_of_range("no such column: " + std::string(col));
+    return std::holds_alternative<std::nullptr_t>(values[it->second]);
   }
 
-  DbValue operator[](const std::string &column) { return values[(*columns).at(column)]; }
-  DbValue operator[](const size_t index) { return values[index]; }
+  DbValue operator[](std::string_view column) const {
+    auto it = columns->find(column);
+    if (it == columns->end())
+      throw std::out_of_range("no such column: " + std::string(column));
+    return values[it->second];
+  }
+
+  DbValue operator[](const size_t index) const { return values[index]; }
 
   std::vector<DbValue> values;
-  std::shared_ptr<std::unordered_map<std::string, size_t>> columns;
+  std::shared_ptr<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>> columns;
 
   std::string toString() const {
     std::string s;
@@ -89,7 +106,7 @@ public:
 struct QueryResult {
   size_t affectedRows; // for non SELECT queries
   std::vector<Row> rows;
-  std::shared_ptr<std::unordered_map<std::string, size_t>> columns;
+  std::shared_ptr<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>> columns;
 
   QueryResult &operator+=(const QueryResult &other) {
     affectedRows += other.affectedRows;

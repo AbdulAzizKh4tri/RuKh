@@ -59,7 +59,7 @@ public:
 #endif
 
     QueryResult result;
-    result.columns = std::make_shared<std::unordered_map<std::string, size_t>>();
+    result.columns = std::make_shared<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>>();
     bool first = true;
 
     bool queryComplete = false;

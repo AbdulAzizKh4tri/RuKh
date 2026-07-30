@@ -3,7 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
-#include <rukh/concepts.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Column.hpp>
 

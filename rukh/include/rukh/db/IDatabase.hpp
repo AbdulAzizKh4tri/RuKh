@@ -9,7 +9,6 @@
 #include <nlohmann/json.hpp>
 
 #include <rukh/Task.hpp>
-#include <rukh/concepts.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/ITransaction.hpp>
 

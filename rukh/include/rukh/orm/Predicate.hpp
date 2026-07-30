@@ -3,11 +3,11 @@
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/core/utils.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Column.hpp>
-#include <rukh/orm/TypeHelpers.hpp>
 
 namespace rukh::orm {
 

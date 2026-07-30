@@ -994,9 +994,12 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     co_await User::bulkInsert(users);
     auto query = User::filter(P::equals(&User::email, "user1@example.com"));
 
+    json res = json::array();
+
     auto us = *co_await query.get();
     for (auto user : us) {
       SPDLOG_DEBUG(user.toString());
+	  res.push_back(user.toJson());
     }
 
     query.orWhere(P::equals(&User::email, "user2@example.com"));
@@ -1004,6 +1007,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     us = *co_await query.get();
     for (auto user : us) {
       SPDLOG_DEBUG(user.toString());
+	  res.push_back(user.toJson());
     }
 
     query.where(P::like(&User::name, "user%"));
@@ -1011,6 +1015,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     us = *co_await query.get();
     for (auto user : us) {
       SPDLOG_DEBUG(user.toString());
+	  res.push_back(user.toJson());
     }
 
     query.where(P::iContains(&User::name, "User"));
@@ -1018,9 +1023,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     us = *co_await query.get();
     for (auto user : us) {
       SPDLOG_DEBUG(user.toString());
+	  res.push_back(user.toJson());
     }
-
-    json res = json::array();
 
     co_await User::bulkDestroy(P::truePredicate());
 
