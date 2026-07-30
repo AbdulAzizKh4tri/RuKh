@@ -7,4 +7,4 @@
 #include <rukh/orm/OrmConfig.hpp>
 
 void registerRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
-                    rukh::db::IDatabase *db = rukh::orm::OrmConfig::db);
+                    rukh::db::IDatabase *db);

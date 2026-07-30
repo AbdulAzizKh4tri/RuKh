@@ -50,7 +50,7 @@ int main() {
 
   orm::OrmConfig::db = db;
 
-  registerRoutes(router, getErrorFactory(), &threadPool);
+  registerRoutes(router, getErrorFactory(), &threadPool, db);
 
   auto cert_path = std::filesystem::path(__FILE__).parent_path() / "cert.pem";
   auto key_path = std::filesystem::path(__FILE__).parent_path() / "key.pem";
