@@ -60,7 +60,7 @@ private:
     sql_ += ';';
   }
 
-  inline static std::string sqlInit = "DELETE FROM " + std::string(Model::tableName) + " ";
+  inline static std::string sqlInit = "DELETE FROM " + QueryBase<Model, DeleteQuery<Model>>::tblName + " ";
 };
 
 } // namespace rukh::orm

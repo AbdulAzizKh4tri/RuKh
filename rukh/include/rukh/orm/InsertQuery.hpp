@@ -116,7 +116,7 @@ private:
   }
 
   inline static std::string sqlInit =
-      "INSERT INTO " + std::string(Model::tableName) + " (" + modelColumnListString() + ") ";
+      "INSERT INTO " + QueryBase<Model, InsertQuery<Model>>::tblName + " (" + modelColumnListString() + ") ";
 };
 
 } // namespace rukh::orm
