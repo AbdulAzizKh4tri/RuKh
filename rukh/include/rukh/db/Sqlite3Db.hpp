@@ -58,11 +58,13 @@ public:
   std::expected<std::unique_ptr<ITransaction>, DatabaseError> acquireTransaction() override {
     Connection *conn = acquireConnection();
 
-    auto abandonFn = [this, conn] {
+    auto abandonFn = [this, conn] noexcept {
       char *errMsg = nullptr;
       sqlite3_exec(conn->dbConnection, "ROLLBACK;", nullptr, nullptr, &errMsg);
-      if (errMsg)
+      if (errMsg) {
+        SPDLOG_ERROR("{}", errMsg);
         sqlite3_free(errMsg);
+      }
       releaseConnection(conn);
     };
 

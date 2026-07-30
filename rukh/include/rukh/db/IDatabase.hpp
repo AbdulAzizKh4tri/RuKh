@@ -25,7 +25,9 @@ public:
     return executeQuery(sql, std::vector<DbValue>{std::forward<Args>(args)...});
   }
 
-  virtual std::expected<std::unique_ptr<ITransaction>, DatabaseError> acquireTransaction() = 0;
+  virtual std::expected<std::unique_ptr<ITransaction>, DatabaseError>
+  acquireTransaction() = 0; // ownership transfers to caller, must call releaseTransaction if cleanup is needed
+
   virtual void releaseTransaction(ITransaction *transaction) = 0;
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <rukh/Exceptions.hpp>
 #include <rukh/ThreadPool.hpp>
 #include <rukh/db/DbTypes.hpp>
@@ -13,14 +14,14 @@ namespace rukh::db {
 // TODO: handle exec() errors
 class Sqlite3Transaction : public ITransaction {
 public:
-  Sqlite3Transaction(Connection *conn, ThreadPool *threadPool, std::function<void()> abandonFn)
-      : conn_(conn), threadPool_(threadPool), abandonFn_(abandonFn) {}
+  Sqlite3Transaction(Connection *conn, ThreadPool *threadPool, std::move_only_function<void() noexcept> abandonFn)
+      : conn_(conn), threadPool_(threadPool), abandonFn_(std::move(abandonFn)) {}
 
   Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
                                                                const std::vector<DbValue> params = {}) override {
+    TransactionLockGuard guard{this};
     if (isTransactionEnded())
       throw DatabaseException("Transaction already ended");
-    TransactionLockGuard guard{this};
 
     co_return co_await threadPool_->submit([&, this]() -> std::expected<db::QueryResult, db::DatabaseError> {
       return Sqlite3QueryExecutor::executeOnConnection(conn_, sql, params);
@@ -28,11 +29,11 @@ public:
   }
 
   Task<std::expected<QueryResult, DatabaseError>> begin(const std::string &mode) override {
+    TransactionLockGuard guard{this};
     if (isTransactionEnded())
       throw DatabaseException("Transaction already ended");
 
     std::string sql = "BEGIN TRANSACTION " + mode + ";";
-    TransactionLockGuard guard{this};
 
     co_return co_await threadPool_->submit([this, sql]() -> std::expected<QueryResult, DatabaseError> {
       return Sqlite3QueryExecutor::executeOnConnection(conn_, sql.c_str(), {});
@@ -40,11 +41,11 @@ public:
   }
 
   Task<std::expected<QueryResult, DatabaseError>> commit() override {
+    TransactionLockGuard guard{this};
     if (isTransactionEnded()) {
       SPDLOG_WARN("Attempted to commit ended Transaction");
       co_return std::unexpected(DatabaseError{db::DbErrorType::TRANSACTION_ENDED});
     }
-    TransactionLockGuard guard{this};
 
     auto result = co_await threadPool_->submit([this]() -> std::expected<QueryResult, DatabaseError> {
       return Sqlite3QueryExecutor::executeOnConnection(conn_, "COMMIT;", {});
@@ -56,11 +57,11 @@ public:
   }
 
   Task<std::expected<QueryResult, DatabaseError>> rollback() override {
+    TransactionLockGuard guard{this};
     if (isTransactionEnded()) {
       SPDLOG_WARN("Attempted to rollback ended Transaction");
       co_return std::unexpected(DatabaseError{db::DbErrorType::TRANSACTION_ENDED});
     }
-    TransactionLockGuard guard{this};
 
     auto result = co_await threadPool_->submit([this]() -> std::expected<QueryResult, DatabaseError> {
       return Sqlite3QueryExecutor::executeOnConnection(conn_, "ROLLBACK;", {});
@@ -72,13 +73,14 @@ public:
   }
 
   void abandon() override {
-    if (isTransactionEnded()) {
-      return;
-    }
     TransactionLockGuard guard{this};
-    abandonFn_();
+    if (isTransactionEnded())
+      return;
+    threadPool_->fireAndForget(std::move(abandonFn_));
     ended_ = true;
   }
+
+  ~Sqlite3Transaction() { abandon(); }
 
   bool isTransactionEnded() const override { return ended_; }
 
@@ -86,7 +88,7 @@ public:
 
 private:
   Connection *conn_;
-  std::function<void()> abandonFn_;
+  std::move_only_function<void() noexcept> abandonFn_;
   ThreadPool *threadPool_;
   std::atomic<bool> busy_;
   std::mutex mutex_;
