@@ -8,6 +8,9 @@
 namespace rukh::orm {
 
 template <typename Model, typename Derived> class QueryBase {
+public:
+  inline static const std::string tblName = std::string(Model::tableName);
+
 protected:
   db::IDatabase *db_ = OrmConfig::db;
 

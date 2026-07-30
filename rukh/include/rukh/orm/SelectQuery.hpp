@@ -21,7 +21,7 @@ class SelectQuery : public WhereClause<Model, SelectQuery<Model>>, public QueryB
 public:
   SelectQuery &field(const std::string &column) {
     if (not Model::isValidColumnName(column))
-      throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + Model::tableName);
+      throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + this->tblName);
     changed = true;
     columns_.push_back(column);
     return *this;
@@ -33,7 +33,7 @@ public:
 
   SelectQuery &orderBy(const std::string &order, bool desc = false) {
     if (not Model::isValidColumnName(order))
-      throw rukh::OrmException("orderBy: unknown column '" + order + "' on " + Model::tableName);
+      throw rukh::OrmException("orderBy: unknown column '" + order + "' on " + this->tblName);
     changed = true;
     orderBy_.emplace_back(order, desc);
     return *this;
@@ -59,8 +59,7 @@ public:
 
   SelectQuery &groupBy(const std::string &column) {
     if (not Model::isValidColumnName(column))
-      throw rukh::OrmException("Failed to add column to groupBy: unknown column '" + column + "' on " +
-                               Model::tableName);
+      throw rukh::OrmException("Failed to add column to groupBy: unknown column '" + column + "' on " + this->tblName);
 
     changed = true;
     groupBy_.push_back(column);
@@ -74,7 +73,7 @@ public:
   Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr,
                                                         bool distinct = false) {
     std::string countCol = distinct ? "DISTINCT COUNT(*)" : "COUNT(*)";
-    std::string countSql = "SELECT " + countCol + " FROM " + Model::tableName + " ";
+    std::string countSql = "SELECT " + countCol + " FROM " + this->tblName + " ";
     std::vector<db::DbValue> countParams;
 
     if (this->wherePredicate) {
@@ -94,10 +93,10 @@ public:
                                                         bool distinct = false) {
     if (not Model::validColumnNames().contains(col))
       co_return std::unexpected(
-          {db::DbErrorType::INVALID_COLUMN, "Unknown column '" + col + "' on " + Model::tableName});
+          db::DatabaseError{db::DbErrorType::INVALID_COLUMN, "Unknown column '" + col + "' on " + this->tblName});
 
     std::string countCol = distinct ? "DISTINCT COUNT(" + col + ")" : "COUNT(" + col + ")";
-    std::string countSql = "SELECT " + countCol + " FROM " + Model::tableName + " ";
+    std::string countSql = "SELECT " + countCol + " FROM " + this->tblName + " ";
     std::vector<db::DbValue> countParams;
 
     if (this->wherePredicate) {
@@ -160,7 +159,7 @@ public:
     UpdateQuery<Model> updateQuery;
     for (auto &col : columns_) {
       if (not Model::isValidColumnName(col))
-        throw rukh::OrmException("Failed to add column to query: unknown column '" + col + "' on " + Model::tableName);
+        throw rukh::OrmException("Failed to add column to query: unknown column '" + col + "' on " + this->tblName);
       updateQuery.field(col);
     }
     co_return co_await updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
@@ -218,7 +217,7 @@ private:
       this->sql_ += columns_.at(i);
     }
 
-    this->sql_ += " FROM " + Model::tableName + " ";
+    this->sql_ += " FROM " + this->tblName + " ";
 
     if (this->wherePredicate) {
       this->sql_ += " WHERE ";

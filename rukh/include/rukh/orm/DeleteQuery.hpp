@@ -50,7 +50,7 @@ private:
       sql_ += " WHERE ";
       sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, params_);
     } else {
-      throw rukh::OrmException("No where clause when deleting: " + Model::tableName +
+      throw rukh::OrmException("No where clause when deleting: " + this->tblName +
                                ". use where({{true}}) if you want to delete all");
     }
 
@@ -60,7 +60,7 @@ private:
     sql_ += ';';
   }
 
-  static inline std::string sqlInit = "DELETE FROM " + Model::tableName + " ";
+  inline static std::string sqlInit = "DELETE FROM " + std::string(Model::tableName) + " ";
 };
 
 } // namespace rukh::orm

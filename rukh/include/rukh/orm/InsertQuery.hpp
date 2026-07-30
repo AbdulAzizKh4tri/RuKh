@@ -115,7 +115,8 @@ private:
     return policy == AutoGenerate::DB_INCREMENT or policy == AutoGenerate::DEFAULT or policy == AutoGenerate::DB_NOW;
   }
 
-  static inline std::string sqlInit = "INSERT INTO " + Model::tableName + " (" + modelColumnListString() + ") ";
+  inline static std::string sqlInit =
+      "INSERT INTO " + std::string(Model::tableName) + " (" + modelColumnListString() + ") ";
 };
 
 } // namespace rukh::orm

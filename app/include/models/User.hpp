@@ -17,7 +17,7 @@ using namespace rukh::orm;
 
 struct User : ActiveRecord<User, int64_t> {
 
-  static constexpr std::string tableName = "users";
+  static constexpr std::string_view tableName = "users";
 
   int64_t id;
   std::optional<std::string> email;

@@ -38,7 +38,7 @@ public:
 
   UpdateQuery &field(std::string column) {
     if (not Model::isValidColumnName(column))
-      throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + Model::tableName);
+      throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + this->tblName);
     columns_.push_back(column);
     return *this;
   }
@@ -66,7 +66,7 @@ private:
       this->sql_ += " WHERE ";
       this->sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, this->params_);
     } else {
-      throw rukh::OrmException("No where clause when Updating: " + Model::tableName +
+      throw rukh::OrmException("No where clause when Updating: " + this->tblName +
                                ". use where({{true}}) if you want to update all");
     }
 
@@ -115,7 +115,7 @@ private:
 
   static inline const bool columnShouldBeSkipped(AutoUpdate policy) { return policy == AutoUpdate::DB_SIDE; }
 
-  static inline std::string sqlInit = "UPDATE " + Model::tableName + " SET ";
+  static inline std::string sqlInit = "UPDATE " + std::string(Model::tableName) + " SET ";
 };
 
 } // namespace rukh::orm

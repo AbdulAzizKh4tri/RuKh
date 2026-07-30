@@ -49,7 +49,7 @@ template <typename Model> Model hydrate(const rukh::db::Row &row) {
       Model::columns());
 
   if (not ok) {
-    throw rukh::OrmException("Failed to hydrate row: " + obj.tableName + ": " + row.toString());
+    throw rukh::OrmException("Failed to hydrate row: " + std::string(obj.tableName) + ": " + row.toString());
   }
 
   obj.setPersisted();
