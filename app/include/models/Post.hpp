@@ -1,24 +1,22 @@
 #pragma once
 
-#include "rukh/orm/Column.hpp"
 #include <nlohmann/json.hpp>
 
 #include <rukh/orm/ActiveRecord.hpp>
 
+#include "User.hpp"
+
 namespace models {
 using namespace rukh::orm;
 
-struct User : ActiveRecord<User, int64_t> {
+struct Post : ActiveRecord<Post, int64_t> {
 
-  static constexpr std::string_view tableName = "users";
+  static constexpr std::string_view tableName = "posts";
 
   int64_t id;
-  std::optional<std::string> email;
-  std::optional<std::string> name;
-  std::optional<int64_t> age;
-  std::optional<int64_t> bestFriend;
-  std::optional<int64_t> mother;
-  std::optional<std::string> password;
+  std::string title;
+  std::string content;
+  int64_t user;
   int64_t createdAt;
   int64_t updatedAt;
 
@@ -28,31 +26,30 @@ struct User : ActiveRecord<User, int64_t> {
   }
 
   static constexpr auto columns() {
-    return std::tuple{Column{.fieldPtr = &User::id,
+    return std::tuple{Column{.fieldPtr = &Post::id,
                              .dbName = "id",
                              .isPrimaryKey = true,
                              .autoGenerateMode = AutoGenerate::DB_INCREMENT},
-                      Column{&User::email, "email"},
-                      Column{&User::name, "name"},
-                      Column{&User::age, "age"},
-                      Column{&User::bestFriend, "best_friend"},
-                      Column{&User::mother, "mother"},
-                      Column{&User::password, "password"},
-                      Column{.fieldPtr = &User::createdAt,
+
+                      Column{&Post::title, "title"},
+                      Column{&Post::content, "content"},
+                      Column{&Post::user, "user_id"},
+
+                      Column{.fieldPtr = &Post::createdAt,
                              .dbName = "created_at",
                              .autoGenerateMode = AutoGenerate::DB_NOW,
                              .autoUpdateMode = AutoUpdate::LOCKED},
-                      Column{.fieldPtr = &User::updatedAt,
+
+                      Column{.fieldPtr = &Post::updatedAt,
                              .dbName = "updated_at",
                              .autoGenerateMode = AutoGenerate::DB_NOW,
                              .autoUpdateMode = AutoUpdate::CUSTOM,
-                             .customUpdator = &User::getNowTime}};
+                             .customUpdator = &Post::getNowTime}};
   }
 
   static constexpr auto relations() {
     return std::tuple{
-        oneToOne<User>(&User::bestFriend),
-        manyToOne<User>(&User::mother),
+        manyToOne<User>(&Post::user),
     };
   }
 };

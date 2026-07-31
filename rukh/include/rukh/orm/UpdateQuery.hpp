@@ -113,9 +113,11 @@ private:
     return oss.str();
   }
 
-  static inline const bool columnShouldBeSkipped(AutoUpdate policy) { return policy == AutoUpdate::DB_SIDE; }
+  static inline const bool columnShouldBeSkipped(AutoUpdate policy) {
+    return policy == AutoUpdate::DB_NOW or policy == AutoUpdate::LOCKED;
+  }
 
-  static inline std::string sqlInit = "UPDATE " + QueryBase<Model, UpdateQuery<Model>>::tblName  + " SET ";
+  static inline std::string sqlInit = "UPDATE " + QueryBase<Model, UpdateQuery<Model>>::tblName + " SET ";
 };
 
 } // namespace rukh::orm

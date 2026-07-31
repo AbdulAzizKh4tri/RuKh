@@ -8,7 +8,7 @@
 namespace rukh::orm {
 
 enum struct AutoGenerate { OFF, DB_INCREMENT, DEFAULT, DB_NOW, CUSTOM };
-enum struct AutoUpdate { OFF, DB_SIDE, CUSTOM };
+enum struct AutoUpdate { OFF, DB_NOW, CUSTOM, LOCKED };
 enum struct JsonSerializationMode { OFF, AUTO, CUSTOM };
 
 template <typename Model, typename FieldT> struct Column {

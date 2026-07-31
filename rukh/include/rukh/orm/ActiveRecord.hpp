@@ -9,18 +9,23 @@
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
 
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/orm/DeleteQuery.hpp>
 #include <rukh/orm/InsertQuery.hpp>
+#include <rukh/orm/Relations.hpp>
 #include <rukh/orm/SelectQuery.hpp>
-#include <rukh/TypeHelpers.hpp>
 #include <rukh/orm/UpdateQuery.hpp>
 
 namespace rukh::orm {
 
 template <typename Model, typename... PkTypes> class ActiveRecord {
+
 public:
   static constexpr std::size_t pkArity = sizeof...(PkTypes);
   using PkType = std::tuple<PkTypes...>;
+  using SinglePkType = std::tuple_element_t<0, PkType>;
+
+  operator SinglePkType() const { return getSinglePrimaryKeyValue(); }
 
   static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(const PkType &pkVal,
                                                                            db::ITransaction *transaction = nullptr) {
@@ -112,7 +117,7 @@ public:
   }
 
   Task<std::expected<Model, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
-    Predicate p = buildPkPredicate(this->getPrimaryKey());
+    Predicate p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await UpdateQuery<Model>().where(p).execute(*self, transaction, true);
     if (not result)
@@ -127,7 +132,7 @@ public:
   }
 
   Task<std::expected<Model, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
-    Predicate p = buildPkPredicate(this->getPrimaryKey());
+    Predicate p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await DeleteQuery<Model>().where(p).execute(transaction, true);
     if (not result)
@@ -137,6 +142,31 @@ public:
       throw DatabaseException("Failed to delete object");
     *self = objs[0];
     co_return objs[0];
+  }
+
+  Task<std::expected<std::optional<Model>, db::DatabaseError>> reload(db::ITransaction *transaction = nullptr) {
+    Model *self = static_cast<Model *>(this);
+    auto result = co_await find(getPrimaryKeyValues(), transaction);
+    if (not result)
+      co_return std::unexpected(result.error());
+    if (not *result)
+      co_return std::nullopt;
+    *self = **result;
+    co_return **result;
+  }
+
+  SinglePkType getSinglePrimaryKeyValue() const {
+    auto pkTuple = pkColumns();
+    const Model *self = static_cast<const Model *>(this);
+    return self->*std::get<0>(pkTuple).fieldPtr;
+  }
+
+  PkType getPrimaryKeyValues() const {
+    auto cols = pkColumns();
+    const Model *self = static_cast<const Model *>(this);
+    return [&, this]<std::size_t... I>(std::index_sequence<I...>) {
+      return PkType{(self->*std::get<I>(cols).fieldPtr)...};
+    }(std::make_index_sequence<pkArity>{});
   }
 
   template <typename FieldT> static std::string columnNameOf(FieldT Model::*fieldPtr) {
@@ -163,21 +193,20 @@ public:
     return result;
   }
 
-  PkType getPrimaryKey() const {
-    auto cols = pkColumns();
-    const Model *self = static_cast<const Model *>(this);
-    return [&, this]<std::size_t... I>(std::index_sequence<I...>) {
-      return PkType{(self->*std::get<I>(cols).fieldPtr)...};
-    }(std::make_index_sequence<pkArity>{});
-  }
-
   static constexpr bool isValidColumnName(const std::string &name) {
     return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, Model::columns());
   }
 
+  static constexpr auto pkFieldPtrs() {
+    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getFieldPtrIfPk<I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
+    return result;
+  }
+
   static constexpr auto pkColumns() {
     static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat(slot<I>()...);
+      return std::tuple_cat(getColumnIfPk<I>()...);
     }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
     return result;
   }
@@ -185,6 +214,22 @@ public:
   static constexpr bool isPkColumn(const std::string &name) {
     auto cols = pkColumns();
     return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, cols);
+  }
+
+  static constexpr auto oneToOneRelations() {
+    constexpr auto rels = Model::relations();
+    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getRelationIfOneToOne<I>(rels)...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(rels)>>{});
+    return result;
+  }
+
+  static constexpr auto manyToOneRelations() {
+    constexpr auto rels = Model::relations();
+    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getRelationIfManyToOne<I>(rels)...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(rels)>>{});
+    return result;
   }
 
   template <typename FieldPtr> static Column<Model, FieldPtr> getColumnObject(FieldPtr Model::*fieldPtr) {
@@ -246,17 +291,58 @@ public:
   }
 
   void setPersisted() { persisted_ = true; }
+  bool isPersisted() { return persisted_; }
   void resetPersisted() { persisted_ = false; }
 
 private:
   bool persisted_ = false;
 
   //==============================HELPERS==============================
-  template <std::size_t I> static constexpr auto slot() {
+  template <std::size_t I> static constexpr auto getColumnIfPk() {
     if constexpr (std::get<I>(Model::columns()).isPrimaryKey)
       return std::tuple{std::get<I>(Model::columns())};
     else
       return std::tuple<>{};
+  }
+
+  template <std::size_t I> static constexpr auto getFieldPtrIfPk() {
+    if constexpr (std::get<I>(Model::columns()).isPrimaryKey)
+      return std::tuple{std::get<I>(Model::columns()).fieldPtr};
+    else
+      return std::tuple<>{};
+  }
+  //==============================Relation Helpers==============================
+  //==============================ONE TO ONE==============================
+  template <typename T> struct is_one_to_one_relation : std::false_type {};
+  template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
+  struct is_one_to_one_relation<OneToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
+  template <typename T> static constexpr bool is_one_to_one_relation_v = is_one_to_one_relation<T>::value;
+
+  template <std::size_t I> static constexpr auto getRelationIfOneToOne() {
+    using RelationsTuple = decltype(Model::relations());
+    using RelT = std::tuple_element_t<I, RelationsTuple>;
+
+    if constexpr (is_one_to_one_relation_v<RelT>) {
+      return std::tuple{std::get<I>(Model::relations())};
+    } else {
+      return std::tuple<>{};
+    }
+  }
+  //==============================Many TO ONE==============================
+  template <typename T> struct is_many_to_one_relation : std::false_type {};
+  template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
+  struct is_many_to_one_relation<ManyToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
+  template <typename T> static constexpr bool is_many_to_one_relation_v = is_many_to_one_relation<T>::value;
+
+  template <std::size_t I> static constexpr auto getRelationIfManyToOne() {
+    using RelationsTuple = decltype(Model::relations());
+    using RelT = std::tuple_element_t<I, RelationsTuple>;
+
+    if constexpr (is_many_to_one_relation_v<RelT>) {
+      return std::tuple{std::get<I>(Model::relations())};
+    } else {
+      return std::tuple<>{};
+    }
   }
 
   static Predicate<Model> buildPkPredicate(const PkType &pkVal) {
