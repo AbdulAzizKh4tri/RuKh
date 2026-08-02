@@ -22,12 +22,12 @@ template <typename Model, typename... PkTypes> class ActiveRecord {
 
 public:
   static constexpr std::size_t pkArity = sizeof...(PkTypes);
-  using PkType = std::tuple<PkTypes...>;
-  using SinglePkType = std::tuple_element_t<0, PkType>;
+  using PkTypesTuple = std::tuple<PkTypes...>;
+  using PkType = std::tuple_element_t<0, PkTypesTuple>;
 
-  operator SinglePkType() const { return getSinglePrimaryKeyValue(); }
+  operator PkType() const { return getSinglePrimaryKeyValue(); }
 
-  static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(const PkType &pkVal,
+  static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(const PkTypesTuple &pkVal,
                                                                            db::ITransaction *transaction = nullptr) {
     co_return co_await SelectQuery<Model>().where(buildPkPredicate(pkVal)).first(transaction);
   }
@@ -155,17 +155,17 @@ public:
     co_return **result;
   }
 
-  SinglePkType getSinglePrimaryKeyValue() const {
+  PkType getSinglePrimaryKeyValue() const {
     auto pkTuple = pkColumns();
     const Model *self = static_cast<const Model *>(this);
     return self->*std::get<0>(pkTuple).fieldPtr;
   }
 
-  PkType getPrimaryKeyValues() const {
+  PkTypesTuple getPrimaryKeyValues() const {
     auto cols = pkColumns();
     const Model *self = static_cast<const Model *>(this);
     return [&, this]<std::size_t... I>(std::index_sequence<I...>) {
-      return PkType{(self->*std::get<I>(cols).fieldPtr)...};
+      return PkTypesTuple{(self->*std::get<I>(cols).fieldPtr)...};
     }(std::make_index_sequence<pkArity>{});
   }
 
@@ -345,7 +345,7 @@ private:
     }
   }
 
-  static Predicate<Model> buildPkPredicate(const PkType &pkVal) {
+  static Predicate<Model> buildPkPredicate(const PkTypesTuple &pkVal) {
     auto cols = Model::pkColumns();
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
       return (Predicate<Model>::equals(std::get<I>(cols).fieldPtr, std::get<I>(pkVal)) && ...);

@@ -117,7 +117,6 @@ public:
         readBuffer_.resize(oldSize);
         return gotData ? ReadResult::DATA : ReadResult::WOULD_BLOCK;
       case ReceiveResult::Status::CLOSED:
-        SPDLOG_ERROR("Connection closed by peer, {}:{}", stream_->getIp(), stream_->getPort());
         return ReadResult::CLOSED;
       case ReceiveResult::Status::ERROR:
         SPDLOG_ERROR("Receive error for {}:{}", stream_->getIp(), stream_->getPort());

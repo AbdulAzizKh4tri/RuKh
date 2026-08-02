@@ -12,12 +12,12 @@ struct User : ActiveRecord<User, int64_t> {
 
   static constexpr std::string_view tableName = "users";
 
-  int64_t id;
+  PkType id;
   std::optional<std::string> email;
   std::optional<std::string> name;
   std::optional<int64_t> age;
-  std::optional<int64_t> bestFriend;
-  std::optional<int64_t> mother;
+  std::optional<PkType> bestFriend;
+  std::optional<PkType> mother;
   std::optional<std::string> password;
   int64_t createdAt;
   int64_t updatedAt;

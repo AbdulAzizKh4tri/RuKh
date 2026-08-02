@@ -13,10 +13,10 @@ struct Post : ActiveRecord<Post, int64_t> {
 
   static constexpr std::string_view tableName = "posts";
 
-  int64_t id;
+  PkType id;
   std::string title;
   std::string content;
-  int64_t user;
+  User::PkType user;
   int64_t createdAt;
   int64_t updatedAt;
 
