@@ -663,7 +663,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     auto [insertedUserCount, insertedUserRows] = unwrap(co_await User::bulkInsert(userBatch), "bulkInsert");
     userBatch = insertedUserRows;
 
-    auto users = unwrap(co_await User::all().get(), "get all users");
+    auto users = unwrap(co_await User::all().select(), "get all users");
 
     std::vector<Post> postBatch;
     postBatch.push_back({.title = "post 1", .content = "lorem ipsum", .user = users[0]});
@@ -674,7 +674,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     auto [insertedPostCount, insertedPostRows] = unwrap(co_await Post::bulkInsert(postBatch), "bulk user Insert");
     postBatch = insertedPostRows;
 
-    auto posts = unwrap(co_await Post::all().get(), "get all posts");
+    auto posts = unwrap(co_await Post::all().select(), "get all posts");
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     User alice = userBatch[0];
@@ -790,7 +790,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
           unwrap(co_await User::bulkUpdate(patch, std::tuple{&User::name, &User::password}, pred), "bulkUpdate");
       expect(updatedCount == 2, "expected 2 rows, got " + std::to_string(updatedCount));
 
-      auto afterUpdate = unwrap(co_await User::filter(pred).get(), "get");
+      auto afterUpdate = unwrap(co_await User::filter(pred).select(), "get");
       for (auto &u : afterUpdate)
         expect(u.name == "megaJoe", "row id " + std::to_string(u.id) + " not updated");
     });

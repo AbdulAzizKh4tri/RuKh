@@ -1,6 +1,5 @@
 #pragma once
 
-#include "rukh/orm/Column.hpp"
 #include <nlohmann/json.hpp>
 
 #include <rukh/orm/ActiveRecord.hpp>

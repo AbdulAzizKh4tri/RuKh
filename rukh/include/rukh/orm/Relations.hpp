@@ -1,31 +1,57 @@
 #pragma once
 
+#include <concepts>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/db/DbTypes.hpp>
 
 namespace rukh::orm {
 
-template <typename OneModel, typename ManyModel, typename FkFieldPtrsTuple> struct ManyToOneRelation {
-  using PkFieldPtrs = decltype(OneModel::pkFieldPtrs());
+enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL };
 
+template <typename TargetModel, typename FieldModel, typename FkFieldPtrsTuple, typename Derived> struct FkRelation {
+  using PkFieldPtrs = decltype(TargetModel::pkFieldPtrs());
   FkFieldPtrsTuple fkFieldPtrs;
-  PkFieldPtrs pkFieldPtrs = OneModel::pkFieldPtrs();
+  PkFieldPtrs pkFieldPtrs = TargetModel::pkFieldPtrs();
+
+  OnDelete onDelete = OnDelete::NO_ACTION;
+
+  template <OnDelete od> Derived &with() {
+    if constexpr (od == OnDelete::SET_NULL) {
+      static_assert(AllOptionalTuple<FkFieldPtrsTuple>, "FK fields must be optional<> for OnDelete::Set_NULL");
+    }
+    onDelete = od;
+    return static_cast<Derived &>(*this);
+  }
 };
 
-template <typename OneModel, typename ManyModel, typename... FieldTypes>
-constexpr auto manyToOne(FieldTypes ManyModel::*...ptrs) {
-  return ManyToOneRelation<OneModel, ManyModel, std::tuple<FieldTypes ManyModel::*...>>{ptrs...};
+template <typename TargetModel, typename FieldModel, typename FkFieldPtrsTuple>
+struct ManyToOneRelation : public FkRelation<TargetModel, FieldModel, FkFieldPtrsTuple,
+                                             ManyToOneRelation<TargetModel, FieldModel, FkFieldPtrsTuple>> {};
+
+template <typename TargetModel, typename FieldModel, typename... FieldTypes>
+constexpr auto manyToOne(FieldTypes FieldModel::*...ptrs) {
+
+  using FkFieldPtrsTuple = std::tuple<FieldTypes FieldModel::*...>;
+  using rawFkTypesTuple = std::tuple<remove_optional_t<FieldTypes>...>;
+  static_assert(std::same_as<typename FieldModel::PkTypesTuple, rawFkTypesTuple>,
+                "manyToOne(): mentioned foreign keys don't match primary keys of foreign model");
+
+  return ManyToOneRelation<TargetModel, FieldModel, FkFieldPtrsTuple>{ptrs...};
 }
 
-template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple> struct OneToOneRelation {
-  using PkFieldPtrs = decltype(ModelB::pkFieldPtrs());
+template <typename TargetModel, typename FieldModel, typename FkFieldPtrsTuple>
+struct OneToOneRelation : public FkRelation<TargetModel, FieldModel, FkFieldPtrsTuple,
+                                            OneToOneRelation<TargetModel, FieldModel, FkFieldPtrsTuple>> {};
 
-  FkFieldPtrsTuple fkFieldPtrs;
-  PkFieldPtrs pkFieldPtrs = ModelB::pkFieldPtrs();
-};
+template <typename TargetModel, typename FieldModel, typename... FieldTypes>
+constexpr auto oneToOne(FieldTypes FieldModel::*...ptrs) {
 
-template <typename ModelA, typename ModelB, typename... FieldTypes>
-constexpr auto oneToOne(FieldTypes ModelB::*...ptrs) {
-  return OneToOneRelation<ModelA, ModelB, std::tuple<FieldTypes ModelB::*...>>{ptrs...};
+  using FkFieldPtrsTuple = std::tuple<FieldTypes FieldModel::*...>;
+  using rawFkTypesTuple = std::tuple<remove_optional_t<FieldTypes>...>;
+  static_assert(std::same_as<typename FieldModel::PkTypesTuple, rawFkTypesTuple>,
+                "oneToOne(): mentioned foreign keys don't match primary keys of foreign model");
+
+  return OneToOneRelation<TargetModel, FieldModel, FkFieldPtrsTuple>{ptrs...};
 }
 
 } // namespace rukh::orm

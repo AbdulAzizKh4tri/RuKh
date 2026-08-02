@@ -7,9 +7,9 @@
 
 namespace rukh::orm {
 
-enum struct AutoGenerate { OFF, DB_INCREMENT, DEFAULT, DB_NOW, CUSTOM };
-enum struct AutoUpdate { OFF, DB_NOW, CUSTOM, LOCKED };
-enum struct JsonSerializationMode { OFF, AUTO, CUSTOM };
+enum class AutoGenerate { OFF, DB_INCREMENT, DEFAULT, DB_NOW, CUSTOM };
+enum class AutoUpdate { OFF, DB_NOW, CUSTOM, LOCKED };
+enum class JsonSerializationMode { OFF, AUTO, CUSTOM };
 
 template <typename Model, typename FieldT> struct Column {
   FieldT Model::*const fieldPtr;

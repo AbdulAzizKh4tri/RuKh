@@ -120,9 +120,18 @@ public:
       case SQLITE_CONSTRAINT: {
         int extended = sqlite3_extended_errcode(dbConnection);
         std::string err = sqlite3_errmsg(dbConnection);
-        if (extended == SQLITE_CONSTRAINT_UNIQUE || extended == SQLITE_CONSTRAINT_PRIMARYKEY)
+        switch (extended) {
+        case SQLITE_CONSTRAINT_PRIMARYKEY:
           return std::unexpected(DatabaseError{DbErrorType::DUPLICATE_KEY, err});
-        return std::unexpected(DatabaseError{DbErrorType::CONSTRAINT_VIOLATION, err});
+        case SQLITE_CONSTRAINT_FOREIGNKEY:
+          return std::unexpected(DatabaseError{DbErrorType::FOREIGN_KEY_VIOLATION, err});
+        case SQLITE_CONSTRAINT_TRIGGER:
+          return std::unexpected(DatabaseError{DbErrorType::TRIGGER_ERROR, err});
+        case SQLITE_CONSTRAINT_UNIQUE:
+          return std::unexpected(DatabaseError{DbErrorType::UNIQUE_CONSTRAINT_VIOLATION, err});
+        default:
+          return std::unexpected(DatabaseError{DbErrorType::CONSTRAINT_VIOLATION, err});
+        }
       }
 
       case SQLITE_TOOBIG:

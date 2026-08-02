@@ -32,7 +32,6 @@ public:
   }
 
   DeleteQuery<Model> &reset() {
-    this->whereChanged = true;
     this->wherePredicate = std::nullopt;
     params_.clear();
     return *this;

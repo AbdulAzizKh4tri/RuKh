@@ -32,30 +32,6 @@ public:
     co_return co_await SelectQuery<Model>().where(buildPkPredicate(pkVal)).first(transaction);
   }
 
-  static Task<std::expected<Model, db::DatabaseError>> findOrCreate(Model obj,
-                                                                    db::ITransaction *transaction = nullptr) {
-    auto objPk = obj.getPrimaryKey();
-    auto findResult = co_await find(objPk, transaction);
-    if (not findResult)
-      co_return std::unexpected(findResult.error());
-    if (auto userOpt = *findResult; userOpt) {
-      co_return *userOpt;
-    }
-    auto insertResult = co_await InsertQuery<Model>().execute({obj}, transaction, true);
-    if (not insertResult) {
-      if (insertResult.error().type == db::DbErrorType::DUPLICATE_KEY) {
-        auto refetch = co_await find(objPk, transaction);
-        if (not refetch)
-          throw DatabaseException("Huh? Insert returned a duplicate key, but could not find the object");
-        co_return *refetch;
-      } else {
-        co_return std::unexpected(insertResult.error());
-      }
-    }
-    auto [_, objs] = *insertResult;
-    co_return objs[0];
-  }
-
   static SelectQuery<Model> all() { return SelectQuery<Model>(); }
   static SelectQuery<Model> filter(const Predicate<Model> &p) { return SelectQuery<Model>().where(p); }
 

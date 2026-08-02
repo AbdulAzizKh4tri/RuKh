@@ -8,6 +8,7 @@
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/DeleteQuery.hpp>
+#include <rukh/orm/InsertQuery.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/QueryBase.hpp>
 #include <rukh/orm/UpdateQuery.hpp>
@@ -19,22 +20,21 @@ namespace rukh::orm {
 template <typename Model>
 class SelectQuery : public WhereClause<Model, SelectQuery<Model>>, public QueryBase<Model, SelectQuery<Model>> {
 public:
-  SelectQuery &field(const std::string &column) {
+  SelectQuery &column(std::string column) {
     if (not Model::isValidColumnName(column))
       throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + this->tblName);
-    changed = true;
     columns_.push_back(column);
     return *this;
   }
 
   template <typename FieldT> SelectQuery &field(FieldT Model::*fieldPtr) {
-    return field(Model::columnNameOf(fieldPtr));
+    columns_.push_back(Model::columnNameOf(fieldPtr));
+    return *this;
   }
 
   SelectQuery &orderBy(const std::string &order, bool desc = false) {
     if (not Model::isValidColumnName(order))
       throw rukh::OrmException("orderBy: unknown column '" + order + "' on " + this->tblName);
-    changed = true;
     orderBy_.emplace_back(order, desc);
     return *this;
   }
@@ -46,13 +46,11 @@ public:
   SelectQuery &limit(size_t limit) {
     if (limit == 0)
       throw rukh::OrmException("Limit must be greater than 0");
-    changed = true;
     limit_ = limit;
     return *this;
   }
 
   SelectQuery &offset(size_t offset) {
-    changed = true;
     offset_ = offset_.value_or(0) + offset;
     return *this;
   }
@@ -61,7 +59,6 @@ public:
     if (not Model::isValidColumnName(column))
       throw rukh::OrmException("Failed to add column to groupBy: unknown column '" + column + "' on " + this->tblName);
 
-    changed = true;
     groupBy_.push_back(column);
     return *this;
   }
@@ -117,7 +114,22 @@ public:
     co_return co_await count(Model::columnNameOf(fieldPtr), transaction, distinct);
   }
 
-  Task<std::expected<std::vector<Model>, db::DatabaseError>> get(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
+    buildSelectSqlAndSetParams(2);
+
+    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
+
+    auto [rowCount, objs] = *queryResult;
+
+    if (rowCount != 1)
+      throw rukh::OrmException("get(): Got more than one row when expected only one");
+
+    co_return hydrate<Model>(objs[0]);
+  }
+
+  Task<std::expected<std::vector<Model>, db::DatabaseError>> select(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -127,12 +139,7 @@ public:
   }
 
   Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
-    std::optional<size_t> oldLimit = limit_;
-    limit_ = 1;
-    changed = true;
-    buildSelectSqlAndSetParams();
-    limit_ = oldLimit;
-    changed = true;
+    buildSelectSqlAndSetParams(1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -145,13 +152,59 @@ public:
   }
 
   Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams();
+    buildSelectSqlAndSetParams(1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
     co_return queryResult->rows.size() > 0;
+  }
+
+  /*
+   * FOOTGUN ALERT!!
+   * There is no validation for whether the provided "where" predicate values match the provided `obj` values.
+   * That is the caller's responsibility!
+   */
+  Task<std::expected<Model, db::DatabaseError>> getOneOrCreate(const Model &obj,
+                                                               db::ITransaction *transaction = nullptr) {
+    if (not this->wherePredicate)
+      throw rukh::OrmException("getOneOrCreate(): no where predicate set");
+
+    auto getOneOptional =
+        [&](db::ITransaction *transaction) -> Task<std::expected<std::optional<Model>, db::DatabaseError>> {
+      buildSelectSqlAndSetParams(2);
+      auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+      if (not queryResult)
+        co_return std::unexpected(queryResult.error());
+
+      auto [rowCount, objs] = *queryResult;
+      if (rowCount > 1)
+        throw rukh::OrmException("get(): Got more than one row when expected only one");
+      if (rowCount == 0)
+        co_return std::nullopt;
+      co_return hydrate<Model>(objs[0]);
+    };
+
+    auto getResult = co_await getOneOptional(transaction);
+    if (not getResult)
+      co_return std::unexpected(getResult.error());
+
+    auto userOpt = *getResult;
+    if (userOpt)
+      co_return *userOpt;
+
+    auto insertResult = co_await InsertQuery<Model>().execute({obj}, transaction, true);
+    if (not insertResult) {
+      if (insertResult.error().type == db::DbErrorType::DUPLICATE_KEY or
+          insertResult.error().type == db::DbErrorType::UNIQUE_CONSTRAINT_VIOLATION) {
+        co_return co_await getOne(transaction);
+      } else {
+        co_return std::unexpected(insertResult.error());
+      }
+    }
+    auto [_, objs] = *insertResult;
+    co_return objs[0];
   }
 
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
@@ -174,8 +227,6 @@ public:
   }
 
   SelectQuery<Model> &reset() {
-    changed = true;
-    this->whereChanged = true;
     this->wherePredicate = std::nullopt;
     columns_.clear();
     this->params_.clear();
@@ -188,7 +239,6 @@ public:
 
 private:
   std::string sql_;
-  bool changed = true;
   std::vector<std::string> columns_;
   std::vector<db::DbValue> params_;
   std::vector<std::pair<std::string, bool>> orderBy_;
@@ -196,13 +246,7 @@ private:
   std::optional<size_t> limit_;
   std::optional<size_t> offset_;
 
-  void buildSelectSqlAndSetParams() {
-    if (not changed and not this->whereChanged)
-      return;
-
-    changed = false;
-    this->whereChanged = false;
-
+  void buildSelectSqlAndSetParams(std::optional<size_t> limit = std::nullopt) {
     this->sql_ = "SELECT ";
     params_.clear();
 
@@ -246,7 +290,9 @@ private:
       }
     }
 
-    if (limit_) {
+    if (limit) {
+      this->sql_ += " LIMIT " + std::to_string(limit.value());
+    } else if (limit_) {
       this->sql_ += " LIMIT " + std::to_string(limit_.value());
     }
 

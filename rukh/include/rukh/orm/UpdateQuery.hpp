@@ -36,7 +36,7 @@ public:
     return *this;
   }
 
-  UpdateQuery &field(std::string column) {
+  UpdateQuery &column(std::string column) {
     if (not Model::isValidColumnName(column))
       throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + this->tblName);
     columns_.push_back(column);
@@ -44,7 +44,6 @@ public:
   }
 
   UpdateQuery<Model> &reset() {
-    this->whereChanged = true;
     this->wherePredicate = std::nullopt;
     columns_.clear();
     this->params_.clear();

@@ -4,7 +4,7 @@
 
 #include <rukh/orm/ActiveRecord.hpp>
 
-#include "User.hpp"
+#include "models/User.hpp"
 
 namespace models {
 using namespace rukh::orm;
@@ -49,7 +49,7 @@ struct Post : ActiveRecord<Post, int64_t> {
 
   static constexpr auto relations() {
     return std::tuple{
-        manyToOne<User>(&Post::user),
+        manyToOne<User>(&Post::user).with<OnDelete::CASCADE>(),
     };
   }
 };
