@@ -35,13 +35,22 @@ public:
 
       sqlite3_busy_timeout(dbConnection, SQLITE3_BUSY_TIMEOUT);
 
+      rc = sqlite3_exec(dbConnection, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
+      if (rc != SQLITE_OK) {
+        sqlite3_close(dbConnection);
+        throw DatabaseException("Failed to enable foreign keys");
+      }
+
       auto conn = new Connection();
       conn->dbConnection = dbConnection;
       connectionQueue_.addConnection(conn);
     }
 
     Connection *conn = acquireConnection();
-    sqlite3_exec(conn->dbConnection, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
+    int rc = sqlite3_exec(conn->dbConnection, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
+    if (rc != SQLITE_OK) {
+      throw DatabaseException("Failed to enable WAL mode");
+    }
     releaseConnection(conn);
   }
 

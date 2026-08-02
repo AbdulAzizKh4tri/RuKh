@@ -34,11 +34,14 @@ public:
     cv_.notify_one();
   }
 
-  void addConnection(Connection *conn) { available_.push_back(conn); }
+  void addConnection(Connection *conn) {
+    available_.push_back(conn);
+    allConnections_.push_back(conn);
+  }
 
   ~ConnectionQueue() {
     std::unique_lock<std::mutex> lock(mutex_);
-    for (auto conn : available_) {
+    for (auto conn : allConnections_) {
       for (auto &[_, statement] : conn->statements)
         sqlite3_finalize(statement);
       sqlite3_close(conn->dbConnection);
@@ -48,6 +51,7 @@ public:
 
 private:
   std::vector<Connection *> available_;
+  std::vector<Connection *> allConnections_;
   std::mutex mutex_;
   std::condition_variable cv_;
 };
