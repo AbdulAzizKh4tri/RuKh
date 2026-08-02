@@ -18,7 +18,7 @@ template <typename TargetModel, typename FieldModel, typename FkFieldPtrsTuple, 
 
   template <OnDelete od> Derived &with() {
     if constexpr (od == OnDelete::SET_NULL) {
-      static_assert(AllOptionalTuple<FkFieldPtrsTuple>, "FK fields must be optional<> for OnDelete::Set_NULL");
+      static_assert(AllOptionalFieldPtrs<FkFieldPtrsTuple>, "FK fields must be optional<> for OnDelete::Set_NULL");
     }
     onDelete = od;
     return static_cast<Derived &>(*this);
