@@ -1,8 +1,13 @@
 #pragma once
 
+#include <coroutine>
+
 namespace rukh {
 
 class Executor;
 extern thread_local Executor *tl_executor;
 extern thread_local bool tl_timed_out;
+
+void notifyTaskFinished(std::coroutine_handle<> h) noexcept;
+
 } // namespace rukh

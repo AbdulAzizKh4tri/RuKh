@@ -58,11 +58,15 @@ public:
 
   void post(std::coroutine_handle<> h);
 
+  void markRootFinished(void *addr);
+
 private:
   EpollInstance epoll_;
   std::vector<Task<void>> ownedTasks_;
   std::unordered_map<void *, size_t> ownedTaskMap_;
   std::queue<ReadyTask> readyQueue_;
+
+  std::vector<void *> finishedRoots_;
 
   int nextSeq_ = 0;
   std::unordered_map<int, SuspendedTask> suspendedTasks_;

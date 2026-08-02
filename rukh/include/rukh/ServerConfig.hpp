@@ -19,7 +19,7 @@ public:
   static const std::string &getServerLine() { return serverLine_; }
 
   // ── Timeouts (seconds) ────────────────────────────────────
-  inline static int INACTIVITY_TIMEOUT_S = 20;
+  inline static int INACTIVITY_TIMEOUT_S = 10;
   inline static int FORMATION_TIMEOUT_S = 120;
   inline static int GRACEFUL_SHUTDOWN_TIMEOUT_S = 20;
   inline static int EPOLL_WAIT_TIMEOUT = 1;

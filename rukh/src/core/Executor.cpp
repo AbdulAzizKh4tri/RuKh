@@ -11,6 +11,10 @@ namespace rukh {
 
 thread_local Executor *tl_executor = nullptr;
 thread_local bool tl_timed_out = false;
+void notifyTaskFinished(std::coroutine_handle<> h) noexcept {
+  if (tl_executor)
+    tl_executor->markRootFinished(h.address());
+}
 
 Executor::Executor() {
   eventFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -86,6 +90,8 @@ void Executor::submitFileWrite(int fd, const void *buf, size_t len, std::corouti
   nextUserData_++;
 }
 
+void Executor::markRootFinished(void *addr) { finishedRoots_.push_back(addr); }
+
 void Executor::run(std::atomic<bool> &shutdown) {
   tl_executor = this;
   std::chrono::steady_clock::time_point shutdownDeadline = std::chrono::steady_clock::time_point::max();
@@ -126,8 +132,12 @@ void Executor::run(std::atomic<bool> &shutdown) {
       tl_timed_out = timed_out;
       task.resume();
       tl_timed_out = false;
-      if (task.done()) {
-        auto it = ownedTaskMap_.find(task.address());
+
+      while (not finishedRoots_.empty()) {
+        void *addr = finishedRoots_.back();
+        finishedRoots_.pop_back();
+
+        auto it = ownedTaskMap_.find(addr);
         if (it == ownedTaskMap_.end())
           continue;
 

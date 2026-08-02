@@ -4,6 +4,8 @@
 #include <exception>
 #include <optional>
 
+#include <rukh/core/ExecutorContext.hpp>
+
 namespace rukh {
 
 template <typename T> class Task {
@@ -30,6 +32,7 @@ public:
     std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
       if (handle.promise().continuation)
         return handle.promise().continuation;
+      notifyTaskFinished(handle);
       return std::noop_coroutine();
     }
 
@@ -111,6 +114,7 @@ public:
     std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
       if (handle.promise().continuation)
         return handle.promise().continuation;
+      notifyTaskFinished(handle);
       return std::noop_coroutine();
     }
 
