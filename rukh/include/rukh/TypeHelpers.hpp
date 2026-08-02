@@ -15,5 +15,9 @@ template <typename T> struct remove_optional<std::optional<T>> {
 };
 template <typename T> using remove_optional_t = typename remove_optional<T>::type;
 
+
 template <typename Model, auto MemPtr> using field_t = std::remove_cvref_t<decltype(std::declval<Model>().*MemPtr)>;
 template <typename Model, auto MemPtr> using raw_field_t = remove_optional_t<field_t<Model, MemPtr>>;
+
+
+template <typename T> inline constexpr bool always_false_v = false;

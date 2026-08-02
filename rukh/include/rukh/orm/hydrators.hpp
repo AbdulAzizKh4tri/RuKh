@@ -21,11 +21,12 @@ bool hydrateOne(Model &obj, const Column<Model, FieldT> &col, const db::Row &row
       SPDLOG_ERROR("Failed to hydrate column: {}", col.dbName);
       return false;
     }
-    obj.*(col.fieldPtr) = *val;
+    obj.*(col.fieldPtr) = std::move(*val);
     return true;
   } else {
     auto val = row.as<FieldT>(col.dbName);
     if (not val) {
+      SPDLOG_ERROR("Failed to hydrate column: {}", col.dbName);
       return false;
     }
     obj.*(col.fieldPtr) = std::move(*val);

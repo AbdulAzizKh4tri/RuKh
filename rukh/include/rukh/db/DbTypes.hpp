@@ -1,56 +1,12 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <rukh/TypeHelpers.hpp>
 #include <string>
 
+#include <rukh/TypeHelpers.hpp>
+#include <rukh/db/DbValue.hpp>
+
 namespace rukh::db {
-
-using DbValue = std::variant<int64_t, double, std::string, std::vector<unsigned char>, std::nullptr_t>;
-
-template <std::integral T>
-  requires(!std::same_as<T, bool>)
-DbValue toDbValueImpl(T v) {
-  return static_cast<int64_t>(v);
-}
-
-template <typename T> DbValue toDbValueImpl(const std::optional<T> &v) {
-  return v ? toDbValueImpl(*v) : DbValue{nullptr};
-}
-
-inline DbValue toDbValueImpl(DbValue v) { return v; }
-inline DbValue toDbValueImpl(bool v) { return static_cast<int64_t>(v); }
-inline DbValue toDbValueImpl(float v) { return static_cast<double>(v); }
-inline DbValue toDbValueImpl(double v) { return v; }
-inline DbValue toDbValueImpl(const std::string &v) { return v; }
-inline DbValue toDbValueImpl(const char *v) { return std::string(v); }
-inline DbValue toDbValueImpl(const std::vector<unsigned char> &v) { return v; }
-inline DbValue toDbValueImpl(const nlohmann::json &v) { return v.dump(); }
-inline DbValue toDbValueImpl(std::chrono::sys_seconds tp) {
-  return static_cast<int64_t>(tp.time_since_epoch().count());
-}
-inline DbValue toDbValueImpl(std::nullptr_t) { return nullptr; }
-
-template <typename T> DbValue toDbValue(const T &v) {
-  if constexpr (OptionalT<T>) {
-    return v.has_value() ? toDbValueImpl(*v) : DbValue{nullptr};
-  } else {
-    return toDbValueImpl(v);
-  }
-}
-
-inline std::string dbValueToString(const DbValue &v) {
-  if (std::holds_alternative<std::string>(v))
-    return std::get<std::string>(v);
-
-  if (std::holds_alternative<int64_t>(v))
-    return std::to_string(std::get<int64_t>(v));
-
-  if (std::holds_alternative<double>(v))
-    return std::to_string(std::get<double>(v));
-
-  return {};
-}
 
 struct StringHash {
   // NOTE: Don't know what this does, but it works
@@ -65,9 +21,8 @@ public:
   template <typename T> std::optional<T> as(const std::string_view col) const {
     auto it = columns->find(col);
     if (it == columns->end())
-      return std::nullopt;
-    auto *val = std::get_if<T>(&values[it->second]);
-    return val ? std::make_optional(*val) : std::nullopt;
+      return std::nullopt;                         // missing column
+    return db::fromDbValue<T>(values[it->second]); // throws on type mismatch or bad range
   }
 
   template <typename T> std::optional<T> as(const size_t col) const {

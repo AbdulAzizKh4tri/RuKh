@@ -666,10 +666,10 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     auto users = unwrap(co_await User::all().get(), "get all users");
 
     std::vector<Post> postBatch;
-    postBatch.push_back({.title = "post 1", .content = "lorem ipsum", .user = 1});
-    postBatch.push_back({.title = "post 2", .content = "ipsum", .user = 4});
-    postBatch.push_back({.title = "post 3", .content = "loripsum", .user = 2});
-    postBatch.push_back({.title = "post 4", .content = "lor", .user = 3});
+    postBatch.push_back({.title = "post 1", .content = "lorem ipsum", .user = users[0]});
+    postBatch.push_back({.title = "post 2", .content = "ipsum", .user = users[1]});
+    postBatch.push_back({.title = "post 3", .content = "loripsum", .user = users[2]});
+    postBatch.push_back({.title = "post 4", .content = "lor", .user = users[2]});
 
     auto [insertedPostCount, insertedPostRows] = unwrap(co_await Post::bulkInsert(postBatch), "bulk user Insert");
     postBatch = insertedPostRows;

@@ -6,6 +6,7 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/db/DbTypes.hpp>
+#include <rukh/db/DbValue.hpp>
 #include <rukh/db/Sqlite3Types.hpp>
 
 namespace rukh::db {
@@ -13,7 +14,9 @@ namespace rukh::db {
 class Sqlite3QueryExecutor {
 public:
   static void bindQueryParam(sqlite3_stmt *stmt, int index, const std::vector<DbValue> &params) {
-    if (std::holds_alternative<int64_t>(params[index])) {
+    if (std::holds_alternative<bool>(params[index])) {
+      sqlite3_bind_int64(stmt, index + 1, (std::get<bool>(params[index])) ? 1 : 0);
+    } else if (std::holds_alternative<int64_t>(params[index])) {
       sqlite3_bind_int64(stmt, index + 1, std::get<int64_t>(params[index]));
     } else if (std::holds_alternative<double>(params[index])) {
       sqlite3_bind_double(stmt, index + 1, std::get<double>(params[index]));
