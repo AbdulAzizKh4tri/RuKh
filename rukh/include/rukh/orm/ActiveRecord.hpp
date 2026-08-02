@@ -25,7 +25,7 @@ public:
   using PkTypesTuple = std::tuple<PkTypes...>;
   using PkType = std::tuple_element_t<0, PkTypesTuple>;
 
-  operator PkType() const { return getSinglePrimaryKeyValue(); }
+  operator PkType() const { return getPrimaryKeyValue(); }
 
   static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(const PkTypesTuple &pkVal,
                                                                            db::ITransaction *transaction = nullptr) {
@@ -155,7 +155,7 @@ public:
     co_return **result;
   }
 
-  PkType getSinglePrimaryKeyValue() const {
+  PkType getPrimaryKeyValue() const {
     auto pkTuple = pkColumns();
     const Model *self = static_cast<const Model *>(this);
     return self->*std::get<0>(pkTuple).fieldPtr;
