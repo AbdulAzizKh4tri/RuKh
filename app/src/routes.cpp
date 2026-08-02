@@ -676,7 +676,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     auto posts = unwrap(co_await Post::all().select(), "get all posts");
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
     User alice = userBatch[0];
     alice.age = 34;
     co_await alice.save();

@@ -16,7 +16,7 @@ struct Post : ActiveRecord<Post, int64_t> {
   PkType id;
   std::string title;
   std::string content;
-  User::PkType user;
+  std::optional<User::PkType> user;
   int64_t createdAt;
   int64_t updatedAt;
 
@@ -49,7 +49,7 @@ struct Post : ActiveRecord<Post, int64_t> {
 
   static constexpr auto relations() {
     return std::tuple{
-        manyToOne<User>(&Post::user).with<OnDelete::CASCADE>(),
+        manyToOne<User>(&Post::user).with<OnDelete::SET_NULL>(),
     };
   }
 };

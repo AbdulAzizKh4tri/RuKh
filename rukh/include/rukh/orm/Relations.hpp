@@ -6,13 +6,14 @@
 
 namespace rukh::orm {
 
-enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL };
+enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL, CUSTOM };
 
 template <typename TargetModel, typename FieldModel, typename FkFieldPtrsTuple, typename Derived> struct FkRelation {
   using PkFieldPtrs = decltype(TargetModel::pkFieldPtrs());
   FkFieldPtrsTuple fkFieldPtrs;
   PkFieldPtrs pkFieldPtrs = TargetModel::pkFieldPtrs();
 
+  // TODO: Add custom deleters
   OnDelete onDelete = OnDelete::NO_ACTION;
 
   template <OnDelete od> Derived &with() {
