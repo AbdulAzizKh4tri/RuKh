@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <optional>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -34,5 +36,11 @@ template <typename Tuple>
 concept AllOptionalFieldPtrs = []<std::size_t... I>(std::index_sequence<I...>) consteval {
   return (... && OptionalT<remove_member_pointer_t<std::tuple_element_t<I, Tuple>>>);
 }(std::make_index_sequence<std::tuple_size_v<Tuple>>{});
+
+template <std::size_t N> struct FixedString {
+  char data[N]{};
+  constexpr FixedString(const char (&str)[N]) { std::copy_n(str, N, data); }
+  constexpr std::string_view view() const { return {data, N - 1}; }
+};
 
 } // namespace rukh

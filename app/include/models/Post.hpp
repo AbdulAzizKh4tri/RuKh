@@ -49,7 +49,7 @@ struct Post : ActiveRecord<Post, int64_t> {
 
   static constexpr auto relations() {
     return std::tuple{
-        manyToOne<User>(&Post::user).with<OnDelete::SET_NULL>(),
+        manyToOne<User>(&Post::user).onDelete<OnDelete::SET_NULL>().withRelatedName("user_posts"),
     };
   }
 };

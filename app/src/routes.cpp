@@ -676,7 +676,6 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     auto posts = unwrap(co_await Post::all().select(), "get all posts");
 
-
     User alice = userBatch[0];
     alice.age = 34;
     co_await alice.save();
@@ -695,6 +694,12 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     Post post1 = postBatch[0];
     post1.content = "lorem ipsum dolor sit amet";
     co_await post1.save();
+
+    auto joePosts = unwrap(co_await joe.related<Post>().select(), "get all related");
+
+    for (auto post : joePosts) {
+      SPDLOG_DEBUG(post.toString(1));
+    }
 
     res.push_back(alice.toJson());
     res.push_back(bob.toJson());

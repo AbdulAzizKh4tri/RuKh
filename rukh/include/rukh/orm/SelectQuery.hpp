@@ -114,6 +114,9 @@ public:
     co_return co_await count(Model::columnNameOf(fieldPtr), transaction, distinct);
   }
 
+  /*
+   * Returns a single object, throws if 0 or multiple rows are returned
+   */
   Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams(2);
 
