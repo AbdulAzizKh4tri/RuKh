@@ -645,8 +645,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
   // -- Database test routes -------------------------------
   // All live under /tests/db/* and interact with the 'users' table
 
-  // GET /tests/db/select
-  router.get("/tests/db/select", [](const HttpRequest &request) -> Task<Response> {
+  // GET /tests/db/relations
+  router.get("/tests/db/relations", [](const HttpRequest &request) -> Task<Response> {
     using namespace models;
     using namespace testutil;
     using Pu = Predicate<User>;
@@ -669,7 +669,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     postBatch.push_back({.title = "post 1", .content = "lorem ipsum", .user = users[0]});
     postBatch.push_back({.title = "post 2", .content = "ipsum", .user = users[1]});
     postBatch.push_back({.title = "post 3", .content = "loripsum", .user = users[2]});
-    postBatch.push_back({.title = "post 4", .content = "lor", .user = users[2]});
+    postBatch.push_back({.title = "post 4", .content = "lor", .user = users[3]});
 
     auto [insertedPostCount, insertedPostRows] = unwrap(co_await Post::bulkInsert(postBatch), "bulk user Insert");
     postBatch = insertedPostRows;
@@ -678,6 +678,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     User alice = userBatch[0];
     alice.age = 34;
+    alice.bestFriend = users[3];
     co_await alice.save();
 
     User bob = userBatch[1];
@@ -686,25 +687,27 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     co_await bob.save();
 
     User joe = userBatch[2];
-    joe.createdAt = 234;
-    joe.updatedAt = 5;
+    joe.createdAt = 234; // shouldn't matter
+    joe.updatedAt = 5;   //
     joe.mother = alice;
     co_await joe.save();
+
+    User john = userBatch[3];
 
     Post post1 = postBatch[0];
     post1.content = "lorem ipsum dolor sit amet";
     co_await post1.save();
 
-    auto joePosts = unwrap(co_await joe.related<Post>().select(), "get all related");
-
-    for (auto post : joePosts) {
-      SPDLOG_DEBUG(post.toString(1));
-    }
+    auto joeMama = *unwrap(co_await joe.ref<User, &User::mother>().first());
+    auto joeMamaBestFriend = unwrap(co_await joeMama.ref<User, &User::bestFriend>().getOne());
+    auto johnPosts = unwrap(co_await joeMamaBestFriend.related<Post, "user_posts">().select());
 
     res.push_back(alice.toJson());
     res.push_back(bob.toJson());
     res.push_back(joe.toJson());
-    res.push_back(post1.toJson());
+
+    for (auto post : johnPosts)
+      res.push_back(post.toJson());
 
     unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
     unwrap(co_await Post::bulkDestroy({true}), "bulkDestroy");

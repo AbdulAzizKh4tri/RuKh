@@ -124,12 +124,14 @@ public:
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
-    auto [rowCount, objs] = *queryResult;
+    auto rowCount = queryResult->rows.size();
 
-    if (rowCount != 1)
-      throw rukh::OrmException("get(): Got more than one row when expected only one");
+    if (rowCount > 1)
+      throw rukh::OrmException("get(): Got more than one row, expected only one");
+    if (rowCount < 1)
+      throw rukh::OrmException("get(): Found no matching rows");
 
-    co_return hydrate<Model>(objs[0]);
+    co_return hydrate<Model>(queryResult->rows[0]);
   }
 
   Task<std::expected<std::vector<Model>, db::DatabaseError>> select(db::ITransaction *transaction = nullptr) {
@@ -181,12 +183,12 @@ public:
       if (not queryResult)
         co_return std::unexpected(queryResult.error());
 
-      auto [rowCount, objs] = *queryResult;
+      auto rowCount = queryResult->rows.size();
       if (rowCount > 1)
         throw rukh::OrmException("get(): Got more than one row when expected only one");
       if (rowCount == 0)
         co_return std::nullopt;
-      co_return hydrate<Model>(objs[0]);
+      co_return hydrate<Model>(queryResult->rows[0]);
     };
 
     auto getResult = co_await getOneOptional(transaction);

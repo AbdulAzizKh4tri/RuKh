@@ -1,8 +1,8 @@
 #pragma once
 
-#include <concepts>
 #include <rukh/TypeHelpers.hpp>
 #include <rukh/db/DbTypes.hpp>
+#include <rukh/db/ITransaction.hpp>
 
 namespace rukh::orm {
 
@@ -13,7 +13,7 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
   using PkFieldPtrs = decltype(TargetModel::pkFieldPtrs());
   using Target = TargetModel;   // For ActiveRecord to use
   using Definer = DefinerModel; //
-  using customDeleterType = bool (TargetModel::*)() const;
+  using customDeleterType = bool (TargetModel::*)(db::ITransaction *) const;
 
   FkFieldPtrsTuple fkFieldPtrs;
   PkFieldPtrs pkFieldPtrs = TargetModel::pkFieldPtrs();
@@ -55,6 +55,11 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
     return static_cast<Derived &>(*this);
   }
 
+  template <typename FkPtr, typename PkPtr> struct FieldPtrPair {
+    FkPtr fkPtr;
+    PkPtr pkPtr;
+  };
+
   constexpr auto getFieldPtrPairs() const {
     auto result = [&]<std::size_t... I>(std::index_sequence<I...>) {
       return std::make_tuple(getFieldPtrPair<I>()...);
@@ -70,7 +75,7 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
                                remove_member_pointer_t<decltype(pkPtr)>>,
                   "FK and PK fields must be the same type. Order is important!");
 
-    return std::pair{fkPtr, pkPtr};
+    return FieldPtrPair{fkPtr, pkPtr};
   }
 };
 

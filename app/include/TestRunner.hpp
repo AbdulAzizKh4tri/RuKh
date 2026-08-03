@@ -67,7 +67,7 @@ inline void expect(bool cond, const std::string &msg) {
 }
 
 // Unwraps std::expected<T, DatabaseError>, throwing with context on failure.
-template <typename T> T unwrap(std::expected<T, rukh::db::DatabaseError> result, const std::string &context) {
+template <typename T> T unwrap(std::expected<T, rukh::db::DatabaseError> result, const std::string &context = "none") {
   if (not result)
     throw std::runtime_error(context + " failed: " + result.error().message);
   return std::move(*result);

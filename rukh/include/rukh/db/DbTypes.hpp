@@ -62,12 +62,6 @@ struct QueryResult {
   size_t affectedRows; // for non SELECT queries
   std::vector<Row> rows;
   std::shared_ptr<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>> columns;
-
-  QueryResult &operator+=(const QueryResult &other) {
-    affectedRows += other.affectedRows;
-    rows.insert(rows.end(), other.rows.begin(), other.rows.end());
-    return *this;
-  }
 };
 
 enum class DbErrorType {
