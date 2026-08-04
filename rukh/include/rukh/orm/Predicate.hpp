@@ -49,7 +49,7 @@ template <typename Model> struct Predicate {
 
   Operator op;                     // only used if
   std::vector<db::DbValue> values; // Kind::Leaf
-                                   //
+
   std::vector<Predicate> children; // used if And/Or
 
   //===============CONSTRUCTORS===============

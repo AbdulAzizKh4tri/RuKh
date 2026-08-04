@@ -226,29 +226,6 @@ public:
     return query;
   }
 
-  template <auto... fkfieldPtrs> static constexpr auto getRelationByForeignKeyFieldPtrs() {
-    using AllRelationsTuple = std::remove_cvref_t<decltype(Model::relations())>;
-
-    constexpr auto lookupFieldTuple = std::make_tuple(fkfieldPtrs...);
-    using LookUpFieldTupleType = std::remove_cvref_t<decltype(lookupFieldTuple)>;
-
-    return [&]<std::size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat([&]<std::size_t Idx>() constexpr {
-        using Relation = std::tuple_element_t<Idx, AllRelationsTuple>; // was decltype(allRelations)
-        using RelFk = std::remove_cvref_t<decltype(std::get<Idx>(Model::relations()).fkFieldPtrs)>;
-        if constexpr (std::same_as<RelFk, LookUpFieldTupleType>) {
-          if constexpr (std::get<Idx>(Model::relations()).fkFieldPtrs == lookupFieldTuple) {
-            return std::tuple<Relation>{std::get<Idx>(Model::relations())};
-          } else {
-            return std::tuple<>{};
-          }
-        } else {
-          return std::tuple<>{};
-        }
-      }.template operator()<I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<AllRelationsTuple>>{});
-  }
-
   PkType getPrimaryKeyValue() const {
     auto pkTuple = pkColumns();
     const Model *self = static_cast<const Model *>(this);
@@ -263,6 +240,9 @@ public:
     }(std::make_index_sequence<pkArity>{});
   }
 
+  /*
+   * Returns the Database column name of a Model field pointer
+   */
   template <typename FieldT> static std::string columnNameOf(FieldT Model::*fieldPtr) {
     std::string result;
     bool found = false;
@@ -305,11 +285,6 @@ public:
       return std::tuple_cat(getColumnIfPk<I>()...);
     }(std::make_index_sequence<std::tuple_size_v<decltype(Model::columns())>>{});
     return result;
-  }
-
-  static constexpr bool isPkColumn(const std::string &name) {
-    auto cols = pkColumns();
-    return std::apply([&](auto &&...col) { return ((col.dbName == name) or ...); }, cols);
   }
 
   template <typename LookupModel> static constexpr auto getRelationByTargetModel() {
@@ -355,8 +330,17 @@ public:
     return result;
   }
 
+  /*
+   * Stringifies the JSON representation of the Model.
+   * Indent parameter is passed to nlohmann::json::dump
+   */
   std::string toString(const int indent = -1) const { return toJson().dump(indent); }
 
+  /*
+   * Default serialization mode is AUTO.
+   * For more complex fields, Json serializers can be set per Column object.
+   * Or you can define your own toJson() function.
+   */
   nlohmann::json toJson() const {
     nlohmann::json j;
     const Model *self = static_cast<const Model *>(this);
@@ -421,6 +405,29 @@ private:
 
   //==============================Relation Helpers==============================
 
+  template <auto... fkfieldPtrs> static constexpr auto getRelationByForeignKeyFieldPtrs() {
+    using AllRelationsTuple = std::remove_cvref_t<decltype(Model::relations())>;
+
+    constexpr auto lookupFieldTuple = std::make_tuple(fkfieldPtrs...);
+    using LookUpFieldTupleType = std::remove_cvref_t<decltype(lookupFieldTuple)>;
+
+    return [&]<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat([&]<std::size_t Idx>() constexpr {
+        using Relation = std::tuple_element_t<Idx, AllRelationsTuple>; // was decltype(allRelations)
+        using RelFk = std::remove_cvref_t<decltype(std::get<Idx>(Model::relations()).fkFieldPtrs)>;
+        if constexpr (std::same_as<RelFk, LookUpFieldTupleType>) {
+          if constexpr (std::get<Idx>(Model::relations()).fkFieldPtrs == lookupFieldTuple) {
+            return std::tuple<Relation>{std::get<Idx>(Model::relations())};
+          } else {
+            return std::tuple<>{};
+          }
+        } else {
+          return std::tuple<>{};
+        }
+      }.template operator()<I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<AllRelationsTuple>>{});
+  }
+
   template <typename LookupModel, std::size_t I> static constexpr auto getRelationIfTargetModel() {
     using RelT = std::remove_cvref_t<decltype(std::get<I>(Model::relations()))>;
     if constexpr (std::same_as<typename RelT::Target, LookupModel>)
@@ -437,16 +444,6 @@ private:
   }
 
   //==============================ONE TO ONE/ MANY TO ONE==============================
-  template <typename T> struct is_one_to_one_relation : std::false_type {};
-  template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
-  struct is_one_to_one_relation<OneToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
-  template <typename T> static constexpr bool is_one_to_one_relation_v = is_one_to_one_relation<T>::value;
-
-  template <typename T> struct is_many_to_one_relation : std::false_type {};
-  template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
-  struct is_many_to_one_relation<ManyToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
-  template <typename T> static constexpr bool is_many_to_one_relation_v = is_many_to_one_relation<T>::value;
-
   template <std::size_t I> static constexpr auto getRelationIfReferrer() {
     using RelationsTuple = decltype(Model::relations());
     using RelT = std::tuple_element_t<I, RelationsTuple>;

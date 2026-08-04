@@ -4,39 +4,31 @@
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/ITransaction.hpp>
 
+// TODO: one to one self reference integrity modes
 namespace rukh::orm {
 
-// TODO: Add custom deleters
-enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL, CUSTOM };
+enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL };
 
 template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple, typename Derived> struct FkRelation {
   using PkFieldPtrs = decltype(TargetModel::pkFieldPtrs());
   using Target = TargetModel;   // For ActiveRecord to use
   using Definer = DefinerModel; //
-  using customDeleterType = bool (TargetModel::*)(db::ITransaction *) const;
 
   FkFieldPtrsTuple fkFieldPtrs;
   PkFieldPtrs pkFieldPtrs = TargetModel::pkFieldPtrs();
 
   OnDelete onDeletePolicy = OnDelete::NO_ACTION;
-  customDeleterType customDeleter = nullptr;
 
   std::string_view relatedName = "";
 
   bool index = true;
   std::string_view constraintName = "";
 
-  template <OnDelete od, customDeleterType deleter = nullptr> constexpr Derived &onDelete() {
+  template <OnDelete od> constexpr Derived &onDelete() {
     if constexpr (od == OnDelete::SET_NULL) {
       static_assert(AllOptionalFieldPtrs<FkFieldPtrsTuple>, "FK fields must be optional<> for OnDelete::SET_NULL");
     }
-    if constexpr (od == OnDelete::CUSTOM) {
-      static_assert(deleter != nullptr, "OnDelete::CUSTOM requires a non-null deleter");
-    } else {
-      static_assert(deleter == nullptr, "deleter only meaningful for OnDelete::CUSTOM");
-    }
     onDeletePolicy = od;
-    customDeleter = deleter;
     return static_cast<Derived &>(*this);
   }
 
@@ -73,7 +65,7 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
 
     static_assert(std::same_as<remove_optional_t<remove_member_pointer_t<decltype(fkPtr)>>,
                                remove_member_pointer_t<decltype(pkPtr)>>,
-                  "FK and PK fields must be the same type. Order is important!");
+                  "FK and PK fields must be the same type. Order in composite keys is important!");
 
     return FieldPtrPair{fkPtr, pkPtr};
   }
@@ -109,4 +101,13 @@ constexpr auto oneToOne(FieldTypes DefinerModel::*...ptrs) {
   return OneToOneRelation<TargetModel, DefinerModel, FkFieldPtrsTuple>{ptrs...};
 }
 
+template <typename T> struct is_one_to_one_relation : std::false_type {};
+template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
+struct is_one_to_one_relation<OneToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
+template <typename T> static constexpr bool is_one_to_one_relation_v = is_one_to_one_relation<T>::value;
+
+template <typename T> struct is_many_to_one_relation : std::false_type {};
+template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
+struct is_many_to_one_relation<ManyToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
+template <typename T> static constexpr bool is_many_to_one_relation_v = is_many_to_one_relation<T>::value;
 } // namespace rukh::orm
