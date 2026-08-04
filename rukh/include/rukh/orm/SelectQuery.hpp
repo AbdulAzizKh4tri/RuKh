@@ -17,6 +17,7 @@
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
+#include <string>
 
 namespace rukh::orm {
 
@@ -45,6 +46,9 @@ class SelectQuery : public QueryBase<SelectQuery<Models...>, Models...>,
 public:
   // TODO: ADD STRING ESCAPE HATCHES FOR ALL THESE;
 
+  SelectQuery() {}
+  SelectQuery(const std::string &tableAlias) : tableAlias_(tableAlias) {}
+
   template <typename FieldPtr>
   SelectQuery &field(FieldPtr fieldPtr, const std::string &tableAlias = "", const std::string &columnAlias = "") {
     columns_.push_back(getColumnWithAliases(fieldPtr, tableAlias, columnAlias));
@@ -52,13 +56,12 @@ public:
   }
 
   template <typename JoinModel>
-  SelectQuery &join(const Predicate<Models...> &predicate, const std::string &tableAlias = "",
+  SelectQuery &join(const Predicate<Models...> &predicate, const std::optional<std::string> tableAlias = std::nullopt,
                     JoinType joinType = JoinType::INNER) {
     static_assert(is_in_tuple_v<JoinModel, ModelsTuple>, "JoinModel not found in provided SelectQuery Model types");
     if (not joins_)
       joins_ = std::vector<Join>();
-    joins_->emplace_back(JoinModel::tableName,
-                         (tableAlias.empty() ? getAlias(get_index_of_v<JoinModel, ModelsTuple>) : tableAlias),
+    joins_->emplace_back(JoinModel::tableName, (tableAlias.value_or(getAlias(get_index_of_v<JoinModel, ModelsTuple>))),
                          to_string(joinType), predicate);
     return *this;
   }
@@ -90,10 +93,10 @@ public:
                                                         bool distinct = false) {
 
     std::ostringstream countSs;
-    countSs << "SELECT " << (distinct ? "DISTINCT COUNT(*)" : "COUNT(*)") << " FROM " << std::string(Model::tableName);
     std::vector<db::DbValue> countParams;
 
-    countSs << " FROM " << std::string(Model::tableName) << " AS " << getAlias(get_index_of_v<Model, ModelsTuple>);
+    countSs << "SELECT " << (distinct ? "DISTINCT COUNT(*)" : "COUNT(*)") << " FROM " << std::string(Model::tableName)
+            << " AS " << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
 
     if (joins_) {
       for (auto &join : *joins_) {
@@ -124,7 +127,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(false, 2);
+    buildSelectSqlAndSetParams(2);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -145,7 +148,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<std::optional<Model>, db::DatabaseError>> getOneOptional(db::ITransaction *transaction) {
-    buildSelectSqlAndSetParams(false, 2);
+    buildSelectSqlAndSetParams(2);
     auto queryResult = co_await this->dispatch(transaction, sql_, params_);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
@@ -174,7 +177,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(false, 1);
+    buildSelectSqlAndSetParams(1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -190,7 +193,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(false, 1);
+    buildSelectSqlAndSetParams(1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -286,7 +289,7 @@ private:
   };
 
   std::string sql_;
-  std::string tableAlias_;
+  std::optional<std::string> tableAlias_ = std::nullopt;
   std::optional<std::vector<Join>> joins_ = std::nullopt;
   std::vector<std::string> columns_;
   std::vector<db::DbValue> params_;
@@ -305,7 +308,7 @@ private:
     return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr) + asColumnAlias;
   }
 
-  void buildSelectSqlAndSetParams(bool count = false, std::optional<size_t> limit = std::nullopt) {
+  void buildSelectSqlAndSetParams(std::optional<size_t> limit = std::nullopt) {
     params_.clear();
 
     std::ostringstream ss;
@@ -319,7 +322,7 @@ private:
             auto addColumn = [&](auto &&c) {
               if (!first)
                 ss << ", ";
-              ss << getAlias(get_index_of_v<Model, ModelsTuple>) << "." << c.dbName;
+              ss << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>)) << "." << c.dbName;
               first = false;
             };
             (addColumn(col), ...);
@@ -333,7 +336,8 @@ private:
       ss << ", " << columns_.at(i);
     }
 
-    ss << " FROM " << std::string(Model::tableName) << " AS " << getAlias(get_index_of_v<Model, ModelsTuple>);
+    ss << " FROM " << std::string(Model::tableName) << " AS "
+       << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
 
     if (joins_) {
       for (auto &join : *joins_) {

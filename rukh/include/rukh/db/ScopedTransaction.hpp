@@ -20,20 +20,18 @@ public:
   }
 
   Task<std::expected<QueryResult, DatabaseError>> begin(const std::string &mode = "DEFERRED") override {
-    co_return co_await transaction_->begin(mode);
+    return transaction_->begin(mode);
   }
-  Task<std::expected<QueryResult, DatabaseError>> commit() override { co_return co_await transaction_->commit(); };
+  Task<std::expected<QueryResult, DatabaseError>> commit() override { return transaction_->commit(); };
 
-  Task<std::expected<QueryResult, DatabaseError>> rollback() override { co_return co_await transaction_->rollback(); };
+  Task<std::expected<QueryResult, DatabaseError>> rollback() override { return transaction_->rollback(); };
 
   Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &query,
                                                                const std::vector<DbValue> params = {}) override {
-    co_return co_await transaction_->executeQuery(query, params);
+    return transaction_->executeQuery(query, params);
   }
 
-  void abandon() override {
-    transaction_->abandon();
-  }
+  void abandon() override { transaction_->abandon(); }
 
   bool isTransactionEnded() const override { return transaction_->isTransactionEnded(); }
 
