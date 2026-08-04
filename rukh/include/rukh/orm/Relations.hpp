@@ -63,8 +63,8 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
     auto pkPtr = std::get<I>(pkFieldPtrs);
     auto fkPtr = std::get<I>(fkFieldPtrs);
 
-    static_assert(std::same_as<remove_optional_t<remove_member_pointer_t<decltype(fkPtr)>>,
-                               remove_member_pointer_t<decltype(pkPtr)>>,
+    static_assert(std::same_as<remove_optional_t<get_field_t<decltype(fkPtr)>>,
+                               get_field_t<decltype(pkPtr)>>,
                   "FK and PK fields must be the same type. Order in composite keys is important!");
 
     return FieldPtrPair{fkPtr, pkPtr};

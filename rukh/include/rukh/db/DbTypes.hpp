@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <sstream>
 #include <string>
 
 #include <rukh/TypeHelpers.hpp>
@@ -33,14 +34,14 @@ public:
   bool isNull(std::string_view col) const {
     auto it = columns->find(col);
     if (it == columns->end())
-      throw std::out_of_range("no such column: " + std::string(col));
+      throw DatabaseException("No such column: " + std::string(col));
     return std::holds_alternative<std::nullptr_t>(values[it->second]);
   }
 
   DbValue operator[](std::string_view column) const {
     auto it = columns->find(column);
     if (it == columns->end())
-      throw std::out_of_range("no such column: " + std::string(column));
+      throw DatabaseException("No such column: " + std::string(column));
     return values[it->second];
   }
 
@@ -50,11 +51,12 @@ public:
   std::shared_ptr<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>> columns;
 
   std::string toString() const {
-    std::string s;
+    constexpr int COL_WIDTH = 16;
+    std::ostringstream ss;
     for (size_t i = 0; i < values.size(); i++) {
-      s += dbValueToString(values[i]) + " ";
+      ss << std::left << std::setw(COL_WIDTH) << dbValueToString(values[i]);
     }
-    return s;
+    return ss.str();
   }
 };
 
@@ -62,6 +64,24 @@ struct QueryResult {
   size_t affectedRows; // for non SELECT queries
   std::vector<Row> rows;
   std::shared_ptr<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>> columns;
+
+  std::string toString() const {
+    std::ostringstream ss;
+    constexpr int COL_WIDTH = 16;
+
+    std::vector<std::pair<std::string, int>> cols(columns->begin(), columns->end());
+    std::sort(cols.begin(), cols.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
+
+    ss << "\n";
+    for (auto &[key, _] : cols) {
+      ss << std::left << std::setw(COL_WIDTH) << key;
+    }
+    ss << "\n";
+    for (size_t i = 0; i < rows.size(); i++) {
+      ss << rows[i].toString() << "\n";
+    }
+    return ss.str();
+  }
 };
 
 enum class DbErrorType {

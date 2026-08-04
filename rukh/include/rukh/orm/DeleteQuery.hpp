@@ -17,7 +17,7 @@
 namespace rukh::orm {
 
 template <typename Model>
-class DeleteQuery : public WhereClause<Model, DeleteQuery<Model>>, public QueryBase<Model, DeleteQuery<Model>> {
+class DeleteQuery : public WhereClause<DeleteQuery<Model>, Model>, public QueryBase<DeleteQuery<Model>, Model> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(db::ITransaction *transaction = nullptr, bool returning = false) {
@@ -47,10 +47,10 @@ private:
 
     if (this->wherePredicate) {
       sql_ += " WHERE ";
-      sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, params_);
+      sql_ += (*this->wherePredicate).resolvePredicates(params_);
     } else {
-      throw rukh::OrmException("No where clause when deleting: " + this->tblName +
-                               ". use where({{true}}) if you want to delete all");
+      throw rukh::OrmException("No where clause when deleting: " + std::string(Model::tableName) +
+                               ". use where({true}) if you want to delete all");
     }
 
     if (returning)
@@ -59,7 +59,7 @@ private:
     sql_ += ';';
   }
 
-  inline static std::string sqlInit = "DELETE FROM " + QueryBase<Model, DeleteQuery<Model>>::tblName + " ";
+  inline static std::string sqlInit = "DELETE FROM " + std::string(Model::tableName) + " AS " + getAlias(0);
 };
 
 } // namespace rukh::orm

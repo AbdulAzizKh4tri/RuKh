@@ -12,10 +12,11 @@
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/QueryBase.hpp>
 #include <rukh/orm/hydrators.hpp>
+#include <sstream>
 
 namespace rukh::orm {
 
-template <typename Model> class InsertQuery : public QueryBase<Model, InsertQuery<Model>> {
+template <typename Model> class InsertQuery : public QueryBase<InsertQuery<Model>, Model> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const std::vector<Model> &objs, db::ITransaction *transaction = nullptr, bool returning = false) {
@@ -38,14 +39,13 @@ private:
 
   void buildInsertSqlAndSetParams(const std::vector<Model> &objs, bool returning = false) {
     params_.clear();
-    sql_ = sqlInit;
-
-    sql_ += "VALUES ";
-    sql_ += valuesListStringAndParams(objs);
+    std::ostringstream ss;
+    ss << sqlInit << " VALUES " << valuesListStringAndParams(objs);
 
     if (returning)
-      sql_ += " RETURNING *";
-    sql_ += ';';
+      ss << " RETURNING *";
+    ss << ';';
+    sql_ = ss.str();
   }
 
   std::string valuesListStringAndParams(const std::vector<Model> &objs) {
@@ -116,7 +116,7 @@ private:
   }
 
   inline static std::string sqlInit =
-      "INSERT INTO " + QueryBase<Model, InsertQuery<Model>>::tblName + " (" + modelColumnListString() + ") ";
+      "INSERT INTO " + std::string(Model::tableName) + " (" + modelColumnListString() + ") ";
 };
 
 } // namespace rukh::orm

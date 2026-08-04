@@ -97,7 +97,7 @@ public:
   }
 
   Task<std::expected<Model, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
-    Predicate p = buildPkPredicate(this->getPrimaryKeyValues());
+    Predicate<Model> p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await UpdateQuery<Model>().where(p).execute(*self, transaction, true);
     if (not result)
@@ -112,7 +112,7 @@ public:
   }
 
   Task<std::expected<Model, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
-    Predicate p = buildPkPredicate(this->getPrimaryKeyValues());
+    Predicate<Model> p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await DeleteQuery<Model>().where(p).execute(transaction, true);
     if (not result)
@@ -145,7 +145,7 @@ public:
   template <typename DefinerModel, FixedString RelatedName = "">
   SelectQuery<DefinerModel> related(db::ITransaction *transaction = nullptr) {
     using Po = Predicate<DefinerModel>;
-    Po p = Po::truePredicate();
+    Po p = Po(true);
 
     static constexpr auto relationTuple = [] {
       if constexpr (RelatedName.view() == "") {
@@ -155,7 +155,7 @@ public:
       }
     }();
 
-    auto constexpr relationCount = std::tuple_size_v<decltype(relationTuple)>;
+    constexpr auto relationCount = std::tuple_size_v<decltype(relationTuple)>;
     static_assert(relationCount > 0, "related<>(): No matching Relation found on DefinerModel.");
     static_assert(
         relationCount < 2,
@@ -195,7 +195,7 @@ public:
       }
     }();
 
-    auto constexpr relationCount = std::tuple_size_v<decltype(relationTuple)>;
+    constexpr auto relationCount = std::tuple_size_v<decltype(relationTuple)>;
     static_assert(relationCount > 0, "ref<>(): No matching Relation found.");
     static_assert(relationCount < 2,
                   "ref<>(): Multiple matching Relations found. Specify using field pointers to disambiguate.");
@@ -207,13 +207,16 @@ public:
 
     using Pt = Predicate<TargetModel>;
     SelectQuery<TargetModel> query;
+    bool found = false;
     std::apply(
         [&](auto &&...fieldPtrPairs) {
           auto addPredicate = [&](auto &&fieldPtrPair) {
             auto fkField = self->*fieldPtrPair.fkPtr;
             if constexpr (OptionalT<std::remove_cvref_t<decltype(fkField)>>) {
-              if (not fkField)
+              if (not fkField) {
+                query.andWhere(Pt(false));
                 return;
+              }
               query.andWhere(Pt::equals(fieldPtrPair.pkPtr, *fkField));
             } else {
               query.andWhere(Pt::equals(fieldPtrPair.pkPtr, fkField));

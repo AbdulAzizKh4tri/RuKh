@@ -653,6 +653,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     using Pp = Predicate<Post>;
 
     json res = json::array();
+    unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
+    unwrap(co_await Post::bulkDestroy({true}), "bulkDestroy");
 
     std::vector<User> userBatch;
     userBatch.push_back({.email = "alice@example.com", .name = "Alice"});
@@ -676,31 +678,59 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     auto posts = unwrap(co_await Post::all().select(), "get all posts");
 
-    User alice = userBatch[0];
+    User alice = users[0];
     alice.age = 34;
     alice.bestFriend = users[3];
-    co_await alice.save();
+    unwrap(co_await alice.save(), "alice update");
 
-    User bob = userBatch[1];
+    User bob = users[1];
     bob.age = 12;
     bob.mother = alice;
-    co_await bob.save();
+    bob.bestFriend = users[2];
+    unwrap(co_await bob.save(), "bob update");
 
-    User joe = userBatch[2];
+    User joe = users[2];
     joe.createdAt = 234; // shouldn't matter
     joe.updatedAt = 5;   //
     joe.mother = alice;
-    co_await joe.save();
+    joe.bestFriend = alice;
+    unwrap(co_await joe.save(), " joe update");
 
-    User john = userBatch[3];
+    User john = users[3];
+    john.bestFriend = bob;
+    unwrap(co_await john.save(), "john update");
 
-    Post post1 = postBatch[0];
+    Post post1 = posts[0];
     post1.content = "lorem ipsum dolor sit amet";
-    co_await post1.save();
+    unwrap(co_await post1.save(), "post1 update");
 
-    auto joeMama = *unwrap(co_await joe.ref<User, &User::mother>().first());
-    auto joeMamaBestFriend = unwrap(co_await joeMama.ref<User, &User::bestFriend>().getOne());
-    auto johnPosts = unwrap(co_await joeMamaBestFriend.related<Post, "user_posts">().select());
+    auto joeMama = *unwrap(co_await joe.ref<User, &User::mother>().first(), "joemama");
+    auto joeMamaBestFriend = unwrap(co_await joeMama.ref<User, &User::bestFriend>().getOne(), "joemama best friend");
+    auto johnPosts = unwrap(co_await joeMamaBestFriend.related<Post, "user_posts">().select(), "john posts");
+
+    using queryModels1 = std::tuple<User, Post>;
+    using Query1 = unpack_tuple_t<SelectQuery, queryModels1>;
+    using Pred = unpack_tuple_t<Predicate, queryModels1>;
+
+    Query1 query1;
+    query1.field(&User::name, "a", "USER_ABC_NAME");
+    query1.field(&Post::title);
+    Predicate p = Pred(&User::id, Operator::EQUALS, &Post::user);
+    query1.join<Post>(p);
+    SPDLOG_DEBUG(unwrap(co_await query1.execute()).toString());
+
+    using queryModels2 = std::tuple<User>;
+    using Query2 = unpack_tuple_t<SelectQuery, queryModels2>;
+    using Pred2 = unpack_tuple_t<Predicate, queryModels2>;
+
+    Query2 query2;
+    query2.field(&User::name, "a", "USER_A_NAME");
+    query2.field(&User::bestFriend, "a", "USER_A_BFRIEND");
+    query2.field(&User::name, "b", "USER_B_NAME");
+    query2.field(&User::bestFriend, "b", "USER_B_BFRIEND");
+    Predicate p2 = Pred2(&User::id, Operator::EQUALS, &User::bestFriend, {"b", "a"});
+    query2.join<User>(p2, "b");
+    SPDLOG_DEBUG(unwrap(co_await query2.execute()).toString());
 
     res.push_back(alice.toJson());
     res.push_back(bob.toJson());
@@ -708,6 +738,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     for (auto post : johnPosts)
       res.push_back(post.toJson());
+
+    unwrap(co_await joeMama.destroy(), "Destroying joe mama");
 
     unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
     unwrap(co_await Post::bulkDestroy({true}), "bulkDestroy");
@@ -793,7 +825,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       User patch;
       patch.name = "megaJoe";
       patch.password = "1234";
-      Pu pred = Pu::iContains(&User::name, "j");
+      Pu pred = Pu("LOWER(name) LIKE LOWER(?) ESCAPE '\\'", '%' + db::dbValueToString("j") + '%');
+      pred = pred and Pu(true);
       auto [updatedCount, updatedRows] =
           unwrap(co_await User::bulkUpdate(patch, std::tuple{&User::name, &User::password}, pred), "bulkUpdate");
       expect(updatedCount == 2, "expected 2 rows, got " + std::to_string(updatedCount));

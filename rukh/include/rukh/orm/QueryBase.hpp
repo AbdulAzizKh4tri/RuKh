@@ -7,9 +7,10 @@
 
 namespace rukh::orm {
 
-template <typename Model, typename Derived> class QueryBase {
+template <typename Derived, typename... Models> class QueryBase {
 public:
-  inline static const std::string tblName = std::string(Model::tableName);
+  using ModelsTuple = std::tuple<Models...>;
+  using Model = std::tuple_element_t<0, ModelsTuple>;
 
 protected:
   db::IDatabase *db_ = OrmConfig::db;

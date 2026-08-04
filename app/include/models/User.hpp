@@ -50,7 +50,7 @@ struct User : ActiveRecord<User, int64_t> {
 
   static constexpr auto relations() {
     return std::tuple{
-        oneToOne<User>(&User::bestFriend),
+        manyToOne<User>(&User::bestFriend),
         manyToOne<User>(&User::mother),
     };
   }

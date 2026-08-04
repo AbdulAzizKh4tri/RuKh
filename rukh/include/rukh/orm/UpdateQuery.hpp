@@ -13,11 +13,12 @@
 #include <rukh/orm/QueryBase.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
+#include <sstream>
 
 namespace rukh::orm {
 
 template <typename Model>
-class UpdateQuery : public WhereClause<Model, UpdateQuery<Model>>, public QueryBase<Model, UpdateQuery<Model>> {
+class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryBase<UpdateQuery<Model>, Model> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
@@ -31,15 +32,9 @@ public:
     co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }
 
+  // TODO: doesn't support proper aliasing (VEERY LOWW priority)
   template <typename FieldPtr> UpdateQuery &field(FieldPtr fieldPtr) {
     columns_.push_back(Model::columnNameOf(fieldPtr));
-    return *this;
-  }
-
-  UpdateQuery &column(std::string column) {
-    if (not Model::isValidColumnName(column))
-      throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + this->tblName);
-    columns_.push_back(column);
     return *this;
   }
 
@@ -56,23 +51,23 @@ private:
   std::vector<db::DbValue> params_;
 
   void buildUpdateSqlAndSetParams(const Model &obj, bool returning = false) {
-    this->sql_ = sqlInit;
-    this->params_.clear();
-
-    this->sql_ += modelUpdateValueList(obj);
+    params_.clear();
+    std::ostringstream ss;
+    ss << sqlInit << modelUpdateValueList(obj);
 
     if (this->wherePredicate) {
-      this->sql_ += " WHERE ";
-      this->sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, this->params_);
+      ss << " WHERE " << (*this->wherePredicate).resolvePredicates(this->params_);
     } else {
-      throw rukh::OrmException("No where clause when Updating: " + this->tblName +
-                               ". use where({{true}}) if you want to update all");
+      throw rukh::OrmException("No where clause when Updating: " + std::string(Model::tableName) +
+                               ". use where({true}) if you want to update all");
     }
 
     if (returning)
-      this->sql_ += " RETURNING *";
+      ss << " RETURNING *";
 
-    this->sql_ += ';';
+    ss << ';';
+    sql_ = ss.str();
+    SPDLOG_DEBUG(ss.str());
   }
 
   std::string modelUpdateValueList(const Model &obj) {
@@ -116,7 +111,7 @@ private:
     return policy == AutoUpdate::DB_NOW or policy == AutoUpdate::LOCKED;
   }
 
-  static inline std::string sqlInit = "UPDATE " + QueryBase<Model, UpdateQuery<Model>>::tblName + " SET ";
+  static inline std::string sqlInit = "UPDATE " + std::string(Model::tableName) + " AS " + getAlias(0) + " SET ";
 };
 
 } // namespace rukh::orm

@@ -1,10 +1,13 @@
 #pragma once
 
+#include "rukh/db/DbTypes.hpp"
 #include <optional>
 #include <spdlog/spdlog.h>
+#include <sstream>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/DeleteQuery.hpp>
@@ -17,30 +20,53 @@
 
 namespace rukh::orm {
 
-template <typename Model>
-class SelectQuery : public WhereClause<Model, SelectQuery<Model>>, public QueryBase<Model, SelectQuery<Model>> {
+enum class Sorting { DESC, ASC };
+enum class JoinType { INNER, LEFT, RIGHT, FULL, CROSS };
+
+template <typename... Models>
+class SelectQuery : public QueryBase<SelectQuery<Models...>, Models...>,
+                    public WhereClause<SelectQuery<Models...>, Models...> {
+  /*
+   * Every Query has a Main Model, the first one defined in the template params.
+   * This is the only one that can use methods like update, getOne, etc.
+   * If you are not using JOINS, you need not worry about this.
+   */
+
+  static constexpr std::string_view joinTypeStrings[] = {" JOIN ", " LEFT JOIN ", " RIGHT JOIN ", " FULL JOIN ",
+                                                         " CROSS JOIN "};
+  static constexpr std::string_view to_string(JoinType joinType) {
+    return joinTypeStrings[static_cast<std::size_t>(joinType)];
+  }
+
+  using ModelsTuple = std::tuple<Models...>;
+  using Model = std::tuple_element_t<0, ModelsTuple>;
+  static constexpr std::size_t modelCount = sizeof...(Models);
+
 public:
-  SelectQuery &column(std::string column) {
-    if (not Model::isValidColumnName(column))
-      throw rukh::OrmException("Failed to add column to query: unknown column '" + column + "' on " + this->tblName);
-    columns_.push_back(column);
+  // TODO: ADD STRING ESCAPE HATCHES FOR ALL THESE;
+
+  template <typename FieldPtr>
+  SelectQuery &field(FieldPtr fieldPtr, const std::string &tableAlias = "", const std::string &columnAlias = "") {
+    columns_.push_back(getColumnWithAliases(fieldPtr, tableAlias, columnAlias));
     return *this;
   }
 
-  template <typename FieldT> SelectQuery &field(FieldT Model::*fieldPtr) {
-    columns_.push_back(Model::columnNameOf(fieldPtr));
+  template <typename JoinModel>
+  SelectQuery &join(const Predicate<Models...> &predicate, const std::string &tableAlias = "",
+                    JoinType joinType = JoinType::INNER) {
+    static_assert(is_in_tuple_v<JoinModel, ModelsTuple>, "JoinModel not found in provided SelectQuery Model types");
+    if (not joins_)
+      joins_ = std::vector<Join>();
+    joins_->emplace_back(JoinModel::tableName,
+                         (tableAlias.empty() ? getAlias(get_index_of_v<JoinModel, ModelsTuple>) : tableAlias),
+                         to_string(joinType), predicate);
     return *this;
   }
 
-  SelectQuery &orderBy(const std::string &order, bool desc = false) {
-    if (not Model::isValidColumnName(order))
-      throw rukh::OrmException("orderBy: unknown column '" + order + "' on " + this->tblName);
-    orderBy_.emplace_back(order, desc);
+  template <typename FieldPtr>
+  SelectQuery &orderBy(FieldPtr fieldPtr, Sorting sorting = Sorting::ASC, const std::string &tableAlias = "") {
+    orderBy_.emplace_back(getColumnWithAliases(fieldPtr, tableAlias), sorting);
     return *this;
-  }
-
-  template <typename FieldT> SelectQuery &orderBy(FieldT Model::*fieldPtr, bool desc = false) {
-    return orderBy(Model::columnNameOf(fieldPtr), desc);
   }
 
   SelectQuery &limit(size_t limit) {
@@ -55,70 +81,50 @@ public:
     return *this;
   }
 
-  SelectQuery &groupBy(const std::string &column) {
-    if (not Model::isValidColumnName(column))
-      throw rukh::OrmException("Failed to add column to groupBy: unknown column '" + column + "' on " + this->tblName);
-
-    groupBy_.push_back(column);
+  template <typename FieldPtr> SelectQuery &groupBy(FieldPtr fieldPtr, const std::string &tableAlias = "") {
+    groupBy_.push_back(getColumnWithAliases(fieldPtr, tableAlias));
     return *this;
-  }
-
-  template <typename FieldT> SelectQuery &groupBy(FieldT Model::*fieldPtr) {
-    return groupBy(Model::columnNameOf(fieldPtr));
   }
 
   Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr,
                                                         bool distinct = false) {
-    std::string countCol = distinct ? "DISTINCT COUNT(*)" : "COUNT(*)";
-    std::string countSql = "SELECT " + countCol + " FROM " + this->tblName + " ";
+
+    std::ostringstream countSs;
+    countSs << "SELECT " << (distinct ? "DISTINCT COUNT(*)" : "COUNT(*)") << " FROM " << std::string(Model::tableName);
     std::vector<db::DbValue> countParams;
 
-    if (this->wherePredicate) {
-      countSql += " WHERE ";
-      countSql += Predicate<Model>::resolvePredicates(*this->wherePredicate, countParams);
+    countSs << " FROM " << std::string(Model::tableName) << " AS " << getAlias(get_index_of_v<Model, ModelsTuple>);
+
+    if (joins_) {
+      for (auto &join : *joins_) {
+        countSs << join.type << join.tableName << " AS " << join.tableAlias << " ON "
+                << join.condition.resolvePredicates(params_);
+      }
     }
 
-    auto queryResult = co_await this->dispatch(transaction, countSql, countParams);
+    if (this->wherePredicate) {
+      countSs << " WHERE " << (*this->wherePredicate).resolvePredicates(countParams);
+    }
+
+    auto queryResult = co_await this->dispatch(transaction, countSs.str(), countParams);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
     co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
-  template <typename FieldT>
-  Task<std::expected<int64_t, db::DatabaseError>> count(const std::string &col, db::ITransaction *transaction = nullptr,
-                                                        bool distinct = false) {
-    if (not Model::validColumnNames().contains(col))
-      co_return std::unexpected(
-          db::DatabaseError{db::DbErrorType::INVALID_COLUMN, "Unknown column '" + col + "' on " + this->tblName});
-
-    std::string countCol = distinct ? "DISTINCT COUNT(" + col + ")" : "COUNT(" + col + ")";
-    std::string countSql = "SELECT " + countCol + " FROM " + this->tblName + " ";
-    std::vector<db::DbValue> countParams;
-
-    if (this->wherePredicate) {
-      countSql += " WHERE ";
-      countSql += Predicate<Model>::resolvePredicates(*this->wherePredicate, countParams);
-    }
-
-    auto queryResult = co_await this->dispatch(transaction, countSql, countParams);
-    if (not queryResult)
-      co_return std::unexpected(queryResult.error());
-
-    co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
-  }
-
-  template <typename FieldT>
-  Task<std::expected<int64_t, db::DatabaseError>>
-  count(FieldT Model::*fieldPtr, db::ITransaction *transaction = nullptr, bool distinct = false) {
-    co_return co_await count(Model::columnNameOf(fieldPtr), transaction, distinct);
+  template <typename FieldPtr>
+  Task<std::expected<int64_t, db::DatabaseError>> count(FieldPtr fieldPtr, db::ITransaction *transaction = nullptr,
+                                                        bool distinct = false, const std::string &tableAlias = "") {
+    co_return co_await count(getColumnWithAliases(fieldPtr, tableAlias), transaction, distinct);
   }
 
   /*
-   * Returns a single object, throws if 0 or multiple rows are returned
+   * Returns a single object, throws if 0 or multiple rows are returned.
+   * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(2);
+    buildSelectSqlAndSetParams(false, 2);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -127,13 +133,34 @@ public:
     auto rowCount = queryResult->rows.size();
 
     if (rowCount > 1)
-      throw rukh::OrmException("get(): Got more than one row, expected only one");
+      throw rukh::OrmException("getOne(): Got more than one row, expected only one");
     if (rowCount < 1)
-      throw rukh::OrmException("get(): Found no matching rows");
+      throw rukh::OrmException("getOne(): Found no matching rows");
 
     co_return hydrate<Model>(queryResult->rows[0]);
   }
 
+  /*
+   * Returns a single object, throws if multiple rows are returned.
+   * Cannot be used with JOIN Queries that return columns from more than one table;.
+   */
+  Task<std::expected<std::optional<Model>, db::DatabaseError>> getOneOptional(db::ITransaction *transaction) {
+    buildSelectSqlAndSetParams(false, 2);
+    auto queryResult = co_await this->dispatch(transaction, sql_, params_);
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
+
+    auto rowCount = queryResult->rows.size();
+    if (rowCount > 1)
+      throw rukh::OrmException("get(): Got more than one row when expected only one");
+    if (rowCount == 0)
+      co_return std::nullopt;
+    co_return hydrate<Model>(queryResult->rows[0]);
+  };
+
+  /*
+   * Cannot be used with JOIN Queries that return columns from more than one table;.
+   */
   Task<std::expected<std::vector<Model>, db::DatabaseError>> select(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
@@ -143,8 +170,11 @@ public:
     co_return hydrate<Model>(*queryResult);
   }
 
+  /*
+   * Cannot be used with JOIN Queries that return columns from more than one table;.
+   */
   Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(1);
+    buildSelectSqlAndSetParams(false, 1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -156,8 +186,11 @@ public:
     co_return hydrate<Model>(queryResult->rows[0]);
   }
 
+  /*
+   * Cannot be used with JOIN Queries that return columns from more than one table;.
+   */
   Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(1);
+    buildSelectSqlAndSetParams(false, 1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -168,28 +201,16 @@ public:
 
   /*
    * FOOTGUN ALERT!!
-   * There is no validation for whether the provided "where" predicate values match the provided `obj` values.
-   * That is the caller's responsibility!
+   * It is the callers responsibility to ensure that the row described by the where clause matches the values of the
+   * objToCreate. Otherwise a situation may arise where the where clause returns nothing for a query, and creates a
+   * completely different object based on objToCreate, which may already exist.
+   *
+   * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<Model, db::DatabaseError>> getOneOrCreate(const Model &obj,
+  Task<std::expected<Model, db::DatabaseError>> getOneOrCreate(const Model &objToCreate,
                                                                db::ITransaction *transaction = nullptr) {
     if (not this->wherePredicate)
       throw rukh::OrmException("getOneOrCreate(): no where predicate set");
-
-    auto getOneOptional =
-        [&](db::ITransaction *transaction) -> Task<std::expected<std::optional<Model>, db::DatabaseError>> {
-      buildSelectSqlAndSetParams(2);
-      auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
-      if (not queryResult)
-        co_return std::unexpected(queryResult.error());
-
-      auto rowCount = queryResult->rows.size();
-      if (rowCount > 1)
-        throw rukh::OrmException("get(): Got more than one row when expected only one");
-      if (rowCount == 0)
-        co_return std::nullopt;
-      co_return hydrate<Model>(queryResult->rows[0]);
-    };
 
     auto getResult = co_await getOneOptional(transaction);
     if (not getResult)
@@ -199,7 +220,7 @@ public:
     if (userOpt)
       co_return *userOpt;
 
-    auto insertResult = co_await InsertQuery<Model>().execute({obj}, transaction, true);
+    auto insertResult = co_await InsertQuery<Model>().execute({objToCreate}, transaction, true);
     if (not insertResult) {
       if (insertResult.error().type == db::DbErrorType::DUPLICATE_KEY or
           insertResult.error().type == db::DbErrorType::UNIQUE_CONSTRAINT_VIOLATION) {
@@ -212,18 +233,27 @@ public:
     co_return objs[0];
   }
 
+  Task<std::expected<db::QueryResult, db::DatabaseError>> execute(db::ITransaction *transaction = nullptr) {
+    buildSelectSqlAndSetParams();
+    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
+
+    co_return queryResult;
+  }
+
+  // Cannot be used with JOIN Queries that return columns from more than one table;.
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   update(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
     UpdateQuery<Model> updateQuery;
     for (auto &col : columns_) {
-      if (not Model::isValidColumnName(col))
-        throw rukh::OrmException("Failed to add column to query: unknown column '" + col + "' on " + this->tblName);
       updateQuery.field(col);
     }
     co_return co_await updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
         .execute(obj, transaction, returning);
   }
 
+  // Cannot be used with JOIN Queries that return columns from more than one table;.
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   destroy(db::ITransaction *transaction = nullptr, bool returning = false) {
     co_return co_await DeleteQuery<Model>()
@@ -231,7 +261,12 @@ public:
         .execute(transaction, returning);
   }
 
-  SelectQuery<Model> &reset() {
+  std::string getSql() {
+    buildSelectSqlAndSetParams();
+    return this->sql_;
+  }
+
+  SelectQuery<Models...> &reset() {
     this->wherePredicate = std::nullopt;
     columns_.clear();
     this->params_.clear();
@@ -243,67 +278,104 @@ public:
   }
 
 private:
+  struct Join {
+    std::string_view tableName;
+    std::string tableAlias;
+    std::string_view type;
+    Predicate<Models...> condition;
+  };
+
   std::string sql_;
+  std::string tableAlias_;
+  std::optional<std::vector<Join>> joins_ = std::nullopt;
   std::vector<std::string> columns_;
   std::vector<db::DbValue> params_;
-  std::vector<std::pair<std::string, bool>> orderBy_;
+  std::vector<std::pair<std::string, Sorting>> orderBy_;
   std::vector<std::string> groupBy_;
   std::optional<size_t> limit_;
   std::optional<size_t> offset_;
 
-  void buildSelectSqlAndSetParams(std::optional<size_t> limit = std::nullopt) {
-    this->sql_ = "SELECT ";
+  template <typename FieldPtr>
+  std::string getColumnWithAliases(FieldPtr fieldPtr, const std::string &tableAlias, const std::string &columnAlias) {
+    using FieldPtrModel = get_class_t<FieldPtr>;
+    std::string asColumnAlias = columnAlias.empty() ? "" : " AS " + columnAlias;
+    if (tableAlias.empty())
+      return getAlias(get_index_of_v<FieldPtrModel, ModelsTuple>) + "." + FieldPtrModel::columnNameOf(fieldPtr) +
+             asColumnAlias;
+    return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr) + asColumnAlias;
+  }
+
+  void buildSelectSqlAndSetParams(bool count = false, std::optional<size_t> limit = std::nullopt) {
     params_.clear();
 
+    std::ostringstream ss;
+    ss << "SELECT ";
+
     if (columns_.empty()) {
-      this->sql_ += "*";
+      constexpr auto mainModelColumns = Model::columns();
+      bool first = true;
+      std::apply(
+          [&](auto &&...col) {
+            auto addColumn = [&](auto &&c) {
+              if (!first)
+                ss << ", ";
+              ss << getAlias(get_index_of_v<Model, ModelsTuple>) << "." << c.dbName;
+              first = false;
+            };
+            (addColumn(col), ...);
+          },
+          mainModelColumns);
     } else {
-      this->sql_ += columns_.at(0);
+      ss << columns_.at(0);
     }
 
     for (size_t i = 1; i < columns_.size(); i++) {
-      this->sql_ += ", ";
-      this->sql_ += columns_.at(i);
+      ss << ", " << columns_.at(i);
     }
 
-    this->sql_ += " FROM " + this->tblName + " ";
+    ss << " FROM " << std::string(Model::tableName) << " AS " << getAlias(get_index_of_v<Model, ModelsTuple>);
+
+    if (joins_) {
+      for (auto &join : *joins_) {
+        ss << join.type << join.tableName << " AS " << join.tableAlias << " ON "
+           << join.condition.resolvePredicates(params_);
+      }
+    }
 
     if (this->wherePredicate) {
-      this->sql_ += " WHERE ";
-      this->sql_ += Predicate<Model>::resolvePredicates(*this->wherePredicate, this->params_);
+      ss << " WHERE " << (*this->wherePredicate).resolvePredicates(params_);
     }
 
     if (!groupBy_.empty()) {
-      this->sql_ += " GROUP BY ";
-      this->sql_ += groupBy_.at(0);
+      ss << " GROUP BY " << groupBy_.at(0);
       for (size_t i = 1; i < groupBy_.size(); i++) {
-        this->sql_ += ", ";
-        this->sql_ += groupBy_.at(i);
+        ss << ", " << groupBy_.at(i);
       }
     }
 
     if (!orderBy_.empty()) {
-      this->sql_ += " ORDER BY ";
-      this->sql_ += orderBy_.at(0).first;
-      if (orderBy_.at(0).second)
-        this->sql_ += " DESC";
+      ss << " ORDER BY " << orderBy_.at(0).first;
+      if (orderBy_.at(0).second == Sorting::DESC)
+        ss << " DESC";
       for (size_t i = 1; i < orderBy_.size(); i++) {
-        this->sql_ += ", ";
-        this->sql_ += orderBy_.at(i).first;
-        if (orderBy_.at(i).second)
-          this->sql_ += " DESC";
+        ss << ", " << orderBy_.at(i).first;
+        if (orderBy_.at(i).second == Sorting::DESC)
+          ss << " DESC ";
       }
     }
 
     if (limit) {
-      this->sql_ += " LIMIT " + std::to_string(limit.value());
+      ss << " LIMIT " << std::to_string(limit.value());
     } else if (limit_) {
-      this->sql_ += " LIMIT " + std::to_string(limit_.value());
+      ss << " LIMIT " << std::to_string(limit_.value());
     }
 
     if (offset_) {
-      this->sql_ += " OFFSET " + std::to_string(offset_.value());
+      ss << " OFFSET " << std::to_string(offset_.value());
     }
+
+    ss << " ; ";
+    sql_ = ss.str();
   }
 };
 
