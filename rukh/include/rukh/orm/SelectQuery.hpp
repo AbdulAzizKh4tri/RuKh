@@ -89,9 +89,9 @@ public:
     return *this;
   }
 
+  // Count the number of rows
   Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr,
                                                         bool distinct = false) {
-
     std::ostringstream countSs;
     std::vector<db::DbValue> countParams;
 
@@ -109,6 +109,13 @@ public:
       countSs << " WHERE " << (*this->wherePredicate).resolvePredicates(countParams);
     }
 
+    if (!groupBy_.empty()) {
+      countSs << " GROUP BY " << groupBy_.at(0);
+      for (size_t i = 1; i < groupBy_.size(); i++) {
+        countSs << ", " << groupBy_.at(i);
+      }
+    }
+
     auto queryResult = co_await this->dispatch(transaction, countSs.str(), countParams);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
@@ -116,10 +123,41 @@ public:
     co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
+  // Count the non-null values of a field
   template <typename FieldPtr>
   Task<std::expected<int64_t, db::DatabaseError>> count(FieldPtr fieldPtr, db::ITransaction *transaction = nullptr,
                                                         bool distinct = false, const std::string &tableAlias = "") {
-    co_return co_await count(getColumnWithAliases(fieldPtr, tableAlias), transaction, distinct);
+    std::ostringstream countSs;
+    std::vector<db::DbValue> countParams;
+    auto columnWithAlias = getColumnWithAliases(fieldPtr, tableAlias);
+
+    countSs << "SELECT " << (distinct ? "DISTINCT COUNT(" + columnWithAlias + ")" : "COUNT(" + columnWithAlias + ")")
+            << " FROM " << std::string(Model::tableName) << " AS "
+            << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
+
+    if (joins_) {
+      for (auto &join : *joins_) {
+        countSs << join.type << join.tableName << " AS " << join.tableAlias << " ON "
+                << join.condition.resolvePredicates(params_);
+      }
+    }
+
+    if (this->wherePredicate) {
+      countSs << " WHERE " << (*this->wherePredicate).resolvePredicates(countParams);
+    }
+
+    if (!groupBy_.empty()) {
+      countSs << " GROUP BY " << groupBy_.at(0);
+      for (size_t i = 1; i < groupBy_.size(); i++) {
+        countSs << ", " << groupBy_.at(i);
+      }
+    }
+
+    auto queryResult = co_await this->dispatch(transaction, countSs.str(), countParams);
+    if (not queryResult)
+      co_return std::unexpected(queryResult.error());
+
+    co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
   }
 
   /*
@@ -252,14 +290,14 @@ public:
     for (auto &col : columns_) {
       updateQuery.field(col);
     }
-    co_return co_await updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
+    return updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
         .execute(obj, transaction, returning);
   }
 
   // Cannot be used with JOIN Queries that return columns from more than one table;.
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   destroy(db::ITransaction *transaction = nullptr, bool returning = false) {
-    co_return co_await DeleteQuery<Model>()
+    return DeleteQuery<Model>()
         .where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
         .execute(transaction, returning);
   }
