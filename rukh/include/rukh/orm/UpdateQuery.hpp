@@ -67,7 +67,6 @@ private:
 
     ss << ';';
     sql_ = ss.str();
-    SPDLOG_DEBUG(ss.str());
   }
 
   std::string modelUpdateValueList(const Model &obj) {

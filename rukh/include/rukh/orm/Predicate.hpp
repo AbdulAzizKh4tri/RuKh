@@ -49,7 +49,7 @@ template <typename... Models> struct Predicate {
     }
   }
 
-  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE, STRING, FIELD_COMPARISON } predicateType;
+  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE, STRING, FIELD_COMPARISON, EMPTY } predicateType;
 
   std::string columnA;
   std::string columnB;
@@ -105,7 +105,7 @@ template <typename... Models> struct Predicate {
 
   template <typename FieldPtr>
   Predicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
-            const std::string &tableAlias = "")
+            const std::string &tableAlias)
       : Predicate(getColumnWithTableAlias(fieldPtr, tableAlias), opr, vals) {}
 
   /*
@@ -113,7 +113,7 @@ template <typename... Models> struct Predicate {
    */
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
   Predicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB,
-            std::pair<std::string, std::string> tableAliases = {})
+            const std::pair<std::string, std::string> tableAliases)
       : op(opr), predicateType(PredicateType::FIELD_COMPARISON) {
 
     columnA = getColumnWithTableAlias(fieldPtrA, tableAliases.first);
@@ -124,14 +124,32 @@ template <typename... Models> struct Predicate {
 
   //===============OPERATORS===============
 
-  Predicate operator||(const Predicate &rhs) {
+  Predicate operator||(const Predicate &rhs) const {
+    if (this->predicateType == PredicateType::TRUE || rhs.predicateType == PredicateType::TRUE)
+      return Predicate(PredicateType::TRUE);
+
+    if (this->predicateType == PredicateType::FALSE)
+      return rhs;
+
+    if (rhs.predicateType == PredicateType::FALSE)
+      return *this;
+
     Predicate p(PredicateType::OR);
     p.children.push_back(*this);
     p.children.push_back(rhs);
     return p;
   }
 
-  Predicate operator&&(const Predicate &rhs) {
+  Predicate operator&&(const Predicate &rhs) const {
+    if (this->predicateType == PredicateType::FALSE || rhs.predicateType == PredicateType::FALSE)
+      return Predicate(PredicateType::FALSE);
+
+    if (this->predicateType == PredicateType::TRUE)
+      return rhs;
+
+    if (rhs.predicateType == PredicateType::TRUE)
+      return *this;
+
     Predicate p(PredicateType::AND);
     p.children.push_back(*this);
     p.children.push_back(rhs);
@@ -142,27 +160,30 @@ template <typename... Models> struct Predicate {
 
   //===============EQUALS===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> equals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
+  static Predicate<Models...> equals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                     const std::string &tableAlias = "") {
     static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::EQUALS, val);
+    return Predicate<Models...>(fieldPtr, Operator::EQUALS, val, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  static Predicate<Models...> equals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB) {
+  static Predicate<Models...> equals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+                                     const std::pair<std::string, std::string> tableAliases = {}) {
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
                   "equals(): FieldPtr from a model not specified in Predicate<...>");
     static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
                   "equals(): FieldPtr from a model not specified in Predicate<...>");
-    return Predicate<Models...>(fieldPtrA, Operator::EQUALS, fieldPtrB);
+    return Predicate<Models...>(fieldPtrA, Operator::EQUALS, fieldPtrB, tableAliases);
   }
 
   //===============IN===============
   template <typename FieldPtr>
-  static Predicate<Models...> in(FieldPtr fieldPtr, const std::vector<remove_optional_t<FieldPtr>> &val) {
+  static Predicate<Models...> in(FieldPtr fieldPtr, const std::vector<remove_optional_t<FieldPtr>> &val,
+                                 const std::string &tableAlias = "") {
     using Model = get_class_t<FieldPtr>;
     static_assert(is_in_tuple_v<Model, ModelsTuple>, "FieldPtr from a model not specified in Predicate<...>");
-    return in(Model::columnNameOf(fieldPtr), std::vector<db::DbValue>(val.begin(), val.end()));
+    return in(Model::columnNameOf(fieldPtr), std::vector<db::DbValue>(val.begin(), val.end()), tableAlias);
   }
 
   std::string resolvePredicates(std::vector<db::DbValue> &out_params) {

@@ -8,6 +8,9 @@
 namespace rukh::orm {
 
 enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL };
+enum class RelationType { ONE_TO_ONE, MANY_TO_ONE, MANY_TO_MANY };
+
+//=================================================================================================================
 
 template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple, typename Derived> struct FkRelation {
   using PkFieldPtrs = decltype(TargetModel::pkFieldPtrs());
@@ -16,11 +19,8 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
 
   FkFieldPtrsTuple fkFieldPtrs;
   PkFieldPtrs pkFieldPtrs = TargetModel::pkFieldPtrs();
-
   OnDelete onDeletePolicy = OnDelete::NO_ACTION;
-
   std::string_view relatedName = "";
-
   bool index = true;
   std::string_view constraintName = "";
 
@@ -63,17 +63,19 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
     auto pkPtr = std::get<I>(pkFieldPtrs);
     auto fkPtr = std::get<I>(fkFieldPtrs);
 
-    static_assert(std::same_as<remove_optional_t<get_field_t<decltype(fkPtr)>>,
-                               get_field_t<decltype(pkPtr)>>,
+    static_assert(std::same_as<remove_optional_t<get_field_t<decltype(fkPtr)>>, get_field_t<decltype(pkPtr)>>,
                   "FK and PK fields must be the same type. Order in composite keys is important!");
 
     return FieldPtrPair{fkPtr, pkPtr};
   }
 };
 
+//=================================================================================================================
 template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple>
 struct ManyToOneRelation : public FkRelation<TargetModel, DefinerModel, FkFieldPtrsTuple,
-                                             ManyToOneRelation<TargetModel, DefinerModel, FkFieldPtrsTuple>> {};
+                                             ManyToOneRelation<TargetModel, DefinerModel, FkFieldPtrsTuple>> {
+  static constexpr RelationType relationType = RelationType::MANY_TO_ONE;
+};
 
 template <typename TargetModel, typename DefinerModel, typename... FieldTypes>
 constexpr auto manyToOne(FieldTypes DefinerModel::*...ptrs) {
@@ -85,10 +87,13 @@ constexpr auto manyToOne(FieldTypes DefinerModel::*...ptrs) {
 
   return ManyToOneRelation<TargetModel, DefinerModel, FkFieldPtrsTuple>{ptrs...};
 }
+//=================================================================================================================
 
 template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple>
 struct OneToOneRelation : public FkRelation<TargetModel, DefinerModel, FkFieldPtrsTuple,
-                                            OneToOneRelation<TargetModel, DefinerModel, FkFieldPtrsTuple>> {};
+                                            OneToOneRelation<TargetModel, DefinerModel, FkFieldPtrsTuple>> {
+  static constexpr RelationType relationType = RelationType::ONE_TO_ONE;
+};
 
 template <typename TargetModel, typename DefinerModel, typename... FieldTypes>
 constexpr auto oneToOne(FieldTypes DefinerModel::*...ptrs) {
@@ -100,14 +105,58 @@ constexpr auto oneToOne(FieldTypes DefinerModel::*...ptrs) {
 
   return OneToOneRelation<TargetModel, DefinerModel, FkFieldPtrsTuple>{ptrs...};
 }
+//=================================================================================================================
 
-template <typename T> struct is_one_to_one_relation : std::false_type {};
-template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
-struct is_one_to_one_relation<OneToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
-template <typename T> static constexpr bool is_one_to_one_relation_v = is_one_to_one_relation<T>::value;
+enum class ThroughPtrType { TARGET, DEFINER };
 
-template <typename T> struct is_many_to_one_relation : std::false_type {};
-template <typename ModelA, typename ModelB, typename FkFieldPtrsTuple>
-struct is_many_to_one_relation<ManyToOneRelation<ModelA, ModelB, FkFieldPtrsTuple>> : std::true_type {};
-template <typename T> static constexpr bool is_many_to_one_relation_v = is_many_to_one_relation<T>::value;
+template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
+  using Model = get_class_t<ModelPtr>;
+
+  const ThroughPtr throughPtr;
+  const ModelPtr modelPtr;
+  const ThroughPtrType throughPtrType;
+};
+
+template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
+struct ManyToManyRelation {
+  using Target = TargetModel;
+  using Definer = DefinerModel;
+  using Through = ThroughModel;
+
+  static constexpr auto throughFields = std::tuple{ThroughFields...};
+  static constexpr size_t throughFieldCount = sizeof...(ThroughFields);
+  static_assert(throughFieldCount == 0 or throughFieldCount >= 2, "Must map fields of both models");
+  static constexpr RelationType relationType = RelationType::MANY_TO_MANY;
+
+  std::string_view relationName = "";
+  bool isSymmetric = false;
+
+  // Not needed if only one manyToMany relation exists between two models.
+  constexpr ManyToManyRelation &withRelationName(const std::string_view name) {
+    relationName = name;
+    return *this;
+  }
+
+  constexpr ManyToManyRelation &symmetric() {
+    isSymmetric = true;
+    return *this;
+  }
+};
+
+/*
+ * TargetModel: The target of this relationship. Generally to be thought of as the parent model.
+ *
+ * DefinerModel: The one defining the relation.
+ *
+ * ThroughModel: The intermediate model aka the join table. Like a User_x_Group.
+ * You may use DefaultThroughModel if you don't care about additional data, and you have non-composite keys.
+ *
+ * ThroughFields: Ignore if using DefaultThroughModel. Otherwise provide the
+ * mapping from ThroughModel's fields to the Target/Definer Models' fields.
+ */
+template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
+constexpr auto manyToManyRelation() {
+  return ManyToManyRelation<TargetModel, DefinerModel, ThroughModel, ThroughFields...>();
+};
+
 } // namespace rukh::orm

@@ -3,6 +3,8 @@
 #include <nlohmann/json.hpp>
 
 #include <rukh/orm/ActiveRecord.hpp>
+#include <rukh/orm/DefaultThroughModel.hpp>
+#include <rukh/orm/Relations.hpp>
 
 #include "models/User.hpp"
 
@@ -48,9 +50,10 @@ struct Post : ActiveRecord<Post, int64_t> {
   }
 
   static constexpr auto relations() {
-    return std::tuple{
-        manyToOne<User>(&Post::user).onDelete<OnDelete::SET_NULL>().withRelatedName("user_posts"),
-    };
+    using DTM = DefaultThroughModel<User, Post, "post_like_user">;
+
+    return std::tuple{manyToOne<User>(&Post::user).onDelete<OnDelete::SET_NULL>().withRelatedName("user_posts"),
+                      manyToManyRelation<User, Post, DTM>().withRelationName("post_liked_user_very_long_string_for_testing_purposes")};
   }
 };
 

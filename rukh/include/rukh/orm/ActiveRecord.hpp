@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <string>
 #include <tuple>
 
 #include <rukh/Exceptions.hpp>
@@ -17,6 +19,8 @@
 #include <rukh/orm/Relations.hpp>
 #include <rukh/orm/SelectQuery.hpp>
 #include <rukh/orm/UpdateQuery.hpp>
+#include <type_traits>
+#include <utility>
 
 namespace rukh::orm {
 
@@ -135,24 +139,138 @@ public:
     co_return **result;
   }
 
+  // TODO: symmetric
+  template <typename RelatedModel, FixedString RelationName = "">
+  auto manyRelated(db::ITransaction *transaction = nullptr) {
+    static constexpr auto relation = [] {
+      constexpr bool byName = (RelationName.view() != "");
+      constexpr auto rels = [&] { // checking this model
+        if constexpr (byName) {
+          return getManyToManyRelationByName<RelationName>();
+        } else {
+          return getManyToManyRelationByTargetModel<RelatedModel>();
+        }
+      }();
+
+      constexpr auto relSize = std::tuple_size_v<decltype(rels)>;
+      static_assert(relSize < 2, "More than one many-to-many relation found with this model combination or "
+                                 "RelationName. Define Relations only once.");
+      if constexpr (relSize == 1) {
+        return std::get<0>(rels);
+      } else {
+        constexpr auto relsOther = [&] { // checking the other model
+          if constexpr (byName) {
+            return RelatedModel::template getManyToManyRelationByName<RelationName>();
+          } else {
+            return RelatedModel::template getManyToManyRelationByTargetModel<Model>();
+          }
+        }();
+
+        constexpr auto relSizeOther = std::tuple_size_v<decltype(relsOther)>;
+        static_assert(relSizeOther < 2, "More than one many-to-many relation found with this model combination or "
+                                        "RelationName. Define Relations only once.");
+        static_assert(relSizeOther > 0, "No many-to-many relation found with this model combination");
+
+        return std::get<0>(relsOther);
+      }
+    }();
+
+    using Relation = decltype(relation);
+    using ThroughModel = Relation::Through;
+    using DefinerModel = Relation::Definer;
+    using TargetModel = Relation::Target;
+
+    constexpr size_t throughFieldCount = Relation::throughFieldCount;
+    constexpr bool noThroughFields = throughFieldCount == 0;
+    constexpr auto throughFields = [&] {
+      if constexpr (noThroughFields) {
+        constexpr auto throughField1 =
+            ThroughField(&ThroughModel::targetPk, TargetModel::pkFieldPtr(), ThroughPtrType::TARGET);
+        constexpr auto throughField2 =
+            ThroughField(&ThroughModel::definerPk, DefinerModel::pkFieldPtr(), ThroughPtrType::DEFINER);
+        return std::tuple{throughField1, throughField2};
+      } else {
+        return Relation::throughFields;
+      }
+    }();
+
+    using queryModels = std::tuple<RelatedModel, Model, ThroughModel>;
+    using Query = unpack_tuple_t<SelectQuery, queryModels>;
+    using Pred = unpack_tuple_t<Predicate, queryModels>;
+
+    constexpr bool thisIsDefiner = std::is_same_v<DefinerModel, Model>;
+
+    const std::string relatedAlias = "r";
+    const std::string callerAlias = "c";
+    const std::string throughAlias = "t";
+    Query query(relatedAlias);
+
+    Pred rJoinPredicate(true);
+    std::apply(
+        [&](auto &&...throughflds) {
+          auto addPredicate = [&](auto &&throughfld) {
+            if ((thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET) or
+                (not thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::DEFINER))
+              rJoinPredicate = rJoinPredicate and
+                               Pred::equals(throughfld.throughPtr, throughfld.modelPtr, {throughAlias, relatedAlias});
+          };
+          (addPredicate(throughflds), ...);
+        },
+        throughFields);
+
+    Pred cJoinPredicate(true);
+    std::apply(
+        [&](auto &&...throughflds) {
+          auto addPredicate = [&](auto &&throughfld) {
+            if ((thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::DEFINER) or
+                (not thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET))
+              cJoinPredicate = cJoinPredicate and
+                               Pred::equals(throughfld.throughPtr, throughfld.modelPtr, {throughAlias, callerAlias});
+          };
+          (addPredicate(throughflds), ...);
+        },
+        throughFields);
+
+    query.template join<ThroughModel>(rJoinPredicate, throughAlias).template join<Model>(cJoinPredicate, callerAlias);
+
+    const Model *self = static_cast<const Model *>(this);
+
+    Pred wherePred(true);
+    std::apply(
+        [&](auto &&...throughflds) {
+          auto addPredicate = [&](auto &&throughfld) {
+            using ThroughFieldModelPtr = get_class_t<std::remove_cvref_t<decltype(throughfld.modelPtr)>>;
+            if constexpr (std::is_same_v<ThroughFieldModelPtr, Model>) {
+              if ((thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::DEFINER) or
+                  (!thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET))
+                wherePred = wherePred and Pred::equals(throughfld.modelPtr, self->*(throughfld.modelPtr), callerAlias);
+            }
+          };
+          (addPredicate(throughflds), ...);
+        },
+        throughFields);
+
+    query.where(wherePred);
+
+    return query;
+  }
+
   /*
    * Returns a SelectQuery<DefinerModel>.where(foreignKeyFields = this->primaryKeyFields)
-   * For one-to-many and one-to-one relationships where the caller object's Model is referred to by a foreign key in the
+   * For one-to-many and one-to-one relationships where the caller object's Model is referred to by a foreign key in
+   * the DefinerModel. RelatedName need not be specified if there exists only one relation to this Model on the
    * DefinerModel.
-   * RelatedName need not be specified if there exists only one relation to this Model on
-   * the DefinerModel.
    */
   template <typename DefinerModel, FixedString RelatedName = "">
   SelectQuery<DefinerModel> related(db::ITransaction *transaction = nullptr) {
-    using Po = Predicate<DefinerModel>;
-    Po p = Po(true);
+    using Pd = Predicate<DefinerModel>;
+    Pd p = Pd(true);
 
     static constexpr auto relationTuple = [] {
-      if constexpr (RelatedName.view() == "") {
-        return DefinerModel::template getRelationByTargetModel<Model>();
-      } else {
-        return DefinerModel::template getRelationByName<RelatedName>();
-      }
+      if constexpr (RelatedName.view() == "")
+        return DefinerModel::template getFkRelationByTargetModel<Model>();
+      else
+        return DefinerModel::template getFkRelationByName<RelatedName>();
     }();
 
     constexpr auto relationCount = std::tuple_size_v<decltype(relationTuple)>;
@@ -170,7 +288,7 @@ public:
     std::apply(
         [&](auto &&...fieldPtrPairs) {
           auto addPredicate = [&](auto &&fieldPtrPair) {
-            query.andWhere(Po::equals(fieldPtrPair.fkPtr, self->*fieldPtrPair.pkPtr));
+            query.andWhere(Pd::equals(fieldPtrPair.fkPtr, self->*fieldPtrPair.pkPtr));
           };
           (addPredicate(fieldPtrPairs), ...);
         },
@@ -191,7 +309,7 @@ public:
       if constexpr (sizeof...(fkfieldPtrs) > 0) {
         return getRelationByForeignKeyFieldPtrs<fkfieldPtrs...>();
       } else {
-        return getRelationByTargetModel<TargetModel>();
+        return getFkRelationByTargetModel<TargetModel>();
       }
     }();
 
@@ -227,6 +345,22 @@ public:
         comparisonFields);
 
     return query;
+  }
+
+  static constexpr auto fkRelations() {
+    constexpr auto rels = Model::relations();
+    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getRelationIfFk<I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(rels)>>{});
+    return result;
+  }
+
+  static constexpr auto manyToManyRelations() {
+    constexpr auto rels = Model::relations();
+    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getRelationIfManyToMany<I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(rels)>>{});
+    return result;
   }
 
   PkType getPrimaryKeyValue() const {
@@ -290,24 +424,28 @@ public:
     return result;
   }
 
-  template <typename LookupModel> static constexpr auto getRelationByTargetModel() {
+  template <typename LookupModel> static constexpr auto getFkRelationByTargetModel() {
     return []<std::size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat(getRelationIfTargetModel<LookupModel, I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::relations())>>{});
+      return std::tuple_cat(getFkRelationIfTargetModel<LookupModel, I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(fkRelations())>>{});
   }
 
-  template <FixedString Name> static constexpr auto getRelationByName() {
+  template <FixedString Name> static constexpr auto getFkRelationByName() {
     return []<std::size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat(getRelationIfNamed<Name, I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::relations())>>{});
+      return std::tuple_cat(getFkRelationIfNamed<Name, I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(fkRelations())>>{});
   }
 
-  static constexpr auto referrerRelations() {
-    constexpr auto rels = Model::relations();
-    static constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat(getRelationIfReferrer<I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<decltype(rels)>>{});
-    return result;
+  template <typename LookupModel> static constexpr auto getManyToManyRelationByTargetModel() {
+    return []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getManyToManyRelationIfTargetModel<LookupModel, I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(manyToManyRelations())>>{});
+  }
+
+  template <FixedString Name> static constexpr auto getManyToManyRelationByName() {
+    return []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getManyToManyRelationIfNamed<Name, I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(manyToManyRelations())>>{});
   }
 
   template <typename FieldPtr> static Column<Model, FieldPtr> getColumnObject(FieldPtr Model::*fieldPtr) {
@@ -400,7 +538,7 @@ private:
   }
 
   static Predicate<Model> buildPkPredicate(const PkTypesTuple &pkVal) {
-    auto cols = Model::pkColumns();
+    auto cols = pkColumns();
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
       return (Predicate<Model>::equals(std::get<I>(cols).fieldPtr, std::get<I>(pkVal)) && ...);
     }(std::make_index_sequence<pkArity>{});
@@ -409,18 +547,18 @@ private:
   //==============================Relation Helpers==============================
 
   template <auto... fkfieldPtrs> static constexpr auto getRelationByForeignKeyFieldPtrs() {
-    using AllRelationsTuple = std::remove_cvref_t<decltype(Model::relations())>;
+    using FkRelationsTuple = std::remove_cvref_t<decltype(fkRelations())>;
 
     constexpr auto lookupFieldTuple = std::make_tuple(fkfieldPtrs...);
     using LookUpFieldTupleType = std::remove_cvref_t<decltype(lookupFieldTuple)>;
 
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
       return std::tuple_cat([&]<std::size_t Idx>() constexpr {
-        using Relation = std::tuple_element_t<Idx, AllRelationsTuple>; // was decltype(allRelations)
-        using RelFk = std::remove_cvref_t<decltype(std::get<Idx>(Model::relations()).fkFieldPtrs)>;
+        using Relation = std::tuple_element_t<Idx, FkRelationsTuple>;
+        using RelFk = std::remove_cvref_t<decltype(std::get<Idx>(fkRelations()).fkFieldPtrs)>;
         if constexpr (std::same_as<RelFk, LookUpFieldTupleType>) {
-          if constexpr (std::get<Idx>(Model::relations()).fkFieldPtrs == lookupFieldTuple) {
-            return std::tuple<Relation>{std::get<Idx>(Model::relations())};
+          if constexpr (std::get<Idx>(fkRelations()).fkFieldPtrs == lookupFieldTuple) {
+            return std::tuple<Relation>{std::get<Idx>(fkRelations())};
           } else {
             return std::tuple<>{};
           }
@@ -428,30 +566,58 @@ private:
           return std::tuple<>{};
         }
       }.template operator()<I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<AllRelationsTuple>>{});
+    }(std::make_index_sequence<std::tuple_size_v<FkRelationsTuple>>{});
   }
 
-  template <typename LookupModel, std::size_t I> static constexpr auto getRelationIfTargetModel() {
-    using RelT = std::remove_cvref_t<decltype(std::get<I>(Model::relations()))>;
+  //==============================Many to Many==============================
+
+  template <typename LookupModel, std::size_t I> static constexpr auto getManyToManyRelationIfTargetModel() {
+    using RelT = std::remove_cvref_t<decltype(std::get<I>(manyToManyRelations()))>;
     if constexpr (std::same_as<typename RelT::Target, LookupModel>)
-      return std::tuple{std::get<I>(Model::relations())};
+      return std::tuple{std::get<I>(manyToManyRelations())};
     else
       return std::tuple{};
   }
 
-  template <FixedString Name, std::size_t I> static constexpr auto getRelationIfNamed() {
-    if constexpr (std::get<I>(Model::relations()).relatedName == Name.view())
-      return std::tuple{std::get<I>(Model::relations())};
+  template <FixedString Name, std::size_t I> static constexpr auto getManyToManyRelationIfNamed() {
+    if constexpr (std::get<I>(manyToManyRelations()).relationName == Name.view())
+      return std::tuple{std::get<I>(manyToManyRelations())};
     else
       return std::tuple{};
   }
 
-  //==============================ONE TO ONE/ MANY TO ONE==============================
-  template <std::size_t I> static constexpr auto getRelationIfReferrer() {
+  template <std::size_t I> static constexpr auto getRelationIfManyToMany() {
     using RelationsTuple = decltype(Model::relations());
     using RelT = std::tuple_element_t<I, RelationsTuple>;
 
-    if constexpr (is_one_to_one_relation_v<RelT> or is_many_to_one_relation_v<RelT>)
+    if constexpr (RelT::relationType == RelationType::MANY_TO_MANY)
+      return std::tuple{std::get<I>(Model::relations())};
+    else
+      return std::tuple<>{};
+  }
+
+  //==============================ONE TO ONE/ MANY TO ONE==============================
+
+  template <typename LookupModel, std::size_t I> static constexpr auto getFkRelationIfTargetModel() {
+    using RelT = std::remove_cvref_t<decltype(std::get<I>(fkRelations()))>;
+    if constexpr (std::same_as<typename RelT::Target, LookupModel>)
+      return std::tuple{std::get<I>(fkRelations())};
+    else
+      return std::tuple{};
+  }
+
+  template <FixedString Name, std::size_t I> static constexpr auto getFkRelationIfNamed() {
+    if constexpr (std::get<I>(fkRelations()).relatedName == Name.view())
+      return std::tuple{std::get<I>(fkRelations())};
+    else
+      return std::tuple{};
+  }
+
+  template <std::size_t I> static constexpr auto getRelationIfFk() {
+    using RelationsTuple = decltype(Model::relations());
+    using RelT = std::tuple_element_t<I, RelationsTuple>;
+
+    if constexpr (RelT::relationType == RelationType::ONE_TO_ONE or RelT::relationType == RelationType::MANY_TO_ONE)
       return std::tuple{std::get<I>(Model::relations())};
     else
       return std::tuple<>{};

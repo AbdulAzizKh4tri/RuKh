@@ -20,7 +20,7 @@ template <typename T> struct remove_optional<std::optional<T>> {
 template <typename T> using remove_optional_t = typename remove_optional<T>::type;
 
 //=============
-template <typename T> inline constexpr bool always_false_v = false;
+template <typename... T> inline constexpr bool always_false_v = false;
 
 //=============
 // get the type of the field from a fieldPtr

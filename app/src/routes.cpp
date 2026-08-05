@@ -704,6 +704,15 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     post1.content = "lorem ipsum dolor sit amet";
     unwrap(co_await post1.save(), "post1 update");
 
+    auto x = john.manyRelated<User>();
+    SPDLOG_DEBUG(x.getSql());
+
+    auto y = john.manyRelated<Post>();
+    SPDLOG_DEBUG(y.getSql());
+
+    auto z = post1.manyRelated<User>();
+    SPDLOG_DEBUG(z.getSql());
+
     auto joeMama = *unwrap(co_await joe.ref<User, &User::mother>().first(), "joemama");
     auto joeMamaBestFriend = unwrap(co_await joeMama.ref<User, &User::bestFriend>().getOne(), "joemama best friend");
     auto johnPosts = unwrap(co_await joeMamaBestFriend.related<Post, "user_posts">().select(), "john posts");
@@ -715,7 +724,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     Query1 query1;
     query1.field(&User::name, "a", "USER_ABC_NAME");
     query1.field(&Post::title);
-    Predicate p = Pred(&User::id, Operator::EQUALS, &Post::user);
+    Predicate p = Pred::equals(&User::id, &Post::user);
     query1.join<Post>(p);
     SPDLOG_DEBUG(unwrap(co_await query1.execute()).toString());
 

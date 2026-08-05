@@ -15,6 +15,7 @@ template <typename Model, typename FieldT> struct Column {
   FieldT Model::*const fieldPtr;
   const std::string_view dbName;
   const bool isPrimaryKey = false;
+  const bool index = false;
 
   const AutoGenerate autoGenerateMode = AutoGenerate::OFF;
   const db::DbValue defaultValue = nullptr;
