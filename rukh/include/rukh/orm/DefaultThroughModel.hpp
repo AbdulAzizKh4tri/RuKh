@@ -30,8 +30,8 @@ struct DefaultThroughModel : public ActiveRecord<DefaultThroughModel<TargetModel
 
   static constexpr auto relations() {
     return std::tuple{
-        manyToOne<Target>(&DefaultThroughModel::targetPk),
-        manyToOne<Definer>(&DefaultThroughModel::definerPk),
+        manyToOne<Target>(&DefaultThroughModel::targetPk).template onDelete<OnDelete::CASCADE>(),
+        manyToOne<Definer>(&DefaultThroughModel::definerPk).template onDelete<OnDelete::CASCADE>(),
     };
   }
 
@@ -40,7 +40,6 @@ struct DefaultThroughModel : public ActiveRecord<DefaultThroughModel<TargetModel
         makeUniqueTogether(&DefaultThroughModel::targetPk, &DefaultThroughModel::definerPk),
     };
   }
-
 };
 
 } // namespace rukh::orm

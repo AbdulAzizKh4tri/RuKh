@@ -16,8 +16,6 @@
 #include <rukh/db/Sqlite3Types.hpp>
 
 namespace rukh::db {
-// TODO: handle exec() errors
-
 const int SQLITE3_BUSY_TIMEOUT = 5000; // ms to wait on SQLITE_BUSY instead of failing immediately
 
 class Sqlite3Db : public IDatabase {

@@ -704,6 +704,9 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     post1.content = "lorem ipsum dolor sit amet";
     unwrap(co_await post1.save(), "post1 update");
 
+    auto w = john.manyRelated<Post, "likes">();
+    SPDLOG_DEBUG(w.getSql());
+
     auto x = john.manyRelated<User>();
     SPDLOG_DEBUG(x.getSql());
 

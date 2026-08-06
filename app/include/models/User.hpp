@@ -52,12 +52,11 @@ struct User : ActiveRecord<User, int64_t> {
 
   static constexpr auto relations() {
     using DTM = DefaultThroughModel<User, User, "user_friend_user">;
-    constexpr auto throughField1 = ThroughField{&DTM::targetPk, &User::id, ThroughPtrType::TARGET};
-    constexpr auto throughField2 = ThroughField{&DTM::definerPk, &User::id, ThroughPtrType::DEFINER};
+
     return std::tuple{
         manyToOne<User>(&User::bestFriend),
         manyToOne<User>(&User::mother),
-        manyToManyRelation<User, User, DTM, throughField1, throughField2>().withRelationName("friendship").symmetric(),
+        manyToManyRelation<User, User, DTM>().withRelationName("friendship").withSymmetryMode<SymmetryMode::READ>(),
     };
   }
 };

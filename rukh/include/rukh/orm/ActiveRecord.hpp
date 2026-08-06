@@ -242,7 +242,7 @@ public:
             using ThroughFieldModelPtr = get_class_t<std::remove_cvref_t<decltype(throughfld.modelPtr)>>;
             if constexpr (std::is_same_v<ThroughFieldModelPtr, Model>) {
               if ((thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::DEFINER) or
-                  (!thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET))
+                  (not thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET))
                 wherePred = wherePred and Pred::equals(throughfld.modelPtr, self->*(throughfld.modelPtr), callerAlias);
             }
           };
@@ -540,7 +540,7 @@ private:
   static Predicate<Model> buildPkPredicate(const PkTypesTuple &pkVal) {
     auto cols = pkColumns();
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
-      return (Predicate<Model>::equals(std::get<I>(cols).fieldPtr, std::get<I>(pkVal)) && ...);
+      return (Predicate<Model>::equals(std::get<I>(cols).fieldPtr, std::get<I>(pkVal)) and ...);
     }(std::make_index_sequence<pkArity>{});
   }
 

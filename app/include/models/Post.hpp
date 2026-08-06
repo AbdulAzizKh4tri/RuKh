@@ -6,6 +6,7 @@
 #include <rukh/orm/DefaultThroughModel.hpp>
 #include <rukh/orm/Relations.hpp>
 
+#include "models/PostLikeUser.hpp"
 #include "models/User.hpp"
 
 namespace models {
@@ -50,10 +51,15 @@ struct Post : ActiveRecord<Post, int64_t> {
   }
 
   static constexpr auto relations() {
-    using DTM = DefaultThroughModel<User, Post, "post_like_user">;
+    using Through = PostLikeUser<User, Post>;
+    static constexpr auto throughField1 = ThroughField{
+        .throughPtr = &Through::postId, .modelPtr = Post::pkFieldPtr(), .throughPtrType = ThroughPtrType::DEFINER};
+    static constexpr auto throughField2 = ThroughField{
+        .throughPtr = &Through::userId, .modelPtr = User::pkFieldPtr(), .throughPtrType = ThroughPtrType::TARGET};
 
     return std::tuple{manyToOne<User>(&Post::user).onDelete<OnDelete::SET_NULL>().withRelatedName("user_posts"),
-                      manyToManyRelation<User, Post, DTM>().withRelationName("post_liked_user_very_long_string_for_testing_purposes")};
+                      manyToManyRelation<User, Post, Through, throughField1, throughField2>().withRelationName(
+                          "likes")};
   }
 };
 

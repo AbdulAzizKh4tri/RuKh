@@ -4,7 +4,7 @@
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/ITransaction.hpp>
 
-// TODO: one to one self reference integrity modes
+// TODO: one to one self reference integrity modes (i.e user1 -> user2 should also ensure user2 -> user1).
 namespace rukh::orm {
 
 enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL };
@@ -117,6 +117,20 @@ template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
   const ThroughPtrType throughPtrType;
 };
 
+/*
+ * NONE: Defaut, non symmetric relation
+ *
+ * DB_WRITE: The Database runs a trigger after each insert/update that inserts/updates the mirrored relation.
+ * for example, let's assume all friendships are symmetrical.
+ * user1 -> friends -> user2. The database will run a trigger to add user2 -> friends user1.
+ * If the model contains extra data like "since", the DB trigger will update the mirrored row on updation as well.
+ * Stores 2 rows per relation, easier to migrate to a non-symmetrical relation if needed.
+ *
+ * READ: The ORM queries the mirrored relation as well.
+ *
+ */
+enum class SymmetryMode { NONE, DB_WRITE, READ };
+
 template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
 struct ManyToManyRelation {
   using Target = TargetModel;
@@ -129,7 +143,7 @@ struct ManyToManyRelation {
   static constexpr RelationType relationType = RelationType::MANY_TO_MANY;
 
   std::string_view relationName = "";
-  bool isSymmetric = false;
+  SymmetryMode symmetryMode = SymmetryMode::NONE;
 
   // Not needed if only one manyToMany relation exists between two models.
   constexpr ManyToManyRelation &withRelationName(const std::string_view name) {
@@ -137,8 +151,11 @@ struct ManyToManyRelation {
     return *this;
   }
 
-  constexpr ManyToManyRelation &symmetric() {
-    isSymmetric = true;
+  template <SymmetryMode sm> constexpr ManyToManyRelation &withSymmetryMode() {
+    static_assert((sm != SymmetryMode::NONE and throughFieldCount % 2 == 0 and std::is_same_v<Target, Definer>) or
+                      (sm == SymmetryMode::NONE),
+                  "Symmetric relations can only be self-referencing (Let me know if I'm wrong).");
+    symmetryMode = sm;
     return *this;
   }
 };

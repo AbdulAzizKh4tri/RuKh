@@ -49,12 +49,6 @@ public:
   SelectQuery() {}
   SelectQuery(const std::string &tableAlias) : tableAlias_(tableAlias) {}
 
-  template <typename FieldPtr>
-  SelectQuery &field(FieldPtr fieldPtr, const std::string &tableAlias = "", const std::string &columnAlias = "") {
-    columns_.push_back(getColumnWithAliases(fieldPtr, tableAlias, columnAlias));
-    return *this;
-  }
-
   template <typename JoinModel>
   SelectQuery &join(const Predicate<Models...> &predicate, const std::optional<std::string> tableAlias = std::nullopt,
                     JoinType joinType = JoinType::INNER) {
@@ -63,6 +57,12 @@ public:
       joins_ = std::vector<Join>();
     joins_->emplace_back(JoinModel::tableName, (tableAlias.value_or(getAlias(get_index_of_v<JoinModel, ModelsTuple>))),
                          to_string(joinType), predicate);
+    return *this;
+  }
+
+  template <typename FieldPtr>
+  SelectQuery &field(FieldPtr fieldPtr, const std::string &tableAlias = "", const std::string &columnAlias = "") {
+    columns_.push_back(getColumnWithAliases(fieldPtr, tableAlias, columnAlias));
     return *this;
   }
 

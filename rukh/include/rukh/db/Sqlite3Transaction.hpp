@@ -11,7 +11,6 @@
 #include <spdlog/spdlog.h>
 
 namespace rukh::db {
-// TODO: handle exec() errors
 class Sqlite3Transaction : public ITransaction {
 public:
   Sqlite3Transaction(Connection *conn, ThreadPool *threadPool, std::move_only_function<void() noexcept> abandonFn)
