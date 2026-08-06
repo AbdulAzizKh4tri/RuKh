@@ -17,7 +17,7 @@
 namespace rukh::orm {
 
 template <typename Model>
-class DeleteQuery : public WhereClause<DeleteQuery<Model>, Model>, public QueryBase<DeleteQuery<Model>, Model> {
+class DeleteQuery : public WhereClause<DeleteQuery<Model>, Model>, public QueryBase<DeleteQuery<Model>> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(db::ITransaction *transaction = nullptr, bool returning = false) {

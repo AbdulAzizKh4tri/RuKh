@@ -54,8 +54,8 @@ struct User : ActiveRecord<User, int64_t> {
     using DTM = DefaultThroughModel<User, User, "user_friend_user">;
 
     return std::tuple{
-        manyToOne<User>(&User::bestFriend),
-        manyToOne<User>(&User::mother),
+        manyToOne<User>(&User::bestFriend).withRelatedName("best_friends"),
+        manyToOne<User>(&User::mother).withRelatedName("children"),
         manyToManyRelation<User, User, DTM>().withRelationName("friendship").withSymmetryMode<SymmetryMode::READ>(),
     };
   }

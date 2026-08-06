@@ -1,9 +1,9 @@
 #pragma once
 
-#include "rukh/db/DbTypes.hpp"
 #include <optional>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <string>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
@@ -17,37 +17,72 @@
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
-#include <string>
 
 namespace rukh::orm {
 
 enum class Sorting { DESC, ASC };
 enum class JoinType { INNER, LEFT, RIGHT, FULL, CROSS };
+enum class SetQueryType { UNION, UNION_ALL, INTERSECT, INTERSECT_ALL, EXCEPT, EXCEPT_ALL };
 
 template <typename... Models>
-class SelectQuery : public QueryBase<SelectQuery<Models...>, Models...>,
-                    public WhereClause<SelectQuery<Models...>, Models...> {
+class SelectQuery : public QueryBase<SelectQuery<Models...>>, public WhereClause<SelectQuery<Models...>, Models...> {
   /*
    * Every Query has a Main Model, the first one defined in the template params.
    * This is the only one that can use methods like update, getOne, etc.
-   * If you are not using JOINS, you need not worry about this.
+   * If you are not using JOINS or SET operations, you need not worry about this.
    */
-
-  static constexpr std::string_view joinTypeStrings[] = {" JOIN ", " LEFT JOIN ", " RIGHT JOIN ", " FULL JOIN ",
-                                                         " CROSS JOIN "};
-  static constexpr std::string_view to_string(JoinType joinType) {
-    return joinTypeStrings[static_cast<std::size_t>(joinType)];
-  }
-
+public:
   using ModelsTuple = std::tuple<Models...>;
   using Model = std::tuple_element_t<0, ModelsTuple>;
-  static constexpr std::size_t modelCount = sizeof...(Models);
 
-public:
-  // TODO: ADD STRING ESCAPE HATCHES FOR ALL THESE;
+  std::vector<SelectQuery> children;
+  std::optional<SetQueryType> setQueryType = std::nullopt;
 
   SelectQuery() {}
   SelectQuery(const std::string &tableAlias) : tableAlias_(tableAlias) {}
+  SelectQuery(const SetQueryType setType) : setQueryType(setType) {}
+
+  SelectQuery unionQuery(const SelectQuery &otherQuery) {
+    SelectQuery query(SetQueryType::UNION);
+    query.children.push_back(*this);
+    query.children.push_back(otherQuery);
+    return query;
+  }
+
+  SelectQuery intersectQuery(const SelectQuery &otherQuery) {
+    SelectQuery query(SetQueryType::INTERSECT);
+    query.children.push_back(*this);
+    query.children.push_back(otherQuery);
+    return query;
+  }
+
+  SelectQuery exceptQuery(const SelectQuery &otherQuery) {
+    SelectQuery query(SetQueryType::EXCEPT);
+    query.children.push_back(*this);
+    query.children.push_back(otherQuery);
+    return query;
+  }
+
+  SelectQuery unionAllQuery(const SelectQuery &otherQuery) {
+    SelectQuery query(SetQueryType::UNION_ALL);
+    query.children.push_back(*this);
+    query.children.push_back(otherQuery);
+    return query;
+  }
+
+  SelectQuery intersectAllQuery(const SelectQuery &otherQuery) {
+    SelectQuery query(SetQueryType::INTERSECT_ALL);
+    query.children.push_back(*this);
+    query.children.push_back(otherQuery);
+    return query;
+  }
+
+  SelectQuery exceptAllQuery(const SelectQuery &otherQuery) {
+    SelectQuery query(SetQueryType::EXCEPT_ALL);
+    query.children.push_back(*this);
+    query.children.push_back(otherQuery);
+    return query;
+  }
 
   template <typename JoinModel>
   SelectQuery &join(const Predicate<Models...> &predicate, const std::optional<std::string> tableAlias = std::nullopt,
@@ -72,10 +107,18 @@ public:
     return *this;
   }
 
+  SelectQuery &clearLimit() {
+    limit_ = std::nullopt;
+    return *this;
+  }
+
   SelectQuery &limit(size_t limit) {
-    if (limit == 0)
-      throw rukh::OrmException("Limit must be greater than 0");
     limit_ = limit;
+    return *this;
+  }
+
+  SelectQuery &clearOffset() {
+    offset_ = std::nullopt;
     return *this;
   }
 
@@ -90,70 +133,10 @@ public:
   }
 
   // Count the number of rows
-  Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr,
-                                                        bool distinct = false) {
-    std::ostringstream countSs;
-    std::vector<db::DbValue> countParams;
-
-    countSs << "SELECT " << (distinct ? "DISTINCT COUNT(*)" : "COUNT(*)") << " FROM " << std::string(Model::tableName)
-            << " AS " << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
-
-    if (joins_) {
-      for (auto &join : *joins_) {
-        countSs << join.type << join.tableName << " AS " << join.tableAlias << " ON "
-                << join.condition.resolvePredicates(params_);
-      }
-    }
-
-    if (this->wherePredicate) {
-      countSs << " WHERE " << (*this->wherePredicate).resolvePredicates(countParams);
-    }
-
-    if (!groupBy_.empty()) {
-      countSs << " GROUP BY " << groupBy_.at(0);
-      for (size_t i = 1; i < groupBy_.size(); i++) {
-        countSs << ", " << groupBy_.at(i);
-      }
-    }
-
-    auto queryResult = co_await this->dispatch(transaction, countSs.str(), countParams);
-    if (not queryResult)
-      co_return std::unexpected(queryResult.error());
-
-    co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
-  }
-
-  // Count the non-null values of a field
-  template <typename FieldPtr>
-  Task<std::expected<int64_t, db::DatabaseError>> count(FieldPtr fieldPtr, db::ITransaction *transaction = nullptr,
-                                                        bool distinct = false, const std::string &tableAlias = "") {
-    std::ostringstream countSs;
-    std::vector<db::DbValue> countParams;
-    auto columnWithAlias = getColumnWithAliases(fieldPtr, tableAlias);
-
-    countSs << "SELECT " << (distinct ? "DISTINCT COUNT(" + columnWithAlias + ")" : "COUNT(" + columnWithAlias + ")")
-            << " FROM " << std::string(Model::tableName) << " AS "
-            << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
-
-    if (joins_) {
-      for (auto &join : *joins_) {
-        countSs << join.type << join.tableName << " AS " << join.tableAlias << " ON "
-                << join.condition.resolvePredicates(params_);
-      }
-    }
-
-    if (this->wherePredicate) {
-      countSs << " WHERE " << (*this->wherePredicate).resolvePredicates(countParams);
-    }
-
-    if (!groupBy_.empty()) {
-      countSs << " GROUP BY " << groupBy_.at(0);
-      for (size_t i = 1; i < groupBy_.size(); i++) {
-        countSs << ", " << groupBy_.at(i);
-      }
-    }
-
-    auto queryResult = co_await this->dispatch(transaction, countSs.str(), countParams);
+  Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr) {
+    buildSelectSqlAndSetParams();
+    auto countSql = "SELECT COUNT(*) FROM (" + sql_ + ")";
+    auto queryResult = co_await this->dispatch(transaction, countSql, this->params_);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -165,7 +148,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(2);
+    buildSelectSqlAndSetParams(0, 2);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -186,7 +169,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<std::optional<Model>, db::DatabaseError>> getOneOptional(db::ITransaction *transaction) {
-    buildSelectSqlAndSetParams(2);
+    buildSelectSqlAndSetParams(0, 2);
     auto queryResult = co_await this->dispatch(transaction, sql_, params_);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
@@ -215,7 +198,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(1);
+    buildSelectSqlAndSetParams(0, 1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -231,7 +214,7 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(1);
+    buildSelectSqlAndSetParams(0, 1);
 
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
     if (not queryResult)
@@ -302,9 +285,9 @@ public:
         .execute(transaction, returning);
   }
 
-  std::string getSql() {
-    buildSelectSqlAndSetParams();
-    return this->sql_;
+  std::pair<std::string, std::vector<db::DbValue>> getSqlAndParams(size_t depth = 0) {
+    buildSelectSqlAndSetParams(depth);
+    return {this->sql_, this->params_};
   }
 
   SelectQuery<Models...> &reset() {
@@ -336,6 +319,18 @@ private:
   std::optional<size_t> limit_;
   std::optional<size_t> offset_;
 
+  static constexpr std::string_view joinTypeStrings[] = {" JOIN ", " LEFT JOIN ", " RIGHT JOIN ", " FULL JOIN ",
+                                                         " CROSS JOIN "};
+  static constexpr std::string_view to_string(JoinType joinType) {
+    return joinTypeStrings[static_cast<std::size_t>(joinType)];
+  }
+
+  static constexpr std::string_view setQueryTypeStrings[] = {" UNION ",         " UNION ALL ", " INTERSECT ",
+                                                             " INTERSECT ALL ", " EXCEPT ",    " EXCEPT ALL "};
+  static constexpr std::string_view to_string(SetQueryType setType) {
+    return setQueryTypeStrings[static_cast<std::size_t>(setType)];
+  }
+
   template <typename FieldPtr>
   std::string getColumnWithAliases(FieldPtr fieldPtr, const std::string &tableAlias, const std::string &columnAlias) {
     using FieldPtrModel = get_class_t<FieldPtr>;
@@ -346,10 +341,29 @@ private:
     return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr) + asColumnAlias;
   }
 
-  void buildSelectSqlAndSetParams(std::optional<size_t> limit = std::nullopt) {
+  void buildSelectSqlAndSetParams(const size_t depth = 0, std::optional<size_t> limit = std::nullopt) {
     params_.clear();
-
     std::ostringstream ss;
+
+    if (setQueryType) {
+      auto result1 = children[0].getSqlAndParams(depth + 1);
+      auto result2 = children[1].getSqlAndParams(depth + 1);
+
+      auto sql1 = result1.first;
+      auto sql2 = result2.first;
+
+      if (children[0].setQueryType)
+        sql1 = " SELECT * FROM ( " + sql1 + ") AS sub_" + std::to_string(depth) + "_0";
+
+      if (children[1].setQueryType)
+        sql2 = "SELECT * FROM ( " + sql2 + ") AS sub_" + std::to_string(depth) + "_1";
+
+      ss << sql1 << to_string(*setQueryType) << sql2;
+      sql_ = ss.str();
+      params_ = result1.second;
+      params_.insert(params_.end(), result2.second.begin(), result2.second.end());
+      return;
+    }
     ss << "SELECT ";
 
     if (columns_.empty()) {
@@ -416,7 +430,7 @@ private:
       ss << " OFFSET " << std::to_string(offset_.value());
     }
 
-    ss << " ; ";
+    ss << " ";
     sql_ = ss.str();
   }
 };

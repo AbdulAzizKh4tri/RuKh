@@ -1,12 +1,12 @@
 #pragma once
 
-#include "rukh/db/DbValue.hpp"
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/TypeHelpers.hpp>
 #include <rukh/core/utils.hpp>
 #include <rukh/db/DbTypes.hpp>
+#include <rukh/db/DbValue.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Column.hpp>
 
@@ -57,7 +57,7 @@ template <typename... Models> struct Predicate {
   Operator op;                     // only used if
   std::vector<db::DbValue> values; // Kind::Leaf
 
-  std::vector<Predicate<Models...>> children; // used for And/Or
+  std::vector<Predicate> children;
 
   //===============CONSTRUCTORS===============
 
@@ -177,6 +177,10 @@ template <typename... Models> struct Predicate {
     return Predicate<Models...>(fieldPtrA, Operator::EQUALS, fieldPtrB, tableAliases);
   }
 
+  static Predicate<Models...> rawEquals(const std::string &innerQuery, const std::vector<db::DbValue> &vals) {
+    return Predicate<Models...>(wrapInParens(innerQuery), Operator::EQUALS, vals);
+  }
+
   //===============IN===============
   template <typename FieldPtr>
   static Predicate<Models...> in(FieldPtr fieldPtr, const std::vector<remove_optional_t<FieldPtr>> &val,
@@ -186,6 +190,7 @@ template <typename... Models> struct Predicate {
     return in(Model::columnNameOf(fieldPtr), std::vector<db::DbValue>(val.begin(), val.end()), tableAlias);
   }
 
+  //===============HELPERS END===============
   std::string resolvePredicates(std::vector<db::DbValue> &out_params) {
     switch (predicateType) {
 
@@ -236,8 +241,6 @@ template <typename... Models> struct Predicate {
     default: {
 
       std::string s = "(";
-      if (children.size() != 2)
-        throw rukh::OrmException("Non-leaf predicate with wrong number of children");
 
       s += children[0].resolvePredicates(out_params);
       if (predicateType == PredicateType::AND)
@@ -279,8 +282,6 @@ template <typename... Models> struct Predicate {
     }
     default: {
       std::string s = "(";
-      if (children.size() != 2)
-        throw rukh::OrmException("Non-leaf predicate with wrong number of children");
 
       s += children[0].toString();
 
@@ -297,12 +298,15 @@ template <typename... Models> struct Predicate {
   }
 
 private:
-  template <typename FieldPtr> std::string getColumnWithTableAlias(FieldPtr fieldPtr, const std::string &tableAlias) {
+  template <typename FieldPtr>
+  static std::string getColumnWithTableAlias(FieldPtr fieldPtr, const std::string &tableAlias) {
     using FieldPtrModel = get_class_t<FieldPtr>;
     if (tableAlias.empty())
       return getAlias(get_index_of_v<FieldPtrModel, ModelsTuple>) + "." + FieldPtrModel::columnNameOf(fieldPtr);
     return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr);
   }
+
+  static std::string wrapInParens(const std::string &str) { return "(" + str + ")"; }
 };
 
 } // namespace rukh::orm

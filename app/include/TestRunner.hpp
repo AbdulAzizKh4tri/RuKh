@@ -24,6 +24,7 @@ public:
   // Runs one named step. Step failures (thrown exceptions) are caught here so one
   // failing step never aborts the rest of the suite.
   template <typename Fn> rukh::Task<void> run(std::string name, Fn &&step) {
+    SPDLOG_INFO(name);
     try {
       co_await step();
       results_.push_back({std::move(name), true, ""});

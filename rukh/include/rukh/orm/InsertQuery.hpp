@@ -16,7 +16,7 @@
 
 namespace rukh::orm {
 
-template <typename Model> class InsertQuery : public QueryBase<InsertQuery<Model>, Model> {
+template <typename Model> class InsertQuery : public QueryBase<InsertQuery<Model>> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const std::vector<Model> &objs, db::ITransaction *transaction = nullptr, bool returning = false) {

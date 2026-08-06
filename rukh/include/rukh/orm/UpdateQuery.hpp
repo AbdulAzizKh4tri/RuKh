@@ -18,7 +18,7 @@
 namespace rukh::orm {
 
 template <typename Model>
-class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryBase<UpdateQuery<Model>, Model> {
+class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryBase<UpdateQuery<Model>> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {

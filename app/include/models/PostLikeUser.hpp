@@ -8,7 +8,8 @@
 
 #include "rukh/orm/Column.hpp"
 
-namespace rukh::orm {
+namespace models {
+using namespace rukh::orm;
 
 template <typename TargetModel, typename DefinerModel>
 struct PostLikeUser : public ActiveRecord<PostLikeUser<TargetModel, DefinerModel>, int64_t> {
@@ -49,4 +50,4 @@ struct PostLikeUser : public ActiveRecord<PostLikeUser<TargetModel, DefinerModel
   }
 };
 
-} // namespace rukh::orm
+} // namespace models

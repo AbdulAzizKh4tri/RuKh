@@ -57,9 +57,10 @@ struct Post : ActiveRecord<Post, int64_t> {
     static constexpr auto throughField2 = ThroughField{
         .throughPtr = &Through::userId, .modelPtr = User::pkFieldPtr(), .throughPtrType = ThroughPtrType::TARGET};
 
-    return std::tuple{manyToOne<User>(&Post::user).onDelete<OnDelete::SET_NULL>().withRelatedName("user_posts"),
-                      manyToManyRelation<User, Post, Through, throughField1, throughField2>().withRelationName(
-                          "likes")};
+    return std::tuple{
+        manyToOne<User>(&Post::user).onDelete<OnDelete::SET_NULL>().withRelatedName("user_posts"),
+        manyToManyRelation<User, Post, Through, throughField1, throughField2>().withRelationName("likes"),
+    };
   }
 };
 
