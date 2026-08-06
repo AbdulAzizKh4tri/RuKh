@@ -56,7 +56,9 @@ struct User : ActiveRecord<User, int64_t> {
     return std::tuple{
         manyToOne<User>(&User::bestFriend).withRelatedName("best_friends"),
         manyToOne<User>(&User::mother).withRelatedName("children"),
-        manyToManyRelation<User, User, DTM>().withRelationName("friendship").withSymmetryMode<SymmetryMode::READ>(),
+        manyToManyRelation<User, User, DTM>()
+            .withRelationName("friendship")
+            .withSymmetryMode<SymmetryMode::SINGLE_ROW>(),
     };
   }
 };

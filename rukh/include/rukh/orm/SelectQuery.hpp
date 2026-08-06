@@ -353,7 +353,7 @@ private:
       auto sql2 = result2.first;
 
       if (children[0].setQueryType)
-        sql1 = " SELECT * FROM ( " + sql1 + ") AS sub_" + std::to_string(depth) + "_0";
+        sql1 = "SELECT * FROM ( " + sql1 + ") AS sub_" + std::to_string(depth) + "_0";
 
       if (children[1].setQueryType)
         sql2 = "SELECT * FROM ( " + sql2 + ") AS sub_" + std::to_string(depth) + "_1";

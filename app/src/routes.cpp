@@ -705,13 +705,13 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     unwrap(co_await post1.save(), "post1 update");
 
     auto w = john.manyRelated<Post, "likes">();
-    // SPDLOG_DEBUG(w.getSqlAndParams().first);
+    SPDLOG_DEBUG(w.getSqlAndParams().first);
 
     auto x = john.manyRelated<User>();
-    // SPDLOG_DEBUG(x.getSqlAndParams().first);
+    SPDLOG_DEBUG(x.getSqlAndParams().first);
 
     auto y = post1.manyRelated<User>();
-    // SPDLOG_DEBUG(y.getSqlAndParams().first);
+    SPDLOG_DEBUG(y.getSqlAndParams().first);
 
     auto z =
         (alice.related<User, "children">().unionQuery(alice.ref<User, &User::bestFriend>())).unionAllQuery(User::all());

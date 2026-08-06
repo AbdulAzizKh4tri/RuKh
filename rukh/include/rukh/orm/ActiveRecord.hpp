@@ -139,7 +139,7 @@ public:
     co_return **result;
   }
 
-  // TODO: symmetric
+  // TODO: Add and Remove M2M relations
   template <typename RelatedModel, FixedString RelationName = "">
   auto manyRelated(db::ITransaction *transaction = nullptr) {
     static constexpr auto relation = [] {
@@ -201,56 +201,59 @@ public:
     constexpr bool thisIsDefiner = std::is_same_v<DefinerModel, Model>;
 
     const std::string relatedAlias = "r";
-    const std::string callerAlias = "c";
     const std::string throughAlias = "t";
-    Query query(relatedAlias);
-
-    Pred rJoinPredicate(true);
-    std::apply(
-        [&](auto &&...throughflds) {
-          auto addPredicate = [&](auto &&throughfld) {
-            if ((thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET) or
-                (not thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::DEFINER))
-              rJoinPredicate = rJoinPredicate and
-                               Pred::equals(throughfld.throughPtr, throughfld.modelPtr, {throughAlias, relatedAlias});
-          };
-          (addPredicate(throughflds), ...);
-        },
-        throughFields);
-
-    Pred cJoinPredicate(true);
-    std::apply(
-        [&](auto &&...throughflds) {
-          auto addPredicate = [&](auto &&throughfld) {
-            if ((thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::DEFINER) or
-                (not thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET))
-              cJoinPredicate = cJoinPredicate and
-                               Pred::equals(throughfld.throughPtr, throughfld.modelPtr, {throughAlias, callerAlias});
-          };
-          (addPredicate(throughflds), ...);
-        },
-        throughFields);
-
-    query.template join<ThroughModel>(rJoinPredicate, throughAlias).template join<Model>(cJoinPredicate, callerAlias);
-
     const Model *self = static_cast<const Model *>(this);
 
-    Pred wherePred(true);
-    std::apply(
-        [&](auto &&...throughflds) {
-          auto addPredicate = [&](auto &&throughfld) {
-            using ThroughFieldModelPtr = get_class_t<std::remove_cvref_t<decltype(throughfld.modelPtr)>>;
-            if constexpr (std::is_same_v<ThroughFieldModelPtr, Model>) {
-              if ((thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::DEFINER) or
-                  (not thisIsDefiner and throughfld.throughPtrType == ThroughPtrType::TARGET))
-                wherePred = wherePred and Pred::equals(throughfld.modelPtr, self->*(throughfld.modelPtr), callerAlias);
-            }
-          };
-          (addPredicate(throughflds), ...);
-        },
-        throughFields);
+    Query query(relatedAlias);
 
-    query.where(wherePred);
+    auto buildJoinPredicate = [&](ThroughPtrType matchType) {
+      Pred pred(true);
+      std::apply(
+          [&](auto &&...flds) {
+            auto add = [&](auto &&fld) {
+              if (fld.throughPtrType == matchType)
+                pred = pred and Pred::equals(fld.throughPtr, fld.modelPtr, {throughAlias, relatedAlias});
+            };
+            (add(flds), ...);
+          },
+          throughFields);
+      return pred;
+    };
+
+    auto buildWherePredicate = [&](ThroughPtrType matchType) {
+      Pred p(true);
+      std::apply(
+          [&](auto &&...flds) {
+            auto add = [&](auto &&throughfld) {
+              using ThroughFieldModelPtr = get_class_t<std::remove_cvref_t<decltype(throughfld.modelPtr)>>;
+              if constexpr (std::is_same_v<ThroughFieldModelPtr, Model>) {
+                if (throughfld.throughPtrType == matchType) {
+                  p = p and Pred::equals(throughfld.throughPtr, self->*throughfld.modelPtr, throughAlias);
+                }
+              }
+            };
+            (add(flds), ...);
+          },
+          throughFields);
+      return p;
+    };
+
+    // Join on the OTHER / Related / Queried  model. Where clause on THIS / calling model.
+    Pred joinPredicate = buildJoinPredicate(thisIsDefiner ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER);
+    Pred wherePredicate = buildWherePredicate(thisIsDefiner ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET);
+
+    query.template join<ThroughModel>(joinPredicate, throughAlias).where(wherePredicate);
+
+    if constexpr (relation.symmetryMode == SymmetryMode::SINGLE_ROW) {
+      Query queryMirrored(relatedAlias);
+
+      // thisIsDefiner will always be true for Self Referencing relationships.
+      // WHERE on the OTHER / Related / Queried  model. JOIN on THIS / calling model. Mirror of what we did above.
+      Pred joinPredicateMirrored = buildJoinPredicate(ThroughPtrType::DEFINER);
+      Pred wherePredicateMirrored = buildWherePredicate(ThroughPtrType::TARGET);
+      queryMirrored.template join<ThroughModel>(joinPredicateMirrored, throughAlias).where(wherePredicateMirrored);
+      query = query.unionAllQuery(queryMirrored);
+    }
 
     return query;
   }

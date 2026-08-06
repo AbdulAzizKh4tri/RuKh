@@ -120,16 +120,17 @@ template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
 /*
  * NONE: Defaut, non symmetric relation
  *
- * DB_WRITE: The Database runs a trigger after each insert/update that inserts/updates the mirrored relation.
- * for example, let's assume all friendships are symmetrical.
- * user1 -> friends -> user2. The database will run a trigger to add user2 -> friends user1.
- * If the model contains extra data like "since", the DB trigger will update the mirrored row on updation as well.
+ * DOUBLE_ROW: The Database runs a trigger after each insert/update that inserts/updates the mirrored relation.
+ * for example, let's assume all friendships are unrealistically symmetrical.
+ * user1 -> friends -> user2. The database will run a trigger to add user2 -> friends -> user1.
+ * If the model contains extra data like "since" and the row is updated, the DB trigger will update the mirrored row as
+ * well.
  * Stores 2 rows per relation, easier to migrate to a non-symmetrical relation if needed.
  *
- * READ: The ORM queries the mirrored relation as well.
- *
+ * SINGLE_ROW: A single row is stored per relation. The ORM queries the mirrored relation at read time.
+ * The ORM checks whether the relation already exists during inserts.
  */
-enum class SymmetryMode { NONE, DB_WRITE, READ };
+enum class SymmetryMode { NONE, DOUBLE_ROW, SINGLE_ROW };
 
 template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
 struct ManyToManyRelation {
