@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rukh/orm/Column.hpp"
 #include <rukh/TypeHelpers.hpp>
 #include <rukh/orm/ActiveRecord.hpp>
 #include <rukh/orm/Constraints.hpp>
@@ -22,7 +23,10 @@ struct DefaultThroughModel : public ActiveRecord<DefaultThroughModel<TargetModel
 
   static constexpr auto columns() {
     return std::tuple{
-        Column{.fieldPtr = &DefaultThroughModel::id, .dbName = "id", .isPrimaryKey = true},
+        Column{.fieldPtr = &DefaultThroughModel::id,
+               .dbName = "id",
+               .isPrimaryKey = true,
+               .autoGenerateMode = AutoGenerate::DB_INCREMENT},
         Column{.fieldPtr = &DefaultThroughModel::targetPk, .dbName = "pkA", .index = true},
         Column{.fieldPtr = &DefaultThroughModel::definerPk, .dbName = "pkB", .index = true},
     };

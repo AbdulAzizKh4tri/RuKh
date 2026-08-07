@@ -704,60 +704,26 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     post1.content = "lorem ipsum dolor sit amet";
     unwrap(co_await post1.save(), "post1 update");
 
-    auto w = john.manyRelated<Post, "likes">();
-    SPDLOG_DEBUG(w.getSqlAndParams().first);
+    unwrap(co_await john.add<"friendship">(alice));
+    unwrap(co_await bob.add<"friendship">(joe));
+    unwrap(co_await john.add<"friendship">(joe));
+    unwrap(co_await bob.add<"friendship">(john));
+    unwrap(co_await john.add<"friendship">(bob));
 
-    auto x = john.manyRelated<User>();
-    SPDLOG_DEBUG(x.getSqlAndParams().first);
+    auto qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "friendship">())::Through::all().execute());
+    SPDLOG_DEBUG(qr.toString());
 
-    auto y = post1.manyRelated<User>();
-    SPDLOG_DEBUG(y.getSqlAndParams().first);
+    unwrap(co_await john.add<"likes">(post1));
+    unwrap(co_await bob.add<"likes">(post1));
+    unwrap(co_await joe.add<"likes">(post1));
 
-    auto z =
-        (alice.related<User, "children">().unionQuery(alice.ref<User, &User::bestFriend>())).unionAllQuery(User::all());
-    SPDLOG_DEBUG(z.getSqlAndParams().first);
-
-    auto cocktailQuery = unwrap(co_await z.select(), "UNION");
-    for (auto user : cocktailQuery) {
-      SPDLOG_DEBUG(user.toString(1));
-    }
-
-    auto joeMama = *unwrap(co_await joe.ref<User, &User::mother>().first(), "joemama");
-    auto joeMamaBestFriend = unwrap(co_await joeMama.ref<User, &User::bestFriend>().getOne(), "joemama best friend");
-    auto johnPosts = unwrap(co_await joeMamaBestFriend.related<Post, "user_posts">().select(), "john posts");
-
-    using queryModels1 = std::tuple<User, Post>;
-    using Query1 = unpack_tuple_t<SelectQuery, queryModels1>;
-    using Pred = unpack_tuple_t<Predicate, queryModels1>;
-
-    Query1 query1;
-    query1.field(&User::name, "a", "USER_ABC_NAME");
-    query1.field(&Post::title);
-    Predicate p = Pred::equals(&User::id, &Post::user);
-    query1.join<Post>(p);
-    // SPDLOG_DEBUG(unwrap(co_await query1.execute()).toString());
-
-    using queryModels2 = std::tuple<User>;
-    using Query2 = unpack_tuple_t<SelectQuery, queryModels2>;
-    using Pred2 = unpack_tuple_t<Predicate, queryModels2>;
-
-    Query2 query2;
-    query2.field(&User::name, "a", "USER_A_NAME");
-    query2.field(&User::bestFriend, "a", "USER_A_BFRIEND");
-    query2.field(&User::name, "b", "USER_B_NAME");
-    query2.field(&User::bestFriend, "b", "USER_B_BFRIEND");
-    Predicate p2 = Pred2(&User::id, Operator::EQUALS, &User::bestFriend, {"b", "a"});
-    query2.join<User>(p2, "b");
-    // SPDLOG_DEBUG(unwrap(co_await query2.execute()).toString());
+    auto x = unwrap(co_await post1.manyRelated<User>().select());
+    for (auto user : x)
+      SPDLOG_DEBUG(user.name.value_or("HUH"));
 
     res.push_back(alice.toJson());
     res.push_back(bob.toJson());
     res.push_back(joe.toJson());
-
-    for (auto post : johnPosts)
-      res.push_back(post.toJson());
-
-    unwrap(co_await joeMama.destroy(), "Destroying joe mama");
 
     unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
     unwrap(co_await Post::bulkDestroy({true}), "bulkDestroy");

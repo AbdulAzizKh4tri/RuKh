@@ -22,18 +22,47 @@ CREATE TABLE posts (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE 
 );
 
-CREATE TRIGGER users_updated_at_touch
-AFTER UPDATE ON users
-BEGIN
-    UPDATE users
-    SET updated_at = (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
-    WHERE id = NEW.id;
-END;
+CREATE TABLE post_like_user (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id  INTEGER NOT NULL,
+    post_id  INTEGER NOT NULL,
+    liked_at INTEGER NOT NULL DEFAULT (unixepoch()),
 
-CREATE TRIGGER posts_updated_at_touch
-AFTER UPDATE ON posts
-BEGIN
-    UPDATE posts
-    SET updated_at = (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
-    WHERE id = NEW.id;
-END;
+    UNIQUE (user_id, post_id),
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (post_id)
+        REFERENCES posts(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX idx_post_like_user_user_id
+    ON post_like_user(user_id);
+
+CREATE INDEX idx_post_like_user_post_id
+    ON post_like_user(post_id);
+
+CREATE TABLE user_friend_user (
+    id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    pkA INTEGER NOT NULL,
+    pkB INTEGER NOT NULL,
+
+    UNIQUE (pkA, pkB),
+
+    FOREIGN KEY (pkA)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (pkB)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX idx_user_friend_user_pkA
+    ON user_friend_user(pkA);
+
+CREATE INDEX idx_user_friend_user_pkB
+    ON user_friend_user(pkB);

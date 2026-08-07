@@ -1,5 +1,6 @@
 #pragma once
 
+#include <expected>
 #include <optional>
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -176,7 +177,7 @@ public:
 
     auto rowCount = queryResult->rows.size();
     if (rowCount > 1)
-      throw rukh::OrmException("get(): Got more than one row when expected only one");
+      throw rukh::OrmException("getOptional(): Got more than one row when expected only one");
     if (rowCount == 0)
       co_return std::nullopt;
     co_return hydrate<Model>(queryResult->rows[0]);
@@ -231,8 +232,8 @@ public:
    *
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<Model, db::DatabaseError>> getOneOrCreate(const Model &objToCreate,
-                                                               db::ITransaction *transaction = nullptr) {
+  Task<std::expected<std::pair<Model, bool>, db::DatabaseError>>
+  getOneOrCreate(const Model &objToCreate, db::ITransaction *transaction = nullptr) {
     if (not this->wherePredicate)
       throw rukh::OrmException("getOneOrCreate(): no where predicate set");
 
@@ -242,21 +243,25 @@ public:
 
     auto userOpt = *getResult;
     if (userOpt)
-      co_return *userOpt;
+      co_return std::make_pair(*userOpt, false);
 
     auto insertResult = co_await InsertQuery<Model>().execute({objToCreate}, transaction, true);
     if (not insertResult) {
       if (insertResult.error().type == db::DbErrorType::DUPLICATE_KEY or
           insertResult.error().type == db::DbErrorType::UNIQUE_CONSTRAINT_VIOLATION) {
-        co_return co_await getOne(transaction);
+        auto getOneResult = co_await getOne(transaction);
+        if (not getOneResult)
+          co_return std::unexpected(getOneResult.error());
+        co_return std::make_pair(*getOneResult, false);
       } else {
         co_return std::unexpected(insertResult.error());
       }
     }
     auto [_, objs] = *insertResult;
-    co_return objs[0];
+    co_return std::make_pair(objs[0], true);
   }
 
+  // Returns unhydrated QueryResult Object
   Task<std::expected<db::QueryResult, db::DatabaseError>> execute(db::ITransaction *transaction = nullptr) {
     buildSelectSqlAndSetParams();
     auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
@@ -266,23 +271,9 @@ public:
     co_return queryResult;
   }
 
-  // Cannot be used with JOIN Queries that return columns from more than one table;.
-  Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
-  update(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
-    UpdateQuery<Model> updateQuery;
-    for (auto &col : columns_) {
-      updateQuery.field(col);
-    }
-    return updateQuery.where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
-        .execute(obj, transaction, returning);
-  }
-
-  // Cannot be used with JOIN Queries that return columns from more than one table;.
-  Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
-  destroy(db::ITransaction *transaction = nullptr, bool returning = false) {
-    return DeleteQuery<Model>()
-        .where(this->wherePredicate.value_or(Predicate<Model>::truePredicate()))
-        .execute(transaction, returning);
+  std::string getSql() {
+    buildSelectSqlAndSetParams();
+    return this->sql_;
   }
 
   std::pair<std::string, std::vector<db::DbValue>> getSqlAndParams(size_t depth = 0) {

@@ -58,7 +58,7 @@ struct User : ActiveRecord<User, int64_t> {
         manyToOne<User>(&User::mother).withRelatedName("children"),
         manyToManyRelation<User, User, DTM>()
             .withRelationName("friendship")
-            .withSymmetryMode<SymmetryMode::SINGLE_ROW>(),
+            .withSymmetryMode<SymmetryMode::DOUBLE_ROW>(),
     };
   }
 };

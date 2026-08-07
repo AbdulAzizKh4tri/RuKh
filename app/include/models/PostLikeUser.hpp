@@ -26,7 +26,10 @@ struct PostLikeUser : public ActiveRecord<PostLikeUser<TargetModel, DefinerModel
 
   static constexpr auto columns() {
     return std::tuple{
-        Column{.fieldPtr = &PostLikeUser::id, .dbName = "id", .isPrimaryKey = true},
+        Column{.fieldPtr = &PostLikeUser::id,
+               .dbName = "id",
+               .isPrimaryKey = true,
+               .autoGenerateMode = AutoGenerate::DB_INCREMENT},
         Column{.fieldPtr = &PostLikeUser::userId, .dbName = "user_id", .index = true},
         Column{.fieldPtr = &PostLikeUser::postId, .dbName = "post_id", .index = true},
         Column{.fieldPtr = &PostLikeUser::likedAt,

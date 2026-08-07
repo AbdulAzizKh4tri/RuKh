@@ -139,66 +139,113 @@ public:
     co_return **result;
   }
 
-  // TODO: Add and Remove M2M relations
-  template <typename RelatedModel, FixedString RelationName = "">
-  auto manyRelated(db::ITransaction *transaction = nullptr) {
-    static constexpr auto relation = [] {
-      constexpr bool byName = (RelationName.view() != "");
-      constexpr auto rels = [&] { // checking this model
-        if constexpr (byName) {
-          return getManyToManyRelationByName<RelationName>();
-        } else {
-          return getManyToManyRelationByTargetModel<RelatedModel>();
-        }
+  // TODO: Upserts
+  // TODO: custom ThroughModel fields. Currently only supports auto-generated
+
+  template <FixedString RelationName = "", typename RelatedModel>
+  Task<std::expected<size_t, db::DatabaseError>> add(const RelatedModel &relatedObj,
+                                                     db::ITransaction *transaction = nullptr) {
+    static constexpr auto relation = getManyToManyRelation<RelatedModel, RelationName>();
+    using Relation = decltype(relation);
+    using ThroughModel = Relation::Through;
+    constexpr bool thisIsDefiner = std::is_same_v<typename Relation::Definer, Model>;
+    constexpr auto throughFields = getManyToManyRelationThroughFields<Relation>();
+
+    const std::string relatedAlias = "r";
+    const std::string throughAlias = "t";
+    using Pred = Predicate<ThroughModel>;
+    const Model *self = static_cast<const Model *>(this);
+
+    Pred wherePred = (buildThroughWherePredicate<Relation, Pred, Model>(
+                          self, thisIsDefiner ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET, "") and
+                      buildThroughWherePredicate<Relation, Pred, RelatedModel>(
+                          &relatedObj, thisIsDefiner ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER, ""));
+
+    if constexpr (relation.symmetryMode == SymmetryMode::SINGLE_ROW) {
+      wherePred = wherePred or
+                  (buildThroughWherePredicate<Relation, Pred, Model>(self, ThroughPtrType::TARGET, "") and
+                   buildThroughWherePredicate<Relation, Pred, RelatedModel>(&relatedObj, ThroughPtrType::DEFINER, ""));
+    }
+
+    SelectQuery<ThroughModel> throughQuery = ThroughModel::filter(wherePred);
+
+    ThroughModel throughObj = [&] {
+      if constexpr (thisIsDefiner)
+        return buildThroughObject<Relation>(relatedObj, *self);
+      else
+        return buildThroughObject<Relation>(*self, relatedObj);
+    }();
+
+    if constexpr (relation.symmetryMode == SymmetryMode::DOUBLE_ROW) {
+      ThroughModel mirrorThroughObj = [&] {
+        if constexpr (not thisIsDefiner)
+          return buildThroughObject<Relation>(relatedObj, *self);
+        else
+          return buildThroughObject<Relation>(*self, relatedObj);
       }();
 
-      constexpr auto relSize = std::tuple_size_v<decltype(rels)>;
-      static_assert(relSize < 2, "More than one many-to-many relation found with this model combination or "
-                                 "RelationName. Define Relations only once.");
-      if constexpr (relSize == 1) {
-        return std::get<0>(rels);
-      } else {
-        constexpr auto relsOther = [&] { // checking the other model
-          if constexpr (byName) {
-            return RelatedModel::template getManyToManyRelationByName<RelationName>();
-          } else {
-            return RelatedModel::template getManyToManyRelationByTargetModel<Model>();
-          }
-        }();
-
-        constexpr auto relSizeOther = std::tuple_size_v<decltype(relsOther)>;
-        static_assert(relSizeOther < 2, "More than one many-to-many relation found with this model combination or "
-                                        "RelationName. Define Relations only once.");
-        static_assert(relSizeOther > 0, "No many-to-many relation found with this model combination");
-
-        return std::get<0>(relsOther);
+      auto biResult = co_await ThroughModel::bulkInsert({throughObj, mirrorThroughObj}, transaction);
+      if (not biResult) {
+        if (biResult.error().type == db::DbErrorType::DUPLICATE_KEY or
+            biResult.error().type == db::DbErrorType::UNIQUE_CONSTRAINT_VIOLATION) {
+          co_return 0;
+        }
+        co_return std::unexpected(biResult.error());
       }
-    }();
+      co_return (*biResult).first;
+    } else {
+      auto gcResult = co_await throughQuery.getOneOrCreate(throughObj, transaction);
+      if (not gcResult)
+        co_return std::unexpected(gcResult.error());
+      auto [_, created] = *gcResult;
+      co_return created ? 1 : 0;
+    }
+  }
+
+  template <FixedString RelationName = "", typename RelatedModel>
+  Task<std::expected<size_t, db::DatabaseError>> remove(const RelatedModel &relatedObj,
+                                                        db::ITransaction *transaction = nullptr) {
+    static constexpr auto relation = getManyToManyRelation<RelatedModel, RelationName>();
+    using Relation = decltype(relation);
+    using ThroughModel = Relation::Through;
+    constexpr bool thisIsDefiner = std::is_same_v<typename Relation::Definer, Model>;
+    constexpr auto throughFields = getManyToManyRelationThroughFields<Relation>();
+
+    const std::string relatedAlias = "r";
+    const std::string throughAlias = "t";
+    using Pred = Predicate<ThroughModel>;
+    const Model *self = static_cast<const Model *>(this);
+
+    Pred wherePred = (buildThroughWherePredicate<Relation, Pred, Model>(
+                          self, thisIsDefiner ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET, "") and
+                      buildThroughWherePredicate<Relation, Pred, RelatedModel>(
+                          &relatedObj, thisIsDefiner ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER, ""));
+
+    if constexpr (relation.symmetryMode == SymmetryMode::SINGLE_ROW or
+                  relation.symmetryMode == SymmetryMode::DOUBLE_ROW) {
+      wherePred = wherePred or
+                  (buildThroughWherePredicate<Relation, Pred, Model>(self, ThroughPtrType::TARGET, "") and
+                   buildThroughWherePredicate<Relation, Pred, RelatedModel>(&relatedObj, ThroughPtrType::DEFINER, ""));
+    }
+
+    auto delResult = co_await DeleteQuery<ThroughModel>().where(wherePred).execute(transaction);
+    if (not delResult)
+      co_return std::unexpected(delResult.error());
+
+    co_return (*delResult).first;
+  }
+
+  template <typename RelatedModel, FixedString RelationName = "">
+  auto manyRelated(db::ITransaction *transaction = nullptr) {
+    static constexpr auto relation = getManyToManyRelation<RelatedModel, RelationName>();
 
     using Relation = decltype(relation);
     using ThroughModel = Relation::Through;
-    using DefinerModel = Relation::Definer;
-    using TargetModel = Relation::Target;
+    constexpr bool thisIsDefiner = std::is_same_v<typename Relation::Definer, Model>;
+    constexpr auto throughFields = getManyToManyRelationThroughFields<Relation>();
 
-    constexpr size_t throughFieldCount = Relation::throughFieldCount;
-    constexpr bool noThroughFields = throughFieldCount == 0;
-    constexpr auto throughFields = [&] {
-      if constexpr (noThroughFields) {
-        constexpr auto throughField1 =
-            ThroughField(&ThroughModel::targetPk, TargetModel::pkFieldPtr(), ThroughPtrType::TARGET);
-        constexpr auto throughField2 =
-            ThroughField(&ThroughModel::definerPk, DefinerModel::pkFieldPtr(), ThroughPtrType::DEFINER);
-        return std::tuple{throughField1, throughField2};
-      } else {
-        return Relation::throughFields;
-      }
-    }();
-
-    using queryModels = std::tuple<RelatedModel, Model, ThroughModel>;
-    using Query = unpack_tuple_t<SelectQuery, queryModels>;
-    using Pred = unpack_tuple_t<Predicate, queryModels>;
-
-    constexpr bool thisIsDefiner = std::is_same_v<DefinerModel, Model>;
+    using Query = SelectQuery<RelatedModel, Model, ThroughModel>;
+    using Pred = Predicate<RelatedModel, Model, ThroughModel>;
 
     const std::string relatedAlias = "r";
     const std::string throughAlias = "t";
@@ -206,41 +253,11 @@ public:
 
     Query query(relatedAlias);
 
-    auto buildJoinPredicate = [&](ThroughPtrType matchType) {
-      Pred pred(true);
-      std::apply(
-          [&](auto &&...flds) {
-            auto add = [&](auto &&fld) {
-              if (fld.throughPtrType == matchType)
-                pred = pred and Pred::equals(fld.throughPtr, fld.modelPtr, {throughAlias, relatedAlias});
-            };
-            (add(flds), ...);
-          },
-          throughFields);
-      return pred;
-    };
-
-    auto buildWherePredicate = [&](ThroughPtrType matchType) {
-      Pred p(true);
-      std::apply(
-          [&](auto &&...flds) {
-            auto add = [&](auto &&throughfld) {
-              using ThroughFieldModelPtr = get_class_t<std::remove_cvref_t<decltype(throughfld.modelPtr)>>;
-              if constexpr (std::is_same_v<ThroughFieldModelPtr, Model>) {
-                if (throughfld.throughPtrType == matchType) {
-                  p = p and Pred::equals(throughfld.throughPtr, self->*throughfld.modelPtr, throughAlias);
-                }
-              }
-            };
-            (add(flds), ...);
-          },
-          throughFields);
-      return p;
-    };
-
     // Join on the OTHER / Related / Queried  model. Where clause on THIS / calling model.
-    Pred joinPredicate = buildJoinPredicate(thisIsDefiner ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER);
-    Pred wherePredicate = buildWherePredicate(thisIsDefiner ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET);
+    Predicate joinPredicate = buildThroughJoinPredicate<Relation, RelatedModel, ThroughModel>(
+        thisIsDefiner ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER, throughAlias, relatedAlias);
+    Predicate wherePredicate = buildThroughWherePredicate<Relation, Pred, Model>(
+        self, thisIsDefiner ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET, throughAlias);
 
     query.template join<ThroughModel>(joinPredicate, throughAlias).where(wherePredicate);
 
@@ -249,14 +266,18 @@ public:
 
       // thisIsDefiner will always be true for Self Referencing relationships.
       // WHERE on the OTHER / Related / Queried  model. JOIN on THIS / calling model. Mirror of what we did above.
-      Pred joinPredicateMirrored = buildJoinPredicate(ThroughPtrType::DEFINER);
-      Pred wherePredicateMirrored = buildWherePredicate(ThroughPtrType::TARGET);
+      Predicate joinPredicateMirrored = buildThroughJoinPredicate<Relation, RelatedModel, ThroughModel>(
+          ThroughPtrType::DEFINER, throughAlias, relatedAlias);
+      Predicate wherePredicateMirrored =
+          buildThroughWherePredicate<Relation, Pred, Model>(self, ThroughPtrType::TARGET, throughAlias);
       queryMirrored.template join<ThroughModel>(joinPredicateMirrored, throughAlias).where(wherePredicateMirrored);
       query = query.unionAllQuery(queryMirrored);
     }
 
     return query;
   }
+
+  // TODO: remvoe code duplication from related() and ref()
 
   /*
    * Returns a SelectQuery<DefinerModel>.where(foreignKeyFields = this->primaryKeyFields)
@@ -307,7 +328,6 @@ public:
    */
   template <typename TargetModel, auto... fkfieldPtrs>
   SelectQuery<TargetModel> ref(db::ITransaction *transaction = nullptr) {
-
     static constexpr auto relationTuple = [&] {
       if constexpr (sizeof...(fkfieldPtrs) > 0) {
         return getRelationByForeignKeyFieldPtrs<fkfieldPtrs...>();
@@ -437,6 +457,39 @@ public:
     return []<std::size_t... I>(std::index_sequence<I...>) {
       return std::tuple_cat(getFkRelationIfNamed<Name, I>()...);
     }(std::make_index_sequence<std::tuple_size_v<decltype(fkRelations())>>{});
+  }
+
+  template <typename RelatedModel, FixedString RelationName> static constexpr auto getManyToManyRelation() {
+    constexpr bool byName = (RelationName.view() != "");
+    constexpr auto rels = [&] { // checking this model
+      if constexpr (byName) {
+        return getManyToManyRelationByName<RelationName>();
+      } else {
+        return getManyToManyRelationByTargetModel<RelatedModel>();
+      }
+    }();
+
+    constexpr auto relSize = std::tuple_size_v<decltype(rels)>;
+    static_assert(relSize < 2, "More than one many-to-many relation found with this model combination or "
+                               "RelationName. Define Relations only once.");
+    if constexpr (relSize == 1) {
+      return std::get<0>(rels);
+    } else {
+      constexpr auto relsOther = [&] { // checking the other model
+        if constexpr (byName) {
+          return RelatedModel::template getManyToManyRelationByName<RelationName>();
+        } else {
+          return RelatedModel::template getManyToManyRelationByTargetModel<Model>();
+        }
+      }();
+
+      constexpr auto relSizeOther = std::tuple_size_v<decltype(relsOther)>;
+      static_assert(relSizeOther < 2, "More than one many-to-many relation found with this model combination or "
+                                      "RelationName. Define Relations only once.");
+      static_assert(relSizeOther > 0, "No many-to-many relation found with this model combination");
+
+      return std::get<0>(relsOther);
+    }
   }
 
   template <typename LookupModel> static constexpr auto getManyToManyRelationByTargetModel() {
@@ -573,6 +626,81 @@ private:
   }
 
   //==============================Many to Many==============================
+
+  template <typename Relation, typename RelatedModel, typename ThroughModel>
+  auto buildThroughJoinPredicate(ThroughPtrType matchType, const std::string &throughAlias,
+                                 const std::string &relatedAlias) {
+    using Pred = Predicate<RelatedModel, Model, ThroughModel>;
+    const Model *self = static_cast<const Model *>(this);
+    Pred pred(true);
+    std::apply(
+        [&](auto &&...flds) {
+          auto add = [&](auto &&fld) {
+            if (fld.throughPtrType == matchType)
+              pred = pred and Pred::equals(fld.throughPtr, fld.modelPtr, {throughAlias, relatedAlias});
+          };
+          (add(flds), ...);
+        },
+        getManyToManyRelationThroughFields<Relation>());
+    return pred;
+  };
+
+  template <typename Relation, typename Pred, typename CheckModel>
+  auto buildThroughWherePredicate(const CheckModel *objPtr, ThroughPtrType matchType, const std::string &throughAlias) {
+    Pred p(true);
+    std::apply(
+        [&](auto &&...flds) {
+          auto add = [&](auto &&throughfld) {
+            using ThroughFieldModelPtr = get_class_t<std::remove_cvref_t<decltype(throughfld.modelPtr)>>;
+            if constexpr (std::is_same_v<ThroughFieldModelPtr, CheckModel>) {
+              if (throughfld.throughPtrType == matchType) {
+                p = p and Pred::equals(throughfld.throughPtr, objPtr->*throughfld.modelPtr, throughAlias);
+              }
+            }
+          };
+          (add(flds), ...);
+        },
+        getManyToManyRelationThroughFields<Relation>());
+    return p;
+  };
+
+  template <typename Relation, typename TargetModel = Relation::Target, typename DefinerModel = Relation::Definer>
+  typename Relation::Through buildThroughObject(const TargetModel &tObj, const DefinerModel &dObj) {
+    typename Relation::Through obj;
+
+    std::apply(
+        [&](auto &&...flds) {
+          auto add = [&](auto &&throughfld) {
+            using ThroughFieldModelType = get_class_t<std::remove_cvref_t<decltype(throughfld.modelPtr)>>;
+            if (throughfld.throughPtrType == ThroughPtrType::TARGET) {
+              if constexpr (std::is_same_v<ThroughFieldModelType, TargetModel>)
+                obj.*throughfld.throughPtr = tObj.*throughfld.modelPtr;
+            } else {
+              if constexpr (std::is_same_v<ThroughFieldModelType, DefinerModel>)
+                obj.*throughfld.throughPtr = dObj.*throughfld.modelPtr;
+            }
+          };
+          (add(flds), ...);
+        },
+        getManyToManyRelationThroughFields<Relation>());
+
+    return obj;
+  };
+
+  template <typename Relation> static constexpr auto getManyToManyRelationThroughFields() {
+    using ThroughModel = Relation::Through;
+    using DefinerModel = Relation::Definer;
+    using TargetModel = Relation::Target;
+    if constexpr (Relation::throughFieldCount == 0) {
+      constexpr auto throughField1 =
+          ThroughField(&ThroughModel::targetPk, TargetModel::pkFieldPtr(), ThroughPtrType::TARGET);
+      constexpr auto throughField2 =
+          ThroughField(&ThroughModel::definerPk, DefinerModel::pkFieldPtr(), ThroughPtrType::DEFINER);
+      return std::tuple{throughField1, throughField2};
+    } else {
+      return Relation::throughFields;
+    }
+  }
 
   template <typename LookupModel, std::size_t I> static constexpr auto getManyToManyRelationIfTargetModel() {
     using RelT = std::remove_cvref_t<decltype(std::get<I>(manyToManyRelations()))>;
