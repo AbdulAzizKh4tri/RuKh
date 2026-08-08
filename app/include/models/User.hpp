@@ -52,14 +52,14 @@ struct User : ActiveRecord<User, int64_t> {
 
   static constexpr auto relations() {
     using DTM = DefaultThroughModel<User, User, "user_friend_user">;
+    using DTM2 = DefaultThroughModel<User, User, "user_follows_user">;
 
-    return std::tuple{
-        manyToOne<User>(&User::bestFriend).withRelatedName("best_friends"),
-        manyToOne<User>(&User::mother).withRelatedName("children"),
-        manyToManyRelation<User, User, DTM>()
-            .withRelationName("friendship")
-            .withSymmetryMode<SymmetryMode::DOUBLE_ROW>(),
-    };
+    return std::tuple{manyToOne<User>(&User::bestFriend).withRelatedName("best_friends"),
+                      manyToOne<User>(&User::mother).withRelatedName("children"),
+                      manyToManyRelation<User, User, DTM>()
+                          .withRelationName("friendship")
+                          .withSymmetryMode<SymmetryMode::DOUBLE_ROW>(),
+                      manyToManyRelation<User, User, DTM2>().withRelationName("follows")};
   }
 };
 

@@ -24,6 +24,7 @@
 
 namespace rukh::orm {
 
+enum class LookupDirection { FORWARD, REVERSE };
 template <typename Model, typename... PkTypes> class ActiveRecord {
 
 public:
@@ -236,7 +237,7 @@ public:
   }
 
   template <typename RelatedModel, FixedString RelationName = "">
-  auto manyRelated(db::ITransaction *transaction = nullptr) {
+  auto manyRelated(LookupDirection direction = LookupDirection::FORWARD, db::ITransaction *transaction = nullptr) {
     static constexpr auto relation = getManyToManyRelation<RelatedModel, RelationName>();
 
     using Relation = decltype(relation);
@@ -255,9 +256,12 @@ public:
 
     // Join on the OTHER / Related / Queried  model. Where clause on THIS / calling model.
     Predicate joinPredicate = buildThroughJoinPredicate<Relation, RelatedModel, ThroughModel>(
-        thisIsDefiner ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER, throughAlias, relatedAlias);
+        (thisIsDefiner and direction == LookupDirection::FORWARD) ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER,
+        throughAlias, relatedAlias);
     Predicate wherePredicate = buildThroughWherePredicate<Relation, Pred, Model>(
-        self, thisIsDefiner ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET, throughAlias);
+        self,
+        (thisIsDefiner and direction == LookupDirection::FORWARD) ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET,
+        throughAlias);
 
     query.template join<ThroughModel>(joinPredicate, throughAlias).where(wherePredicate);
 
@@ -267,9 +271,12 @@ public:
       // thisIsDefiner will always be true for Self Referencing relationships.
       // WHERE on the OTHER / Related / Queried  model. JOIN on THIS / calling model. Mirror of what we did above.
       Predicate joinPredicateMirrored = buildThroughJoinPredicate<Relation, RelatedModel, ThroughModel>(
-          ThroughPtrType::DEFINER, throughAlias, relatedAlias);
-      Predicate wherePredicateMirrored =
-          buildThroughWherePredicate<Relation, Pred, Model>(self, ThroughPtrType::TARGET, throughAlias);
+          (thisIsDefiner and direction == LookupDirection::FORWARD) ? ThroughPtrType::DEFINER : ThroughPtrType::TARGET,
+          throughAlias, relatedAlias);
+      Predicate wherePredicateMirrored = buildThroughWherePredicate<Relation, Pred, Model>(
+          self,
+          (thisIsDefiner and direction == LookupDirection::FORWARD) ? ThroughPtrType::TARGET : ThroughPtrType::DEFINER,
+          throughAlias);
       queryMirrored.template join<ThroughModel>(joinPredicateMirrored, throughAlias).where(wherePredicateMirrored);
       query = query.unionAllQuery(queryMirrored);
     }
@@ -472,24 +479,25 @@ public:
     constexpr auto relSize = std::tuple_size_v<decltype(rels)>;
     static_assert(relSize < 2, "More than one many-to-many relation found with this model combination or "
                                "RelationName. Define Relations only once.");
-    if constexpr (relSize == 1) {
+    constexpr auto relsOther = [&] { // checking the other model
+      if constexpr (byName) {
+        return RelatedModel::template getManyToManyRelationByName<RelationName>();
+      } else {
+        return RelatedModel::template getManyToManyRelationByTargetModel<Model>();
+      }
+    }();
+
+    constexpr auto relSizeOther = std::tuple_size_v<decltype(relsOther)>;
+    static_assert(relSizeOther < 2, "More than one many-to-many relation found with this model combination or "
+                                    "RelationName. Define Relations only once.");
+
+    static_assert(std::is_same_v<Model, RelatedModel> or (relSize == 1 xor relSizeOther == 1),
+                  "Relation lookup by Model is ambiguous in this case. Use RelationName");
+
+    if constexpr (relSize == 1)
       return std::get<0>(rels);
-    } else {
-      constexpr auto relsOther = [&] { // checking the other model
-        if constexpr (byName) {
-          return RelatedModel::template getManyToManyRelationByName<RelationName>();
-        } else {
-          return RelatedModel::template getManyToManyRelationByTargetModel<Model>();
-        }
-      }();
-
-      constexpr auto relSizeOther = std::tuple_size_v<decltype(relsOther)>;
-      static_assert(relSizeOther < 2, "More than one many-to-many relation found with this model combination or "
-                                      "RelationName. Define Relations only once.");
-      static_assert(relSizeOther > 0, "No many-to-many relation found with this model combination");
-
+    else
       return std::get<0>(relsOther);
-    }
   }
 
   template <typename LookupModel> static constexpr auto getManyToManyRelationByTargetModel() {

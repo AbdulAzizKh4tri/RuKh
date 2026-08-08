@@ -23,6 +23,7 @@
 #include "models/Post.hpp"
 #include "models/User.hpp"
 #include "routes.hpp"
+#include "rukh/orm/ActiveRecord.hpp"
 
 using json = nlohmann::json;
 using namespace rukh;
@@ -705,21 +706,27 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     unwrap(co_await post1.save(), "post1 update");
 
     unwrap(co_await john.add<"friendship">(alice));
-    unwrap(co_await bob.add<"friendship">(joe));
     unwrap(co_await john.add<"friendship">(joe));
-    unwrap(co_await bob.add<"friendship">(john));
     unwrap(co_await john.add<"friendship">(bob));
 
-    auto qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "friendship">())::Through::all().execute());
+    unwrap(co_await john.add<"follows">(alice));
+    unwrap(co_await bob.add<"follows">(john));
+    unwrap(co_await joe.add<"follows">(john));
+
+    auto johnFollowing = unwrap(co_await john.manyRelated<User, "follows">().select());
+    for (auto followee : johnFollowing)
+      SPDLOG_DEBUG("John follows {}", *followee.name);
+
+    auto johnFollowers = unwrap(co_await john.manyRelated<User, "follows">(LookupDirection::REVERSE).select());
+    for (auto follower : johnFollowers)
+      SPDLOG_DEBUG("John is followed by {}", *follower.name);
+
+    auto qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "follows">())::Through::all().execute());
     SPDLOG_DEBUG(qr.toString());
 
     unwrap(co_await john.add<"likes">(post1));
     unwrap(co_await bob.add<"likes">(post1));
     unwrap(co_await joe.add<"likes">(post1));
-
-    auto x = unwrap(co_await post1.manyRelated<User>().select());
-    for (auto user : x)
-      SPDLOG_DEBUG(user.name.value_or("HUH"));
 
     res.push_back(alice.toJson());
     res.push_back(bob.toJson());
