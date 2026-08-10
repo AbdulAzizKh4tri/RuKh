@@ -6,6 +6,8 @@
 #include <rukh/orm/DefaultThroughModel.hpp>
 #include <rukh/orm/Relations.hpp>
 
+#include "models/Follow.hpp"
+
 namespace models {
 using namespace rukh::orm;
 
@@ -52,14 +54,20 @@ struct User : ActiveRecord<User, int64_t> {
 
   static constexpr auto relations() {
     using DTM = DefaultThroughModel<User, User, "user_friend_user">;
-    using DTM2 = DefaultThroughModel<User, User, "user_follows_user">;
 
-    return std::tuple{manyToOne<User>(&User::bestFriend).withRelatedName("best_friends"),
-                      manyToOne<User>(&User::mother).withRelatedName("children"),
-                      manyToManyRelation<User, User, DTM>()
-                          .withRelationName("friendship")
-                          .withSymmetryMode<SymmetryMode::DOUBLE_ROW>(),
-                      manyToManyRelation<User, User, DTM2>().withRelationName("follows")};
+    using Through = Follow<User>;
+    static constexpr auto throughField1 = ThroughField{
+        .throughPtr = &Through::follower, .modelPtr = User::pkFieldPtr(), .throughPtrType = ThroughPtrType::DEFINER};
+    static constexpr auto throughField2 = ThroughField{
+        .throughPtr = &Through::followee, .modelPtr = User::pkFieldPtr(), .throughPtrType = ThroughPtrType::TARGET};
+
+    return std::tuple{
+        manyToOne<User>(&User::bestFriend).withRelatedName("best_friends"),
+        manyToOne<User>(&User::mother).withRelatedName("children"),
+        manyToManyRelation<User, User, DTM>()
+            .withRelationName("friendship")
+            .withSymmetryMode<SymmetryMode::DOUBLE_ROW>(),
+        manyToManyRelation<User, User, Through, throughField1, throughField2>().withRelationName("follows")};
   }
 };
 

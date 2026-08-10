@@ -1,6 +1,7 @@
 #include <rukh/HttpRequest.hpp>
 
 #include <charconv>
+#include <expected>
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <string_view>

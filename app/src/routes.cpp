@@ -10,20 +10,22 @@
 #include <rukh/HttpResponse.hpp>
 #include <rukh/MultipartParser.hpp>
 #include <rukh/ThreadPool.hpp>
-
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/ScopedTransaction.hpp>
-
+#include <rukh/orm/ActiveRecord.hpp>
+#include <rukh/orm/DefaultThroughModel.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/SelectQuery.hpp>
+#include <rukh/orm/UpdateQuery.hpp>
 
 #include "TestRunner.hpp"
+#include "models/Follow.hpp"
 #include "models/Post.hpp"
+#include "models/PostLikeUser.hpp"
 #include "models/User.hpp"
 #include "routes.hpp"
-#include "rukh/orm/ActiveRecord.hpp"
 
 using json = nlohmann::json;
 using namespace rukh;
@@ -691,11 +693,15 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     unwrap(co_await bob.save(), "bob update");
 
     User joe = users[2];
-    joe.createdAt = 234; // shouldn't matter
-    joe.updatedAt = 5;   //
     joe.mother = alice;
     joe.bestFriend = alice;
-    unwrap(co_await joe.save(), " joe update");
+    unwrap(co_await UpdateQuery<User>()
+               .where(Pu::equals(&User::id, joe.id))
+               .field(&User::mother)
+               .field(&User::bestFriend)
+               .execute(joe),
+           " joe update query");
+    SPDLOG_DEBUG(joe.toString());
 
     User john = users[3];
     john.bestFriend = bob;
@@ -705,28 +711,34 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     post1.content = "lorem ipsum dolor sit amet";
     unwrap(co_await post1.save(), "post1 update");
 
-    unwrap(co_await john.add<"friendship">(alice));
-    unwrap(co_await john.add<"friendship">(joe));
-    unwrap(co_await john.add<"friendship">(bob));
+    Follow<User> followObj = {.follower = john, .followee = alice, .randomNum = 123, .str = "hello"};
+    unwrap(co_await User::upsertRelation<User, "follows">(followObj), "followObj upsert");
 
-    unwrap(co_await john.add<"follows">(alice));
-    unwrap(co_await bob.add<"follows">(john));
-    unwrap(co_await joe.add<"follows">(john));
+    unwrap(co_await john.upsertRelation<"follows">(alice), "follow");
+    unwrap(co_await john.upsertRelation<"friendship">(alice), "follow");
+    unwrap(co_await john.upsertRelation<"likes">(posts[1]), "follow");
+
+    PostLike<User, Post> ob = {.userId = john, .postId = post1};
+    unwrap(co_await User::upsertRelation<Post, "likes">(ob), "ob upsert");
+
+    DefaultThroughModel<User, User, "user_friend_user"> friendObj = {.targetPk = alice, .definerPk = bob};
+    unwrap(co_await User::upsertRelation<User, "friendship">(friendObj), "friendObj upsert");
 
     auto johnFollowing = unwrap(co_await john.manyRelated<User, "follows">().select());
-    for (auto followee : johnFollowing)
-      SPDLOG_DEBUG("John follows {}", *followee.name);
-
     auto johnFollowers = unwrap(co_await john.manyRelated<User, "follows">(LookupDirection::REVERSE).select());
-    for (auto follower : johnFollowers)
-      SPDLOG_DEBUG("John is followed by {}", *follower.name);
 
-    auto qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "follows">())::Through::all().execute());
+    auto qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "friendship">())::Through::all().execute());
     SPDLOG_DEBUG(qr.toString());
 
-    unwrap(co_await john.add<"likes">(post1));
-    unwrap(co_await bob.add<"likes">(post1));
-    unwrap(co_await joe.add<"likes">(post1));
+    qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "follows">())::Through::all().execute());
+    SPDLOG_DEBUG(qr.toString());
+
+    qr = unwrap(co_await decltype(User::getManyToManyRelation<Post, "likes">())::Through::all().execute());
+    SPDLOG_DEBUG(qr.toString());
+
+    unwrap(co_await john.upsertRelation<"likes">(post1));
+    unwrap(co_await bob.upsertRelation<"likes">(post1));
+    unwrap(co_await joe.upsertRelation<"likes">(post1));
 
     res.push_back(alice.toJson());
     res.push_back(bob.toJson());

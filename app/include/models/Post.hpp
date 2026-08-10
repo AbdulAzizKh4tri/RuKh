@@ -51,7 +51,7 @@ struct Post : ActiveRecord<Post, int64_t> {
   }
 
   static constexpr auto relations() {
-    using Through = PostLikeUser<User, Post>;
+    using Through = PostLike<User, Post>;
     static constexpr auto throughField1 = ThroughField{
         .throughPtr = &Through::postId, .modelPtr = Post::pkFieldPtr(), .throughPtrType = ThroughPtrType::DEFINER};
     static constexpr auto throughField2 = ThroughField{

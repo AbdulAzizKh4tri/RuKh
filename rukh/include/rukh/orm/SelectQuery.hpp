@@ -244,7 +244,6 @@ public:
     auto userOpt = *getResult;
     if (userOpt)
       co_return std::make_pair(*userOpt, false);
-
     auto insertResult = co_await InsertQuery<Model>().execute({objToCreate}, transaction, true);
     if (not insertResult) {
       if (insertResult.error().type == db::DbErrorType::DUPLICATE_KEY or
@@ -257,8 +256,8 @@ public:
         co_return std::unexpected(insertResult.error());
       }
     }
-    auto [_, objs] = *insertResult;
-    co_return std::make_pair(objs[0], true);
+    auto objs = (*insertResult).second;
+    co_return std::make_pair(Model{}, true);
   }
 
   // Returns unhydrated QueryResult Object

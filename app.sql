@@ -67,25 +67,20 @@ CREATE INDEX idx_user_friend_user_pkA
 CREATE INDEX idx_user_friend_user_pkB
     ON user_friend_user(pkB);
 
-
 CREATE TABLE user_follows_user (
-    id  INTEGER PRIMARY KEY AUTOINCREMENT,
-    pkA INTEGER NOT NULL,
-    pkB INTEGER NOT NULL,
+    id              INTEGER         PRIMARY KEY AUTOINCREMENT,
+    follower_id     INTEGER         NOT NULL,
+    followee_id     INTEGER         NOT NULL,
+    random_num      INTEGER,
+    str             TEXT,
 
-    UNIQUE (pkA, pkB),
+    FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (followee_id) REFERENCES users(id) ON DELETE CASCADE,
 
-    FOREIGN KEY (pkA)
-        REFERENCES users(id)
-        ON DELETE CASCADE,
-
-    FOREIGN KEY (pkB)
-        REFERENCES users(id)
-        ON DELETE CASCADE
+    UNIQUE (follower_id, followee_id)
 );
 
-CREATE INDEX idx_user_follows_user_pkA
-    ON user_follows_user(pkA);
-
-CREATE INDEX idx_user_follows_user_pkB
-    ON user_follows_user(pkB);
+CREATE INDEX user_follows_user_follower_id_idx 
+	ON user_follows_user (follower_id);
+CREATE INDEX user_follows_user_followee_id_idx 
+	ON user_follows_user (followee_id);

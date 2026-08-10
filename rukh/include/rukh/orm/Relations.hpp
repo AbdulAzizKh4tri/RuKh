@@ -109,6 +109,7 @@ constexpr auto oneToOne(FieldTypes DefinerModel::*...ptrs) {
 
 enum class ThroughPtrType { TARGET, DEFINER };
 
+// TODO: make this throughFieldPair, have both models' correlated fields in it;
 template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
   using Model = get_class_t<ModelPtr>;
 
@@ -132,7 +133,12 @@ template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
  * My personal Recommendation.
  *
  */
-enum class SymmetryMode { NONE, DOUBLE_ROW, SINGLE_ROW, DB_DOUBLE_ROW };
+enum class SymmetryMode {
+  NONE,
+  DOUBLE_ROW,
+  SINGLE_ROW,
+  DB_DOUBLE_ROW // NOT IMPLEMENTED YET;
+};
 
 template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
 struct ManyToManyRelation {

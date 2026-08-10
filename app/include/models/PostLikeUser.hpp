@@ -12,7 +12,7 @@ namespace models {
 using namespace rukh::orm;
 
 template <typename TargetModel, typename DefinerModel>
-struct PostLikeUser : public ActiveRecord<PostLikeUser<TargetModel, DefinerModel>, int64_t> {
+struct PostLike : public ActiveRecord<PostLike<TargetModel, DefinerModel>, int64_t> {
   using Target = TargetModel;
   using Definer = DefinerModel;
 
@@ -26,13 +26,13 @@ struct PostLikeUser : public ActiveRecord<PostLikeUser<TargetModel, DefinerModel
 
   static constexpr auto columns() {
     return std::tuple{
-        Column{.fieldPtr = &PostLikeUser::id,
+        Column{.fieldPtr = &PostLike::id,
                .dbName = "id",
                .isPrimaryKey = true,
                .autoGenerateMode = AutoGenerate::DB_INCREMENT},
-        Column{.fieldPtr = &PostLikeUser::userId, .dbName = "user_id", .index = true},
-        Column{.fieldPtr = &PostLikeUser::postId, .dbName = "post_id", .index = true},
-        Column{.fieldPtr = &PostLikeUser::likedAt,
+        Column{.fieldPtr = &PostLike::userId, .dbName = "user_id", .index = true},
+        Column{.fieldPtr = &PostLike::postId, .dbName = "post_id", .index = true},
+        Column{.fieldPtr = &PostLike::likedAt,
                .dbName = "liked_at",
                .autoGenerateMode = AutoGenerate::DB_NOW,
                .autoUpdateMode = AutoUpdate::LOCKED},
@@ -41,14 +41,14 @@ struct PostLikeUser : public ActiveRecord<PostLikeUser<TargetModel, DefinerModel
 
   static constexpr auto relations() {
     return std::tuple{
-        manyToOne<Target>(&PostLikeUser::userId).template onDelete<OnDelete::CASCADE>().withRelatedName("user_likes"),
-        manyToOne<Definer>(&PostLikeUser::postId).template onDelete<OnDelete::CASCADE>().withRelatedName("post_likes"),
+        manyToOne<Target>(&PostLike::userId).template onDelete<OnDelete::CASCADE>().withRelatedName("user_likes"),
+        manyToOne<Definer>(&PostLike::postId).template onDelete<OnDelete::CASCADE>().withRelatedName("post_likes"),
     };
   }
 
   static auto constraints() {
     return std::tuple{
-        makeUniqueTogether(&PostLikeUser::userId, &PostLikeUser::postId),
+        makeUniqueTogether(&PostLike::userId, &PostLike::postId),
     };
   }
 };
