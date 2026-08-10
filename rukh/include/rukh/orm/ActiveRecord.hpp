@@ -91,30 +91,30 @@ public:
    * If called with a transaction that is later rolled back, this object's id and persisted_ will not reflect the
    * rollback.
    */
-  Task<std::expected<Model, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
-    if (persisted_)
-      co_return co_await update(transaction);
-    else
-      co_return co_await insert(transaction);
+  Task<std::expected<size_t, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
+    return upsert(std::tuple{pkFieldPtrs()}, transaction);
   }
 
-  template <typename FieldsTuple>
-  Task<std::expected<Model, db::DatabaseError>> upsert(FieldsTuple fieldTuple,
-                                                       db::ITransaction *transaction = nullptr) {
+  template <typename ConflictFieldsTuple>
+  Task<std::expected<size_t, db::DatabaseError>> upsert(ConflictFieldsTuple conflictFields,
+                                                        db::ITransaction *transaction = nullptr) {
     Model *self = static_cast<Model *>(this);
     UpsertQuery<Model> query;
-    std::apply([&](auto &&...col) { (query.conflictFields(col), ...); }, fieldTuple);
+    std::apply([&](auto &&...col) { (query.conflictFields(col), ...); }, conflictFields);
     std::vector<Model> inputObjs{*self};
 
     auto result = co_await query.execute(inputObjs, transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
 
-    auto [_, objs] = *result;
+    auto [affectedRowCount, objs] = *result;
 
-    *self = objs[0];
-    setPersisted();
-    co_return objs[0];
+    if (not objs.empty()) {
+      setPersisted();
+      *self = objs[0];
+    }
+
+    co_return affectedRowCount;
   }
 
   Task<std::expected<Model, db::DatabaseError>> insert(db::ITransaction *transaction = nullptr) {
@@ -128,9 +128,12 @@ public:
 
     auto [_, objs] = *result;
 
-    *self = objs[0];
-    setPersisted();
-    co_return objs[0];
+    if (not objs.empty()) {
+      setPersisted();
+      *self = objs[0];
+    }
+
+    co_return *self;
   }
 
   Task<std::expected<Model, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
@@ -141,8 +144,10 @@ public:
       co_return std::unexpected(result.error());
     auto [_, objs] = *result;
 
-    *self = objs[0];
-    co_return objs[0];
+    if (not objs.empty())
+      *self = objs[0];
+
+    co_return *self;
   }
 
   Task<std::expected<Model, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
@@ -151,11 +156,14 @@ public:
     auto result = co_await DeleteQuery<Model>().where(p).execute(transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
+
     auto [_, objs] = *result;
-    if (objs.empty())
-      throw DatabaseException("Failed to delete object");
-    *self = objs[0];
-    co_return objs[0];
+    if (not objs.empty())
+      *self = objs[0];
+
+    resetPersisted();
+
+    co_return *self;
   }
 
   Task<std::expected<std::optional<Model>, db::DatabaseError>> reload(db::ITransaction *transaction = nullptr) {
@@ -170,8 +178,8 @@ public:
   }
 
   template <typename RelatedModel, FixedString RelationName = "", typename ThroughModel>
-  static Task<std::expected<size_t, db::DatabaseError>> upsertRelation(ThroughModel throughObj,
-                                                                       db::ITransaction *transaction = nullptr) {
+  static Task<std::expected<size_t, db::DatabaseError>> upsertRelationThrough(ThroughModel throughObj,
+                                                                              db::ITransaction *transaction = nullptr) {
     static constexpr auto relation = getManyToManyRelation<RelatedModel, RelationName>();
     using Relation = decltype(relation);
     static_assert(std::is_same_v<typename Relation::Through, ThroughModel>,
@@ -223,14 +231,11 @@ public:
         return std::tuple_cat(std::tuple{std::get<I>(throughFields).throughPtr}...);
       }(std::make_index_sequence<std::tuple_size_v<decltype(throughFields)>>{});
 
-      auto res = co_await throughObj.upsert(conflictFieldPtrs, transaction);
-      if (not res)
-        co_return std::unexpected(res.error());
-      co_return 1;
+      co_return co_await throughObj.upsert(conflictFieldPtrs, transaction);
     }
   }
 
-  template <FixedString RelationName = "", typename RelatedModel>
+  template <typename RelatedModel, FixedString RelationName = "">
   Task<std::expected<size_t, db::DatabaseError>> upsertRelation(const RelatedModel &relatedObj,
                                                                 db::ITransaction *transaction = nullptr) {
     static constexpr auto relation = getManyToManyRelation<RelatedModel, RelationName>();
@@ -290,7 +295,7 @@ public:
     }
   }
 
-  template <FixedString RelationName = "", typename RelatedModel>
+  template <typename RelatedModel, FixedString RelationName = "">
   Task<std::expected<size_t, db::DatabaseError>> removeRelation(const RelatedModel &relatedObj,
                                                                 db::ITransaction *transaction = nullptr) {
     static constexpr auto relation = getManyToManyRelation<RelatedModel, RelationName>();

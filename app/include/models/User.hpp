@@ -16,8 +16,8 @@ struct User : ActiveRecord<User, int64_t> {
   static constexpr std::string_view tableName = "users";
 
   PkType id;
-  std::optional<std::string> email;
   std::optional<std::string> name;
+  std::optional<std::string> email;
   std::optional<int64_t> age;
   std::optional<PkType> bestFriend;
   std::optional<PkType> mother;

@@ -648,108 +648,6 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
   // -- Database test routes -------------------------------
   // All live under /tests/db/* and interact with the 'users' table
 
-  // GET /tests/db/relations
-  router.get("/tests/db/relations", [](const HttpRequest &request) -> Task<Response> {
-    using namespace models;
-    using namespace testutil;
-    using Pu = Predicate<User>;
-    using Pp = Predicate<Post>;
-
-    json res = json::array();
-    unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
-    unwrap(co_await Post::bulkDestroy({true}), "bulkDestroy");
-
-    std::vector<User> userBatch;
-    userBatch.push_back({.email = "alice@example.com", .name = "Alice"});
-    userBatch.push_back({.email = "bob@example.com", .name = "Bob"});
-    userBatch.push_back({.email = "joe@example.com", .name = "Joe"});
-    userBatch.push_back({.email = "john@example.com", .name = "John"});
-
-    auto [insertedUserCount, insertedUserRows] = unwrap(co_await User::bulkInsert(userBatch), "bulkInsert");
-    userBatch = insertedUserRows;
-
-    auto users = unwrap(co_await User::all().select(), "get all users");
-
-    std::vector<Post> postBatch;
-    postBatch.push_back({.title = "post 1", .content = "lorem ipsum", .user = users[0]});
-    postBatch.push_back({.title = "post 2", .content = "ipsum", .user = users[1]});
-    postBatch.push_back({.title = "post 3", .content = "loripsum", .user = users[2]});
-    postBatch.push_back({.title = "post 4", .content = "lor", .user = users[3]});
-
-    auto [insertedPostCount, insertedPostRows] = unwrap(co_await Post::bulkInsert(postBatch), "bulk user Insert");
-    postBatch = insertedPostRows;
-
-    auto posts = unwrap(co_await Post::all().select(), "get all posts");
-
-    User alice = users[0];
-    alice.age = 34;
-    alice.bestFriend = users[3];
-    unwrap(co_await alice.save(), "alice update");
-
-    User bob = users[1];
-    bob.age = 12;
-    bob.mother = alice;
-    bob.bestFriend = users[2];
-    unwrap(co_await bob.save(), "bob update");
-
-    User joe = users[2];
-    joe.mother = alice;
-    joe.bestFriend = alice;
-    unwrap(co_await UpdateQuery<User>()
-               .where(Pu::equals(&User::id, joe.id))
-               .field(&User::mother)
-               .field(&User::bestFriend)
-               .execute(joe),
-           " joe update query");
-    SPDLOG_DEBUG(joe.toString());
-
-    User john = users[3];
-    john.bestFriend = bob;
-    unwrap(co_await john.save(), "john update");
-
-    Post post1 = posts[0];
-    post1.content = "lorem ipsum dolor sit amet";
-    unwrap(co_await post1.save(), "post1 update");
-
-    Follow<User> followObj = {.follower = john, .followee = alice, .randomNum = 123, .str = "hello"};
-    unwrap(co_await User::upsertRelation<User, "follows">(followObj), "followObj upsert");
-
-    unwrap(co_await john.upsertRelation<"follows">(alice), "follow");
-    unwrap(co_await john.upsertRelation<"friendship">(alice), "follow");
-    unwrap(co_await john.upsertRelation<"likes">(posts[1]), "follow");
-
-    PostLike<User, Post> ob = {.userId = john, .postId = post1};
-    unwrap(co_await User::upsertRelation<Post, "likes">(ob), "ob upsert");
-
-    DefaultThroughModel<User, User, "user_friend_user"> friendObj = {.targetPk = alice, .definerPk = bob};
-    unwrap(co_await User::upsertRelation<User, "friendship">(friendObj), "friendObj upsert");
-
-    auto johnFollowing = unwrap(co_await john.manyRelated<User, "follows">().select());
-    auto johnFollowers = unwrap(co_await john.manyRelated<User, "follows">(LookupDirection::REVERSE).select());
-
-    auto qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "friendship">())::Through::all().execute());
-    SPDLOG_DEBUG(qr.toString());
-
-    qr = unwrap(co_await decltype(User::getManyToManyRelation<User, "follows">())::Through::all().execute());
-    SPDLOG_DEBUG(qr.toString());
-
-    qr = unwrap(co_await decltype(User::getManyToManyRelation<Post, "likes">())::Through::all().execute());
-    SPDLOG_DEBUG(qr.toString());
-
-    unwrap(co_await john.upsertRelation<"likes">(post1));
-    unwrap(co_await bob.upsertRelation<"likes">(post1));
-    unwrap(co_await joe.upsertRelation<"likes">(post1));
-
-    res.push_back(alice.toJson());
-    res.push_back(bob.toJson());
-    res.push_back(joe.toJson());
-
-    unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
-    unwrap(co_await Post::bulkDestroy({true}), "bulkDestroy");
-
-    co_return HttpResponse(200, "application/json", res.dump(2));
-  });
-
   // GET /tests/db/single_test
   // Runs a fixed sequence of ORM checks. Each step is isolated: a failure records that
   // step as failed and the suite continues. Response is a JSON summary with a per-step
@@ -781,7 +679,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     co_await runner.run("single insert", [&greg]() -> Task<void> {
       // save() doesn't mutate `alice` in place — capture the returned, DB-hydrated model.
-      greg = unwrap(co_await greg.save(), "save");
+      unwrap(co_await greg.save(), "save");
       expect(greg.id > 0, "id not populated after insert");
     });
 
@@ -797,7 +695,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     co_await runner.run("single update", [&greg]() -> Task<void> {
       greg.age = 20;
       greg.password = std::nullopt;
-      greg = unwrap(co_await greg.save(), "save");
+      unwrap(co_await greg.save(), "save");
 
       auto found = unwrap(co_await User::find(greg.id), "find");
       expect(found.has_value() && found->age == 20, "age not updated");
@@ -814,10 +712,10 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     // --- 5. Bulk insert ---
     co_await runner.run("bulk insert", []() -> Task<void> {
       std::vector<User> batch;
-      batch.push_back({.email = "alice@example.com", .name = "Alice"});
-      batch.push_back({.email = "bob@example.com", .name = "Bob"});
-      batch.push_back({.email = "joe@example.com", .name = "Joe"});
-      batch.push_back({.email = "john@example.com", .name = "John"});
+      batch.push_back({.name = "Alice", .email = "alice@example.com"});
+      batch.push_back({.name = "Bob", .email = "bob@example.com"});
+      batch.push_back({.name = "Joe", .email = "joe@example.com"});
+      batch.push_back({.name = "John", .email = "john@example.com"});
 
       auto [insertedCount, insertedRows] = unwrap(co_await User::bulkInsert(batch), "bulkInsert");
       expect(insertedCount == 4, "expected 4 rows, got " + std::to_string(insertedCount));
@@ -857,7 +755,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     co_await runner.run("transaction commit", [db, &bob]() -> Task<void> {
       db::ScopedTransaction transaction(db);
       co_await transaction.begin();
-      bob = unwrap(co_await bob.save(&transaction), "save");
+      unwrap(co_await bob.save(&transaction), "save");
       auto res = co_await transaction.commit();
       expect(res, "commit() returned false");
 
@@ -901,9 +799,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       {
         db::ScopedTransaction transaction(db);
         co_await transaction.begin();
-        auto saved = unwrap(co_await carol.save(&transaction), "save");
-        carolId = saved.id;
-        expect(carolId > 0, "id not populated after insert inside transaction");
+        unwrap(co_await carol.save(&transaction), "save");
+        expect(carol.id > 0, "id not populated after insert inside transaction");
         expect(co_await transaction.rollback(), "rollback() returned false");
       }
       // carolId was populated by the insert even though the row never actually landed —
@@ -915,6 +812,303 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     // --- 11. Leave the table empty for the next run ---
     co_await runner.run("final cleanup",
                         []() -> Task<void> { unwrap(co_await User::bulkDestroy({true}), "bulkDestroy"); });
+
+    json summary = runner.toJson();
+    int status = summary["allPassed"].get<bool>() ? 200 : 500;
+    co_return HttpResponse(status, "application/json", summary.dump(2));
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /tests/db/relations_test
+  // ---------------------------------------------------------------------------
+  router.get("/tests/db/relations_test", [db](const HttpRequest &request) -> Task<Response> {
+    using namespace models;
+    using namespace testutil;
+    using Pu = Predicate<User>;
+    using Pp = Predicate<Post>;
+    using Pfl = Predicate<PostLike<User, Post>>;
+    using Pf = Predicate<Follow<User>>;
+
+    TestRunner runner;
+
+    // =========================================================================
+    // 0. Cleanup – start from a known-empty state
+    // =========================================================================
+    co_await runner.run("cleanup", [db]() -> Task<void> {
+      // Order matters because of FKs / cascades
+      unwrap(co_await PostLike<User, Post>::bulkDestroy({true}), "PostLike bulkDestroy");
+      unwrap(co_await Follow<User>::bulkDestroy({true}), "Follow bulkDestroy");
+      unwrap(co_await Post::bulkDestroy({true}), "Post bulkDestroy");
+      unwrap(co_await User::bulkDestroy({true}), "User bulkDestroy");
+
+      // Also wipe the default through table used by friendship
+      // (DefaultThroughModel creates "user_friend_user")
+      // If you have a direct way to clear it, use it; otherwise the cascade
+      // from User destroy should be enough in most setups.
+      expect(unwrap(co_await User::all().count(), "count") == 0, "users not empty");
+      expect(unwrap(co_await Post::all().count(), "count") == 0, "posts not empty");
+    });
+
+    // =========================================================================
+    // 1. Seed users
+    // =========================================================================
+    User alice, bob, charlie, diana;
+    co_await runner.run("seed users", [&]() -> Task<void> {
+      alice = {.name = "Alice", .email = "alice@example.com", .age = 30};
+      bob = {.name = "Bob", .email = "bob@example.com", .age = 28};
+      charlie = {.name = "Charlie", .email = "charlie@example.com", .age = 25};
+      diana = {.name = "Diana", .email = "diana@example.com", .age = 22};
+
+      unwrap(co_await alice.save(), "alice save");
+      unwrap(co_await bob.save(), "bob save");
+      unwrap(co_await charlie.save(), "charlie save");
+      unwrap(co_await diana.save(), "diana save");
+
+      expect(alice.id > 0 && bob.id > 0 && charlie.id > 0 && diana.id > 0, "ids not set");
+    });
+
+    // =========================================================================
+    // 2. Many-to-one  (Post → User)  + reverse one-to-many
+    // =========================================================================
+    Post post1, post2;
+    co_await runner.run("many-to-one Post.user + reverse related()", [&]() -> Task<void> {
+      post1 = {.title = "Hello", .content = "world", .user = alice.id};
+      post2 = {.title = "Second", .content = "post", .user = alice.id};
+
+      unwrap(co_await post1.save(), "post1 save");
+      unwrap(co_await post2.save(), "post2 save");
+
+      // Forward: ref<>()
+      auto author = unwrap(co_await post1.ref<User>().first(), "ref author");
+      expect(author.has_value() && author->id == alice.id, "ref() did not return Alice");
+
+      // Reverse: related<>()
+      auto alicePosts = unwrap(co_await alice.related<Post>().select(), "related posts");
+      expect(alicePosts.size() == 2, "expected 2 posts for Alice, got " + std::to_string(alicePosts.size()));
+
+      // Explicit related name (should be the same)
+      auto alicePostsNamed = unwrap(co_await alice.related<Post, "user_posts">().select(), "named related");
+      expect(alicePostsNamed.size() == 2, "named related mismatch");
+    });
+
+    // =========================================================================
+    // 3. Optional FK + OnDelete::SET_NULL
+    // =========================================================================
+    co_await runner.run("OnDelete::SET_NULL", [&]() -> Task<void> {
+      // Destroy Alice – posts should survive with user_id = NULL
+      unwrap(co_await alice.destroy(), "destroy alice");
+
+      auto p1 = unwrap(co_await Post::find(post1.id), "find post1");
+      auto p2 = unwrap(co_await Post::find(post2.id), "find post2");
+      expect(p1.has_value() && not p1->user.has_value(), "post1.user should be null after SET_NULL");
+      expect(p2.has_value() && not p2->user.has_value(), "post2.user should be null after SET_NULL");
+
+      // Re-create Alice so later tests have her
+      alice = {.name = "Alice", .email = "alice@example.com", .age = 30};
+      unwrap(co_await alice.save(), "recreate alice");
+    });
+
+    // =========================================================================
+    // 4. Self-referential many-to-one  (bestFriend / mother)
+    // =========================================================================
+    co_await runner.run("self-ref many-to-one (bestFriend + mother)", [&]() -> Task<void> {
+      bob.bestFriend = alice.id;
+      bob.mother = diana.id;
+      unwrap(co_await bob.save(), "bob update");
+
+      // Forward
+      auto best = unwrap(co_await bob.ref<User, &User::bestFriend>().first(), "ref bestFriend");
+      expect(best.has_value() && best->id == alice.id, "bestFriend mismatch");
+
+      auto mom = unwrap(co_await bob.ref<User, &User::mother>().first(), "ref mother");
+      expect(mom.has_value() && mom->id == diana.id, "mother mismatch");
+
+      // Reverse (relatedName)
+      auto bestFriendsOfAlice = unwrap(co_await alice.related<User, "best_friends">().select(), "best_friends");
+      expect(bestFriendsOfAlice.size() == 1 && bestFriendsOfAlice[0].id == bob.id,
+             "expected Bob as best_friend of Alice");
+
+      auto childrenOfDiana = unwrap(co_await diana.related<User, "children">().select(), "children");
+      expect(childrenOfDiana.size() == 1 && childrenOfDiana[0].id == bob.id, "expected Bob as child of Diana");
+    });
+
+    // =========================================================================
+    // 5. Many-to-many – likes (Post ↔ User via PostLike) asymmetric
+    // =========================================================================
+    co_await runner.run("M2M likes – upsert / manyRelated / remove", [&]() -> Task<void> {
+      // Re-assign posts to Alice
+      post1.user = alice.id;
+      post2.user = alice.id;
+
+      unwrap(co_await post1.save(), "re-assign post1");
+      unwrap(co_await post2.save(), "re-assign post2");
+
+      // ---------- A. Call from the DEFINER side first (Post) ----------
+      auto cnt = unwrap(co_await post1.upsertRelation<User, "likes">(alice), "post1 likes alice");
+      expect(cnt == 1, "expected 1 from Post side");
+
+      // Idempotent
+      cnt = unwrap(co_await post1.upsertRelation<User, "likes">(alice), "post1 likes alice again");
+      expect(cnt == 0, "expected 0 on duplicate");
+
+      // ---------- B. Call from the TARGET side (User) ----------
+      cnt = unwrap(co_await bob.upsertRelation<Post, "likes">(post1), "bob likes post1");
+      expect(cnt == 1, "bob like insert");
+
+      // ---------- C. manyRelated from both sides ----------
+      auto aliceLikes = unwrap(co_await alice.manyRelated<Post, "likes">().select(), "alice likes");
+      expect(aliceLikes.size() == 1, "Alice should like 1 post so far");
+
+      auto post1Likers = unwrap(co_await post1.manyRelated<User, "likes">().select(), "post1 likers");
+      expect(post1Likers.size() == 2, "post1 should have 2 likers (alice + bob)");
+
+      // ---------- D. remove ----------
+      auto removed = unwrap(co_await alice.removeRelation<Post, "likes">(post1), "remove like");
+      expect(removed == 1, "expected 1 row removed");
+
+      aliceLikes = unwrap(co_await alice.manyRelated<Post, "likes">().select(), "after remove");
+      expect(aliceLikes.empty(), "Alice should have 0 likes left");
+    });
+
+    // =========================================================================
+    // 6. Many-to-many with extra fields on through model (PostLike.likedAt)
+    // =========================================================================
+    co_await runner.run("M2M with through-object upsert (extra columns)", [&]() -> Task<void> {
+      PostLike<User, Post> likeRow;
+      likeRow.userId = charlie.id;
+      likeRow.postId = post1.id;
+      // likedAt is auto-generated
+
+      auto cnt = unwrap(co_await Post::upsertRelationThrough<User, "likes">(likeRow), "upsert through obj");
+      expect(cnt >= 1, "through upsert failed");
+
+      auto charlieLikes = unwrap(co_await charlie.manyRelated<Post, "likes">().select(), "charlie likes");
+      expect(charlieLikes.size() == 1 && charlieLikes[0].id == post1.id, "charlie should like post1");
+    });
+
+    // =========================================================================
+    // 7. Symmetric many-to-many  – friendship (DOUBLE_ROW)
+    // =========================================================================
+    co_await runner.run("symmetric M2M friendship (DOUBLE_ROW)", [&]() -> Task<void> {
+      // Alice ↔ Bob
+      auto cnt = unwrap(co_await alice.upsertRelation<User, "friendship">(bob), "friend alice-bob");
+      expect(cnt == 2, "DOUBLE_ROW should insert 2 rows"); // one each direction
+
+      // Idempotent
+      cnt = unwrap(co_await alice.upsertRelation<User, "friendship">(bob), "friend again");
+      expect(cnt == 0, "should be 0 on duplicate");
+
+      // Alice ↔ Charlie
+      cnt = unwrap(co_await alice.upsertRelation<User, "friendship">(charlie), "friend alice-charlie");
+      expect(cnt == 2, "second friendship");
+
+      // Query both directions
+      auto aliceFriends = unwrap(co_await alice.manyRelated<User, "friendship">().select(), "alice friends");
+      expect(aliceFriends.size() == 2, "Alice should have 2 friends");
+
+      auto bobFriends = unwrap(co_await bob.manyRelated<User, "friendship">().select(), "bob friends");
+      expect(bobFriends.size() == 1 && bobFriends[0].id == alice.id, "Bob should only see Alice");
+
+      // Remove (should delete both rows)
+      auto removed = unwrap(co_await alice.removeRelation<User, "friendship">(bob), "unfriend");
+      expect(removed == 2, "DOUBLE_ROW remove should delete 2 rows");
+
+      aliceFriends = unwrap(co_await alice.manyRelated<User, "friendship">().select(), "after unfriend");
+      expect(aliceFriends.size() == 1, "only Charlie left");
+    });
+
+    // =========================================================================
+    // 8. Asymmetric self-referential M2M – follows (via Follow)
+    // =========================================================================
+    co_await runner.run("asymmetric M2M follows", [&]() -> Task<void> {
+      // Alice follows Bob
+      auto cnt = unwrap(co_await alice.upsertRelation<User, "follows">(bob), "alice follows bob");
+      expect(cnt == 1, "follow insert");
+
+      // Bob follows Alice (different direction – allowed)
+      cnt = unwrap(co_await bob.upsertRelation<User, "follows">(alice), "bob follows alice");
+      expect(cnt == 1, "reverse follow");
+
+      // Alice follows Charlie
+      cnt = unwrap(co_await alice.upsertRelation<User, "follows">(charlie), "alice follows charlie");
+      expect(cnt == 1, "second follow");
+
+      // Query following (FORWARD)
+      auto aliceFollowing =
+          unwrap(co_await alice.manyRelated<User, "follows">(LookupDirection::FORWARD).select(), "alice following");
+      expect(aliceFollowing.size() == 2, "Alice should follow 2 people");
+
+      // Query followers (REVERSE)
+      auto aliceFollowers =
+          unwrap(co_await alice.manyRelated<User, "follows">(LookupDirection::REVERSE).select(), "alice followers");
+      expect(aliceFollowers.size() == 1 && aliceFollowers[0].id == bob.id, "Alice should have 1 follower (Bob)");
+
+      // Remove
+      auto removed = unwrap(co_await alice.removeRelation<User, "follows">(bob), "unfollow");
+      expect(removed == 1, "unfollow count");
+
+      aliceFollowing = unwrap(co_await alice.manyRelated<User, "follows">().select(), "after unfollow");
+      expect(aliceFollowing.size() == 1, "only Charlie left");
+    });
+
+    // =========================================================================
+    // 9. Through model with extra data + unique constraint
+    // =========================================================================
+    co_await runner.run("Follow through model extra fields + uniqueness", [&]() -> Task<void> {
+      Follow<User> f;
+      f.follower = diana.id;
+      f.followee = alice.id;
+      f.randomNum = 42;
+      f.str = "hello";
+
+      auto cnt = unwrap(co_await User::upsertRelationThrough<User, "follows">(f), "upsert follow with extras");
+      expect(cnt >= 1, "follow with extras failed");
+    });
+
+    // =========================================================================
+    // 10. Cascade delete on through tables
+    // =========================================================================
+    co_await runner.run("CASCADE on through tables", [&]() -> Task<void> {
+      // Destroy Charlie – his likes and follows should disappear
+      unwrap(co_await charlie.destroy(), "destroy charlie");
+
+      auto remainingLikes = unwrap(co_await PostLike<User, Post>::all().count(), "likes count");
+      // Only the likes that did not involve Charlie should remain
+      // (exact number depends on previous steps, but Charlie’s row must be gone)
+
+      auto charlieFollows = unwrap(co_await Follow<User>::filter(Pf::equals(&Follow<User>::follower, charlie.id) or
+                                                                 Pf::equals(&Follow<User>::followee, charlie.id))
+                                       .count(),
+                                   "charlie follows left");
+      expect(charlieFollows == 0, "Charlie’s follow rows should have been cascaded");
+    });
+
+    // =========================================================================
+    // 11. Empty / missing relation edge cases
+    // =========================================================================
+    co_await runner.run("empty relation queries", [&]() -> Task<void> {
+      User lonely = {.name = "Lonely", .email = "lonely@example.com"};
+      unwrap(co_await lonely.save(), "lonely save");
+
+      auto friends = unwrap(co_await lonely.manyRelated<User, "friendship">().select(), "lonely friends");
+      expect(friends.empty(), "lonely should have 0 friends");
+
+      auto following = unwrap(co_await lonely.manyRelated<User, "follows">().select(), "lonely following");
+      expect(following.empty(), "lonely should follow 0");
+
+      auto posts = unwrap(co_await lonely.related<Post>().select(), "lonely posts");
+      expect(posts.empty(), "lonely should have 0 posts");
+    });
+
+    // =========================================================================
+    // Final cleanup (optional – keeps DB tidy)
+    // =========================================================================
+    co_await runner.run("final cleanup", []() -> Task<void> {
+      unwrap(co_await PostLike<User, Post>::bulkDestroy({true}), "final PostLike");
+      unwrap(co_await Follow<User>::bulkDestroy({true}), "final Follow");
+      unwrap(co_await Post::bulkDestroy({true}), "final Post");
+      unwrap(co_await User::bulkDestroy({true}), "final User");
+    });
 
     json summary = runner.toJson();
     int status = summary["allPassed"].get<bool>() ? 200 : 500;

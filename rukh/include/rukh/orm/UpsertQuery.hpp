@@ -17,6 +17,8 @@
 namespace rukh::orm {
 
 // TODO: add conflict field validation. Decide what an empty conflictColumns_ means.
+//
+// TODO: Figure out a way to know whether it's an update or an insert (Without schema changes, or getting DB specific.).
 template <typename Model> class UpsertQuery : public QueryBase<UpsertQuery<Model>> {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>

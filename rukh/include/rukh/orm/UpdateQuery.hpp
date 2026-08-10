@@ -15,6 +15,7 @@
 #include <rukh/orm/hydrators.hpp>
 #include <sstream>
 
+// TODO: figure out proper aliasing (VEERY LOWW priority)
 namespace rukh::orm {
 
 template <typename Model>
@@ -32,7 +33,6 @@ public:
     co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
   }
 
-  // TODO: doesn't support proper aliasing (VEERY LOWW priority)
   template <typename FieldPtr> UpdateQuery &field(FieldPtr fieldPtr) {
     columns_.push_back(Model::columnNameOf(fieldPtr));
     return *this;

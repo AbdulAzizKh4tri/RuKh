@@ -257,7 +257,7 @@ public:
       }
     }
     auto objs = (*insertResult).second;
-    co_return std::make_pair(Model{}, true);
+    co_return std::make_pair(objs[0], true);
   }
 
   // Returns unhydrated QueryResult Object

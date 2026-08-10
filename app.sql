@@ -19,7 +19,7 @@ CREATE TABLE posts (
     user_id                INTEGER,
     created_at             INTEGER NOT NULL DEFAULT (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)),
     updated_at             INTEGER NOT NULL DEFAULT (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE 
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE post_like_user (
