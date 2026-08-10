@@ -109,7 +109,6 @@ constexpr auto oneToOne(FieldTypes DefinerModel::*...ptrs) {
 
 enum class ThroughPtrType { TARGET, DEFINER };
 
-// TODO: make this throughFieldPair, have both models' correlated fields in it;
 template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
   using Model = get_class_t<ModelPtr>;
 

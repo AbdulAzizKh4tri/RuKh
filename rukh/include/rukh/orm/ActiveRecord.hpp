@@ -52,6 +52,17 @@ public:
     co_return *result;
   }
 
+  template <typename FieldsTuple>
+  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  bulkUpsert(const std::vector<Model> &objs, FieldsTuple fieldsTuple, db::ITransaction *transaction = nullptr) {
+    UpsertQuery<Model> query;
+    std::apply([&](auto &&...col) { (query.conflictFields(col), ...); }, fieldsTuple);
+    auto result = co_await query.execute(objs, transaction, true);
+    if (not result)
+      co_return std::unexpected(result.error());
+    co_return *result;
+  }
+
   template <typename FieldTuple>
   static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   bulkUpdate(const Model &newObj, FieldTuple fields, const Predicate<Model> &p,
