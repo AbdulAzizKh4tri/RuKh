@@ -32,7 +32,7 @@ using namespace rukh;
 
 void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool *threadPool, db::IDatabase *db) {
 
-  router.get("/", [&errorFactory](const HttpRequest &request) -> Task<Response> {
+  router.get("/", [](const HttpRequest &request) -> Task<Response> {
     auto name = request.getQueryParam("name");
 
     HttpResponse response(200);
@@ -663,11 +663,11 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     // --- 0. Start from a known-empty table so the suite is idempotent ---
     co_await runner.run("cleanup", [db]() -> Task<void> {
       unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
-      auto count = unwrap(co_await User::all().count(), "count");
+      auto count = unwrap(co_await User::queryAll().count(), "count");
       expect(count == 0, "expected 0 rows after cleanup, got " + std::to_string(count));
 
       unwrap(co_await Post::bulkDestroy({true}), "bulkDestroy");
-      count = unwrap(co_await Post::all().count(), "count");
+      count = unwrap(co_await Post::queryAll().count(), "count");
       expect(count == 0, "expected 0 rows after cleanup, got " + std::to_string(count));
     });
 
@@ -705,7 +705,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     // --- 4. Single destroy ---
     co_await runner.run("single destroy", [&greg]() -> Task<void> {
       unwrap(co_await greg.destroy(), "destroy");
-      auto count = unwrap(co_await User::all().count(), "count");
+      auto count = unwrap(co_await User::queryAll().count(), "count");
       expect(count == 0, "expected 0 rows after destroy, got " + std::to_string(count));
     });
 
@@ -741,7 +741,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     co_await runner.run("bulk destroy", []() -> Task<void> {
       auto [destroyedCount, destroyedRows] = unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
       expect(destroyedCount == 4, "expected 4 rows, got " + std::to_string(destroyedCount));
-      auto count = unwrap(co_await User::all().count(), "count");
+      auto count = unwrap(co_await User::queryAll().count(), "count");
       expect(count == 0, "expected 0 rows, got " + std::to_string(count));
     });
 
@@ -845,8 +845,8 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       // (DefaultThroughModel creates "user_friend_user")
       // If you have a direct way to clear it, use it; otherwise the cascade
       // from User destroy should be enough in most setups.
-      expect(unwrap(co_await User::all().count(), "count") == 0, "users not empty");
-      expect(unwrap(co_await Post::all().count(), "count") == 0, "posts not empty");
+      expect(unwrap(co_await User::queryAll().count(), "count") == 0, "users not empty");
+      expect(unwrap(co_await Post::queryAll().count(), "count") == 0, "posts not empty");
     });
 
     // =========================================================================
@@ -1072,7 +1072,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       // Destroy Charlie – his likes and follows should disappear
       unwrap(co_await charlie.destroy(), "destroy charlie");
 
-      auto remainingLikes = unwrap(co_await PostLike<User, Post>::all().count(), "likes count");
+      auto remainingLikes = unwrap(co_await PostLike<User, Post>::queryAll().count(), "likes count");
       // Only the likes that did not involve Charlie should remain
       // (exact number depends on previous steps, but Charlie’s row must be gone)
 
@@ -1132,7 +1132,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     co_await runner.run("cleanup", [db]() -> Task<void> {
       unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
 
-      auto count = unwrap(co_await User::all().count(), "count");
+      auto count = unwrap(co_await User::queryAll().count(), "count");
       expect(count == 0, "expected empty users table");
     });
 
@@ -1566,7 +1566,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
     co_await runner.run("final cleanup", []() -> Task<void> {
       unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
 
-      auto count = unwrap(co_await User::all().count(), "count");
+      auto count = unwrap(co_await User::queryAll().count(), "count");
       expect(count == 0, "expected empty users table after cleanup");
     });
 

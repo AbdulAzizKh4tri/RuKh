@@ -97,14 +97,20 @@ public:
   }
 
   template <typename FieldPtr>
-  SelectQuery &field(FieldPtr fieldPtr, const std::string &tableAlias = "", const std::string &columnAlias = "") {
-    columns_.push_back(getColumnWithAliases(fieldPtr, tableAlias, columnAlias));
+  SelectQuery &field(FieldPtr fieldPtr, const std::string &func = "", const std::string &tableAlias = "",
+                     const std::string &columnAlias = "") {
+    columns_.push_back(getFinalColumn(fieldPtr, func, tableAlias, columnAlias));
     return *this;
   }
 
   template <typename FieldPtr>
   SelectQuery &orderBy(FieldPtr fieldPtr, Sorting sorting = Sorting::ASC, const std::string &tableAlias = "") {
-    orderBy_.emplace_back(getColumnWithAliases(fieldPtr, tableAlias), sorting);
+    orderBy_.emplace_back(getFinalColumn(fieldPtr, "", tableAlias, ""), sorting);
+    return *this;
+  }
+
+  SelectQuery &distinct() {
+    distinct_ = true;
     return *this;
   }
 
@@ -112,6 +118,8 @@ public:
     limit_ = std::nullopt;
     return *this;
   }
+
+  std::optional<size_t> getLimit() const { return limit_; }
 
   SelectQuery &limit(size_t limit) {
     limit_ = limit;
@@ -123,13 +131,20 @@ public:
     return *this;
   }
 
+  std::optional<size_t> getOffset() const { return offset_; }
+
   SelectQuery &offset(size_t offset) {
     offset_ = offset_.value_or(0) + offset;
     return *this;
   }
 
   template <typename FieldPtr> SelectQuery &groupBy(FieldPtr fieldPtr, const std::string &tableAlias = "") {
-    groupBy_.push_back(getColumnWithAliases(fieldPtr, tableAlias));
+    groupBy_.push_back(getFinalColumn(fieldPtr, "", tableAlias, ""));
+    return *this;
+  }
+
+  SelectQuery &having(const Predicate<Models...> &p) {
+    havingPredicate_ = p;
     return *this;
   }
 
@@ -291,6 +306,8 @@ public:
     return *this;
   }
 
+  size_t getColumnCount() const { return columns_.size(); }
+
 private:
   struct Join {
     std::string_view tableName;
@@ -308,6 +325,8 @@ private:
   std::vector<std::string> groupBy_;
   std::optional<size_t> limit_;
   std::optional<size_t> offset_;
+  std::optional<Predicate<Models...>> havingPredicate_ = std::nullopt;
+  bool distinct_ = false;
 
   static constexpr std::string_view joinTypeStrings[] = {" JOIN ", " LEFT JOIN ", " RIGHT JOIN ", " FULL JOIN ",
                                                          " CROSS JOIN "};
@@ -322,14 +341,21 @@ private:
   }
 
   template <typename FieldPtr>
-  std::string getColumnWithAliases(FieldPtr fieldPtr, const std::string &tableAlias, const std::string &columnAlias) {
+  std::string getFinalColumn(FieldPtr fieldPtr, const std::string &func, const std::string &tableAlias,
+                             const std::string &columnAlias) {
+
     using FieldPtrModel = get_class_t<FieldPtr>;
     std::string asColumnAlias = columnAlias.empty() ? "" : " AS " + columnAlias;
-    if (tableAlias.empty())
-      return getAlias(get_index_of_v<FieldPtrModel, ModelsTuple>) + "." + FieldPtrModel::columnNameOf(fieldPtr) +
-             asColumnAlias;
-    return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr) + asColumnAlias;
+    std::string col;
+    if (tableAlias.empty()) {
+      col = getAlias(get_index_of_v<FieldPtrModel, ModelsTuple>) + "." + FieldPtrModel::columnNameOf(fieldPtr);
+    } else {
+      col = tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr);
+    }
+    return (func.empty() ? func + "(" + col + ")" : col) + asColumnAlias;
   }
+
+  // TODO: make bulidSelectSQLAndSetParams const
 
   void buildSelectSqlAndSetParams(const size_t depth = 0, std::optional<size_t> limit = std::nullopt) {
     params_.clear();
@@ -343,10 +369,12 @@ private:
       auto sql2 = result2.first;
 
       if (children[0].setQueryType)
-        sql1 = "SELECT * FROM ( " + sql1 + ") AS sub_" + std::to_string(depth) + "_0";
+        sql1 = "SELECT " + std::string(distinct_ ? "DISTINCT" : "") + " * FROM ( " + sql1 + ") AS sub_" +
+               std::to_string(depth) + "_0";
 
       if (children[1].setQueryType)
-        sql2 = "SELECT * FROM ( " + sql2 + ") AS sub_" + std::to_string(depth) + "_1";
+        sql2 = "SELECT " + std::string(distinct_ ? "DISTINCT" : "") + " * FROM ( " + sql2 + ") AS sub_" +
+               std::to_string(depth) + "_1";
 
       ss << sql1 << to_string(*setQueryType) << sql2;
       sql_ = ss.str();
@@ -354,7 +382,8 @@ private:
       params_.insert(params_.end(), result2.second.begin(), result2.second.end());
       return;
     }
-    ss << "SELECT ";
+
+    ss << "SELECT " << (distinct_ ? " DISTINCT " : "");
 
     if (columns_.empty()) {
       constexpr auto mainModelColumns = Model::columns();
@@ -396,6 +425,10 @@ private:
       ss << " GROUP BY " << groupBy_.at(0);
       for (size_t i = 1; i < groupBy_.size(); i++) {
         ss << ", " << groupBy_.at(i);
+      }
+
+      if (havingPredicate_) {
+        ss << " HAVING " << havingPredicate_.value().resolvePredicates(params_);
       }
     }
 

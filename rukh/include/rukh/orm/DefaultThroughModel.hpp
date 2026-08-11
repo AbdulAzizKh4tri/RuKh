@@ -27,8 +27,8 @@ struct DefaultThroughModel : public ActiveRecord<DefaultThroughModel<TargetModel
                .dbName = "id",
                .isPrimaryKey = true,
                .autoGenerateMode = AutoGenerate::DB_INCREMENT},
-        Column{.fieldPtr = &DefaultThroughModel::targetPk, .dbName = "pkA", .index = true},
-        Column{.fieldPtr = &DefaultThroughModel::definerPk, .dbName = "pkB", .index = true},
+        Column{.fieldPtr = &DefaultThroughModel::targetPk, .dbName = "pkA"},
+        Column{.fieldPtr = &DefaultThroughModel::definerPk, .dbName = "pkB"},
     };
   }
 

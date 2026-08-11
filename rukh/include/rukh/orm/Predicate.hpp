@@ -32,7 +32,7 @@ enum class Operator {
   BETWEEN
 };
 
-template <typename... Models> struct Predicate {
+template <typename ColumnResolver, typename... Models> struct BasePredicate {
   using ModelsTuple = std::tuple<Models...>;
 
   static constexpr std::string_view opStrings[] = {
@@ -58,7 +58,7 @@ template <typename... Models> struct Predicate {
   Operator op;                     // only used if
   std::vector<db::DbValue> values; // Kind::Leaf
 
-  std::vector<Predicate> children;
+  std::vector<BasePredicate> children;
 
   std::string lhsFunction;
   std::string rhsFunction;
@@ -66,18 +66,18 @@ template <typename... Models> struct Predicate {
   //===============CONSTRUCTORS===============
 
   // custom string escape hatches
-  Predicate(const std::string &str, const std::vector<db::DbValue> &vals)
+  BasePredicate(const std::string &str, const std::vector<db::DbValue> &vals)
       : predicateType(PredicateType::STRING), columnA(str) {
     values.insert(values.end(), vals.begin(), vals.end());
   }
 
-  Predicate(const std::string &col, Operator opr, const std::vector<db::DbValue> &vals)
+  BasePredicate(const std::string &col, Operator opr, const std::vector<db::DbValue> &vals)
       : predicateType(PredicateType::LEAF), op(opr), columnA(col) {
     values.insert(values.end(), vals.begin(), vals.end());
   }
 
   // bool preds
-  Predicate(bool val) {
+  BasePredicate(bool val) {
     if (val)
       predicateType = PredicateType::TRUE;
     else
@@ -86,25 +86,25 @@ template <typename... Models> struct Predicate {
 
   // field to values
   template <typename FieldPtr>
-  Predicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
-            const std::string &tableAlias)
-      : predicateType(PredicateType::LEAF), columnA(getColumnWithTableAlias(fieldPtr, tableAlias)), op(opr) {
+  BasePredicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
+                const std::string &tableAlias)
+      : predicateType(PredicateType::LEAF), columnA(getColumnWithAlias(fieldPtr, tableAlias)), op(opr) {
     values.insert(values.end(), vals.begin(), vals.end());
   }
 
   // field to values with functions
   template <typename FieldPtr>
-  Predicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
-            const std::string &lhsFunc, const std::string &rhsFunc, const std::string &tableAlias)
-      : Predicate(fieldPtr, opr, vals, tableAlias) {
+  BasePredicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
+                const std::string &lhsFunc, const std::string &rhsFunc, const std::string &tableAlias)
+      : BasePredicate(fieldPtr, opr, vals, tableAlias) {
     lhsFunction = lhsFunc;
     rhsFunction = rhsFunc;
   }
 
   // field to Subquery
   template <typename FieldPtr>
-  Predicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &tableAlias)
-      : predicateType(PredicateType::SubQuery), columnA(getColumnWithTableAlias(fieldPtr, tableAlias)), op(opr) {
+  BasePredicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &tableAlias)
+      : predicateType(PredicateType::SubQuery), columnA(getColumnWithAlias(fieldPtr, tableAlias)), op(opr) {
     auto sqlAndParams = subQuery.getSqlAndParams();
     columnB = sqlAndParams.first;
     values.insert(values.end(), sqlAndParams.second.begin(), sqlAndParams.second.end());
@@ -112,48 +112,48 @@ template <typename... Models> struct Predicate {
 
   // field to Subquery with functions
   template <typename FieldPtr>
-  Predicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &lhsFunc,
-            const std::string &tableAlias)
-      : Predicate(fieldPtr, opr, subQuery, tableAlias) {
+  BasePredicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &lhsFunc,
+                const std::string &tableAlias)
+      : BasePredicate(fieldPtr, opr, subQuery, tableAlias) {
     lhsFunction = lhsFunc;
   }
 
   // field to field
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  Predicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB,
-            const std::pair<std::string, std::string> tableAliases)
+  BasePredicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB,
+                const std::pair<std::string, std::string> tableAliases)
       : op(opr), predicateType(PredicateType::FIELD_COMPARISON),
-        columnA(getColumnWithTableAlias(fieldPtrA, tableAliases.first)),
-        columnB(getColumnWithTableAlias(fieldPtrB, tableAliases.second)) {}
+        columnA(getColumnWithAlias(fieldPtrA, tableAliases.first)),
+        columnB(getColumnWithAlias(fieldPtrB, tableAliases.second)) {}
 
   // field to field with functions
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  Predicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB, const std::string &lhsFunc,
-            const std::string &rhsFunc, const std::pair<std::string, std::string> tableAliases)
-      : Predicate(fieldPtrA, opr, fieldPtrB, tableAliases) {
+  BasePredicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB, const std::string &lhsFunc,
+                const std::string &rhsFunc, const std::pair<std::string, std::string> tableAliases)
+      : BasePredicate(fieldPtrA, opr, fieldPtrB, tableAliases) {
     lhsFunction = lhsFunc;
     rhsFunction = rhsFunc;
   }
 
   // Special case for between with functions
   template <typename FieldTA, typename FieldTB, typename FieldTC, typename ModelA, typename ModelB, typename ModelC>
-  Predicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB, FieldTC ModelC::*fieldPtrC,
-            const std::string &lhsFunc, const std::string &rhsFunc,
-            const std::tuple<std::string, std::string, std::string> tableAliases)
+  BasePredicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB, FieldTC ModelC::*fieldPtrC,
+                const std::string &lhsFunc, const std::string &rhsFunc,
+                const std::tuple<std::string, std::string, std::string> tableAliases)
       : op(opr), predicateType(PredicateType::LEAF),
-        columnA(lhsFunc + "(" + getColumnWithTableAlias(fieldPtrA, std::get<0>(tableAliases)) + ")") {
+        columnA(lhsFunc + "(" + getColumnWithAlias(fieldPtrA, std::get<0>(tableAliases)) + ")") {
 
-    columnB = rhsFunc + "(" + getColumnWithTableAlias(fieldPtrB, std::get<1>(tableAliases)) + ") AND " + rhsFunc + "(" +
-              getColumnWithTableAlias(fieldPtrC, std::get<2>(tableAliases)) + ")";
+    columnB = rhsFunc + "(" + getColumnWithAlias(fieldPtrB, std::get<1>(tableAliases)) + ") AND " + rhsFunc + "(" +
+              getColumnWithAlias(fieldPtrC, std::get<2>(tableAliases)) + ")";
   }
 
-  Predicate(PredicateType p) : predicateType(p) {}
+  BasePredicate(PredicateType p) : predicateType(p) {}
 
   //===============OPERATORS===============
 
-  Predicate operator||(const Predicate &rhs) const {
+  BasePredicate operator||(const BasePredicate &rhs) const {
     if (this->predicateType == PredicateType::TRUE || rhs.predicateType == PredicateType::TRUE)
-      return Predicate(true);
+      return BasePredicate(true);
 
     if (this->predicateType == PredicateType::FALSE)
       return rhs;
@@ -161,15 +161,15 @@ template <typename... Models> struct Predicate {
     if (rhs.predicateType == PredicateType::FALSE)
       return *this;
 
-    Predicate p(PredicateType::OR);
+    BasePredicate p(PredicateType::OR);
     p.children.push_back(*this);
     p.children.push_back(rhs);
     return p;
   }
 
-  Predicate operator&&(const Predicate &rhs) const {
+  BasePredicate operator&&(const BasePredicate &rhs) const {
     if (this->predicateType == PredicateType::FALSE || rhs.predicateType == PredicateType::FALSE)
-      return Predicate(false);
+      return BasePredicate(false);
 
     if (this->predicateType == PredicateType::TRUE)
       return rhs;
@@ -177,7 +177,7 @@ template <typename... Models> struct Predicate {
     if (rhs.predicateType == PredicateType::TRUE)
       return *this;
 
-    Predicate p(PredicateType::AND);
+    BasePredicate p(PredicateType::AND);
     p.children.push_back(*this);
     p.children.push_back(rhs);
     return p;
@@ -187,313 +187,338 @@ template <typename... Models> struct Predicate {
 
   //===============NULL===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> isNull(FieldT Model::*fieldPtr, const std::string &tableAlias = "") { // field - val
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
-    return Predicate<Models...>(fieldPtr, Operator::IS_NULL, {}, tableAlias);
+  static BasePredicate<ColumnResolver, Models...> isNull(FieldT Model::*fieldPtr,
+                                                         const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "equals(): FieldPtr from a model not specified in BasePredicate<...>");
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::IS_NULL, {}, tableAlias);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> isNotNull(FieldT Model::*fieldPtr, const std::string &tableAlias = "") { // field - val
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
-    return Predicate<Models...>(fieldPtr, Operator::IS_NOT_NULL, {}, tableAlias);
+  static BasePredicate<ColumnResolver, Models...> isNotNull(FieldT Model::*fieldPtr,
+                                                            const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "equals(): FieldPtr from a model not specified in BasePredicate<...>");
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::IS_NOT_NULL, {}, tableAlias);
   }
 
   //===============EQUALS===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> equals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                     const std::string &tableAlias = "") { // field - val
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> equals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                                         const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "equals(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::EQUALS, {val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::EQUALS, {val}, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  static Predicate<Models...> equals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
-                                     const std::pair<std::string, std::string> tableAliases = {}) { // field-field
+  static BasePredicate<ColumnResolver, Models...>
+  equals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+         const std::pair<std::string, std::string> tableAliases = {}) { // field-field
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
-                  "equals(): FieldPtr from a model not specified in Predicate<...>");
+                  "equals(): FieldPtr from a model not specified in BasePredicate<...>");
     static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
-                  "equals(): FieldPtr from a model not specified in Predicate<...>");
-    return Predicate<Models...>(fieldPtrA, Operator::EQUALS, fieldPtrB, tableAliases);
+                  "equals(): FieldPtr from a model not specified in BasePredicate<...>");
+    return BasePredicate<ColumnResolver, Models...>(fieldPtrA, Operator::EQUALS, fieldPtrB, tableAliases);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> equals(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                     const std::string &tableAlias = "") { // field-subquery
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> equals(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                                         const std::string &tableAlias = "") { // field-subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "equals(): FieldPtr from a model not specified in BasePredicate<...>");
     validateScalarSubQuery(subQuery, "EQUALS");
-    return Predicate<Models...>(fieldPtr, Operator::EQUALS, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::EQUALS, subQuery, tableAlias);
   }
 
   //===============IN===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> in(FieldT Model::*fieldPtr, const std::vector<remove_optional_t<FieldT>> &vals,
-                                 const std::string &tableAlias = "") { // field-vals
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "FieldPtr from a model not specified in Predicate<...>");
-    return Predicate(fieldPtr, Operator::IN, vals, tableAlias);
+  static BasePredicate<ColumnResolver, Models...> in(FieldT Model::*fieldPtr,
+                                                     const std::vector<remove_optional_t<FieldT>> &vals,
+                                                     const std::string &tableAlias = "") { // field-vals
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "FieldPtr from a model not specified in BasePredicate<...>");
+    return BasePredicate(fieldPtr, Operator::IN, vals, tableAlias);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> in(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                 const std::string &tableAlias = "") { // field-subquery
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> in(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                                     const std::string &tableAlias = "") { // field-subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "equals(): FieldPtr from a model not specified in BasePredicate<...>");
     if (subQuery.getColumnCount() != 1)
       throw std::runtime_error("IN subquery must have one specified field (use yourQuery.field())");
-    return Predicate<Models...>(fieldPtr, Operator::IN, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::IN, subQuery, tableAlias);
   }
 
   //===============NOT IN===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> notIn(FieldT Model::*fieldPtr, const std::vector<remove_optional_t<FieldT>> &vals,
-                                    const std::string &tableAlias = "") { // field - values
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "notIn(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> notIn(FieldT Model::*fieldPtr,
+                                                        const std::vector<remove_optional_t<FieldT>> &vals,
+                                                        const std::string &tableAlias = "") { // field - values
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "notIn(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::NOT_IN, vals, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::NOT_IN, vals, tableAlias);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> notIn(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                    const std::string &tableAlias = "") { // field - subquery
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "notIn(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> notIn(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                                        const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "notIn(): FieldPtr from a model not specified in BasePredicate<...>");
 
     if (subQuery.getColumnCount() != 1)
       throw std::runtime_error("NOT IN subquery must have one specified field (use yourQuery.field())");
 
-    return Predicate<Models...>(fieldPtr, Operator::NOT_IN, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::NOT_IN, subQuery, tableAlias);
   }
 
   //===============NOT EQUALS===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> notEquals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                        const std::string &tableAlias = "") { // field - val
+  static BasePredicate<ColumnResolver, Models...> notEquals(FieldT Model::*fieldPtr,
+                                                            const remove_optional_t<FieldT> &val,
+                                                            const std::string &tableAlias = "") { // field - val
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "notEquals(): FieldPtr from a model not specified in Predicate<...>");
+                  "notEquals(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::NOT_EQUALS, {val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::NOT_EQUALS, {val}, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  static Predicate<Models...> notEquals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
-                                        const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+  static BasePredicate<ColumnResolver, Models...>
+  notEquals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+            const std::pair<std::string, std::string> tableAliases = {}) { // field - field
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
-                  "notEquals(): FieldPtr from a model not specified in Predicate<...>");
-    static_assert(is_in_tuple_v<ModelB, ModelsTuple>, "FieldPtr from a model not specified in Predicate<...>");
+                  "notEquals(): FieldPtr from a model not specified in BasePredicate<...>");
+    static_assert(is_in_tuple_v<ModelB, ModelsTuple>, "FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtrA, Operator::NOT_EQUALS, fieldPtrB, tableAliases);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtrA, Operator::NOT_EQUALS, fieldPtrB, tableAliases);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> notEquals(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                        const std::string &tableAlias = "") { // field - subquery
+  static BasePredicate<ColumnResolver, Models...> notEquals(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                                            const std::string &tableAlias = "") { // field - subquery
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "notEquals(): FieldPtr from a model not specified in Predicate<...>");
+                  "notEquals(): FieldPtr from a model not specified in BasePredicate<...>");
 
     validateScalarSubQuery(subQuery, "NOT EQUALS");
 
-    return Predicate<Models...>(fieldPtr, Operator::NOT_EQUALS, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::NOT_EQUALS, subQuery, tableAlias);
   }
 
   //===============GREATER===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> greater(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                      const std::string &tableAlias = "") { // field - val
+  static BasePredicate<ColumnResolver, Models...> greater(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                                          const std::string &tableAlias = "") { // field - val
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+                  "greater(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::GREATER, {val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::GREATER, {val}, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  static Predicate<Models...> greater(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
-                                      const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+  static BasePredicate<ColumnResolver, Models...>
+  greater(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+          const std::pair<std::string, std::string> tableAliases = {}) { // field - field
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
-                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+                  "greater(): FieldPtr from a model not specified in BasePredicate<...>");
     static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
-                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+                  "greater(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtrA, Operator::GREATER, fieldPtrB, tableAliases);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtrA, Operator::GREATER, fieldPtrB, tableAliases);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> greater(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                      const std::string &tableAlias = "") { // field - subquery
+  static BasePredicate<ColumnResolver, Models...> greater(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                                          const std::string &tableAlias = "") { // field - subquery
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+                  "greater(): FieldPtr from a model not specified in BasePredicate<...>");
 
     validateScalarSubQuery(subQuery, "GREATER");
 
-    return Predicate<Models...>(fieldPtr, Operator::GREATER, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::GREATER, subQuery, tableAlias);
   }
 
   //===============LESSER===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> lesser(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                     const std::string &tableAlias = "") { // field - val
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "lesser(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> lesser(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                                         const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "lesser(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LESSER, {val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LESSER, {val}, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  static Predicate<Models...> lesser(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
-                                     const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+  static BasePredicate<ColumnResolver, Models...>
+  lesser(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+         const std::pair<std::string, std::string> tableAliases = {}) { // field - field
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
-                  "lesser(): FieldPtr from a model not specified in Predicate<...>");
+                  "lesser(): FieldPtr from a model not specified in BasePredicate<...>");
     static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
-                  "lesser(): FieldPtr from a model not specified in Predicate<...>");
+                  "lesser(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtrA, Operator::LESSER, fieldPtrB, tableAliases);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtrA, Operator::LESSER, fieldPtrB, tableAliases);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> lesser(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                     const std::string &tableAlias = "") { // field - subquery
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "lesser(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> lesser(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                                         const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "lesser(): FieldPtr from a model not specified in BasePredicate<...>");
 
     validateScalarSubQuery(subQuery, "LESSER");
 
-    return Predicate<Models...>(fieldPtr, Operator::LESSER, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LESSER, subQuery, tableAlias);
   }
 
   //===============GREATER OR EQUAL===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> greaterOrEqual(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                             const std::string &tableAlias = "") { // field - val
+  static BasePredicate<ColumnResolver, Models...> greaterOrEqual(FieldT Model::*fieldPtr,
+                                                                 const remove_optional_t<FieldT> &val,
+                                                                 const std::string &tableAlias = "") { // field - val
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "greaterOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::GREATER_OR_EQUAL, {val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::GREATER_OR_EQUAL, {val}, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  static Predicate<Models...>
+  static BasePredicate<ColumnResolver, Models...>
   greaterOrEqual(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
                  const std::pair<std::string, std::string> tableAliases = {}) { // field - field
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
-                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "greaterOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
     static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
-                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "greaterOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtrA, Operator::GREATER_OR_EQUAL, fieldPtrB, tableAliases);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtrA, Operator::GREATER_OR_EQUAL, fieldPtrB, tableAliases);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> greaterOrEqual(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                             const std::string &tableAlias = "") { // field - subquery
+  static BasePredicate<ColumnResolver, Models...>
+  greaterOrEqual(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                 const std::string &tableAlias = "") { // field - subquery
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "greaterOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
 
     validateScalarSubQuery(subQuery, "GREATER OR EQUAL");
 
-    return Predicate<Models...>(fieldPtr, Operator::GREATER_OR_EQUAL, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::GREATER_OR_EQUAL, subQuery, tableAlias);
   }
 
   //===============LESSER OR EQUAL===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> lesserOrEqual(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                            const std::string &tableAlias = "") { // field - val
+  static BasePredicate<ColumnResolver, Models...> lesserOrEqual(FieldT Model::*fieldPtr,
+                                                                const remove_optional_t<FieldT> &val,
+                                                                const std::string &tableAlias = "") { // field - val
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "lesserOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LESSER_OR_EQUAL, {val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LESSER_OR_EQUAL, {val}, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
-  static Predicate<Models...>
+  static BasePredicate<ColumnResolver, Models...>
   lesserOrEqual(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
                 const std::pair<std::string, std::string> tableAliases = {}) { // field - field
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
-                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "lesserOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
     static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
-                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "lesserOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtrA, Operator::LESSER_OR_EQUAL, fieldPtrB, tableAliases);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtrA, Operator::LESSER_OR_EQUAL, fieldPtrB, tableAliases);
   }
 
   template <typename FieldT, typename Model>
-  static Predicate<Models...> lesserOrEqual(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
-                                            const std::string &tableAlias = "") { // field - subquery
+  static BasePredicate<ColumnResolver, Models...>
+  lesserOrEqual(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                const std::string &tableAlias = "") { // field - subquery
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+                  "lesserOrEqual(): FieldPtr from a model not specified in BasePredicate<...>");
 
     validateScalarSubQuery(subQuery, "LESSER OR EQUAL");
 
-    return Predicate<Models...>(fieldPtr, Operator::LESSER_OR_EQUAL, subQuery, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LESSER_OR_EQUAL, subQuery, tableAlias);
   }
 
   //===============LIKE===============
   template <typename FieldT, typename Model>
     requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-  static Predicate<Models...> like(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                   const std::string &tableAlias = "") { // field - val
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "like(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> like(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                                       const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "like(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LIKE, {val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LIKE, {val}, tableAlias);
   }
 
   //===============ILIKE===============
   template <typename FieldT, typename Model>
     requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-  static Predicate<Models...> ilike(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                    const std::string &tableAlias = "") {
-    static_assert(is_in_tuple_v<Model, ModelsTuple>, "ilike(): FieldPtr from a model not specified in Predicate<...>");
+  static BasePredicate<ColumnResolver, Models...> ilike(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                                        const std::string &tableAlias = "") {
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "ilike(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LIKE, {val}, "LOWER", "LOWER", tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LIKE, {val}, "LOWER", "LOWER", tableAlias);
   }
 
   //===============CONTAINS===============
   template <typename FieldT, typename Model>
     requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-  static Predicate<Models...> contains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                       const std::string &tableAlias = "") {
+  static BasePredicate<ColumnResolver, Models...>
+  contains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val, const std::string &tableAlias = "") {
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "contains(): FieldPtr from a model not specified in Predicate<...>");
+                  "contains(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LIKE, {'%' + val + '%'}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LIKE, {'%' + val + '%'}, tableAlias);
   }
 
   //===============ICONTAINS===============
   template <typename FieldT, typename Model>
     requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-  static Predicate<Models...> iContains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                        const std::string &tableAlias = "") {
+  static BasePredicate<ColumnResolver, Models...>
+  iContains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val, const std::string &tableAlias = "") {
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "iContains(): FieldPtr from a model not specified in Predicate<...>");
+                  "iContains(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LIKE, {'%' + val + '%'}, "LOWER", "LOWER", tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LIKE, {'%' + val + '%'}, "LOWER", "LOWER",
+                                                    tableAlias);
   }
 
   //===============STARTS WITH===============
   template <typename FieldT, typename Model>
     requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-  static Predicate<Models...> startsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                         const std::string &tableAlias = "") {
+  static BasePredicate<ColumnResolver, Models...>
+  startsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val, const std::string &tableAlias = "") {
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "startsWith(): FieldPtr from a model not specified in Predicate<...>");
+                  "startsWith(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LIKE, {val + '%'}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LIKE, {val + '%'}, tableAlias);
   }
 
   //===============ENDS WITH===============
   template <typename FieldT, typename Model>
     requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-  static Predicate<Models...> endsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                       const std::string &tableAlias = "") {
+  static BasePredicate<ColumnResolver, Models...>
+  endsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val, const std::string &tableAlias = "") {
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "endsWith(): FieldPtr from a model not specified in Predicate<...>");
+                  "endsWith(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::LIKE, {'%' + val}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::LIKE, {'%' + val}, tableAlias);
   }
 
   //===============BETWEEN===============
   template <typename FieldT, typename Model>
-  static Predicate<Models...> between(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val1,
-                                      const remove_optional_t<FieldT> &val2,
-                                      const std::string &tableAlias = "") { // field - val1 - val2
+  static BasePredicate<ColumnResolver, Models...>
+  between(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val1, const remove_optional_t<FieldT> &val2,
+          const std::string &tableAlias = "") { // field - val1 - val2
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
-                  "between(): FieldPtr from a model not specified in Predicate<...>");
+                  "between(): FieldPtr from a model not specified in BasePredicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::BETWEEN, {val1, val2}, tableAlias);
+    return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::BETWEEN, {val1, val2}, tableAlias);
   }
 
   //===============HELPERS END===============
@@ -704,12 +729,8 @@ template <typename... Models> struct Predicate {
   }
 
 private:
-  template <typename FieldPtr>
-  static std::string getColumnWithTableAlias(FieldPtr fieldPtr, const std::string &tableAlias) {
-    using FieldPtrModel = get_class_t<FieldPtr>;
-    if (tableAlias.empty())
-      return getAlias(get_index_of_v<FieldPtrModel, ModelsTuple>) + "." + FieldPtrModel::columnNameOf(fieldPtr);
-    return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr);
+  template <typename FieldPtr> static std::string getColumnWithAlias(FieldPtr fieldPtr, const std::string &tableAlias) {
+    return ColumnResolver::template resolve<Models...>(fieldPtr, tableAlias);
   }
 
   static void validateScalarSubQuery(SelectQuery<Models...> &subQuery, const std::string &operatorName) {
@@ -720,5 +741,21 @@ private:
       throw std::runtime_error(operatorName + " subquery must have one specified field (use yourQuery.field())");
   }
 };
+
+struct DefaultColumnResolver {
+  template <typename... Models, typename FieldPtr>
+  static std::string resolve(FieldPtr fieldPtr, const std::string &tableAlias) {
+
+    using FieldPtrModel = get_class_t<FieldPtr>;
+
+    if (tableAlias.empty())
+      return getAlias(get_index_of_v<FieldPtrModel, std::tuple<Models...>>) + "." +
+             FieldPtrModel::columnNameOf(fieldPtr);
+
+    return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr);
+  }
+};
+
+template <typename... Models> using Predicate = BasePredicate<DefaultColumnResolver, Models...>;
 
 } // namespace rukh::orm

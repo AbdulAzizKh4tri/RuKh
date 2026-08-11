@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <rukh/orm/ActiveRecord.hpp>
+#include <rukh/orm/Constraints.hpp>
 #include <rukh/orm/DefaultThroughModel.hpp>
 #include <rukh/orm/Relations.hpp>
 
@@ -50,6 +51,13 @@ struct User : ActiveRecord<User, int64_t> {
                              .autoGenerateMode = AutoGenerate::DB_NOW,
                              .autoUpdateMode = AutoUpdate::CUSTOM,
                              .customUpdator = &User::getNowTime}};
+  }
+
+  static auto constraints() {
+    using CP = CheckPredicate<User>;
+    return std::tuple{
+        checkConstraint(CP::greater(&User::age, 1)),
+    };
   }
 
   static constexpr auto relations() {

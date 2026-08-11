@@ -24,6 +24,7 @@
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/UpsertQuery.hpp>
 
+// TODO: solve N+1 problem.
 namespace rukh::orm {
 
 enum class LookupDirection { FORWARD, REVERSE };
@@ -41,7 +42,7 @@ public:
     co_return co_await SelectQuery<Model>().where(buildPkPredicate(pkVal)).first(transaction);
   }
 
-  static SelectQuery<Model> all() { return SelectQuery<Model>(); }
+  static SelectQuery<Model> queryAll() { return SelectQuery<Model>(); }
   static SelectQuery<Model> filter(const Predicate<Model> &p) { return SelectQuery<Model>().where(p); }
 
   static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>

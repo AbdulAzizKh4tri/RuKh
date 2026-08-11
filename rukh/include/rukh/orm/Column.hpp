@@ -8,7 +8,7 @@
 namespace rukh::orm {
 
 enum class AutoGenerate { OFF, DB_INCREMENT, DEFAULT, DB_NOW, CUSTOM };
-//TODO: Rename to UpdateMode maybe
+// TODO: Rename to UpdateMode maybe
 enum class AutoUpdate { OFF, DB_NOW, CUSTOM, LOCKED };
 enum class JsonSerializationMode { OFF, AUTO, CUSTOM };
 
@@ -16,7 +16,8 @@ template <typename Model, typename FieldT> struct Column {
   FieldT Model::*const fieldPtr;
   const std::string_view dbName;
   const bool isPrimaryKey = false;
-  const bool index = false;
+  const bool isIndexed = false;
+  const bool isUnique = false;
 
   const AutoGenerate autoGenerateMode = AutoGenerate::OFF;
   const db::DbValue defaultValue = nullptr;

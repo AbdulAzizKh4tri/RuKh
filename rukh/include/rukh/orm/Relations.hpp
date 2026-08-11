@@ -126,17 +126,14 @@ template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
  * If the model contains extra data like "since" and the row is updated, the ORM will update the mirrored row as
  * well.
  *
- * DB_DOUBLE_ROW: Same as above but Database triggers handle it.
- *
  * SINGLE_ROW: A single row is stored per relation. The ORM queries the mirrored relation at read time.
  * My personal Recommendation.
  *
  */
 enum class SymmetryMode {
   NONE,
-  DOUBLE_ROW,
   SINGLE_ROW,
-  DB_DOUBLE_ROW // NOT IMPLEMENTED YET;
+  DOUBLE_ROW,
 };
 
 template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
