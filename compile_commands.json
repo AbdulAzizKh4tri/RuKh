@@ -130,5 +130,53 @@
   "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes.cpp",
   "file": "/home/pair/stuff/HttpServer/app/src/routes.cpp",
   "output": "app/CMakeFiles/server.dir/src/routes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/basicTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/basicTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/basicTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/basicTestRoutes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/cookieTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/cookieTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/cookieTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/cookieTestRoutes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/formTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/formTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/formTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/formTestRoutes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/ormTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/ormTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/ormTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/ormTestRoutes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/sessionTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/sessionTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/sessionTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/sessionTestRoutes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/streamTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/streamTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/streamTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/streamTestRoutes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/threadPoolTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/threadPoolTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/threadPoolTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/threadPoolTestRoutes.cpp.o"
+},
+{
+  "directory": "/home/pair/stuff/HttpServer/build/gcc14/app",
+  "command": "/usr/bin/g++-14 -DFMT_SHARED -DSPDLOG_ACTIVE_LEVEL=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/pair/stuff/HttpServer/app/include -I/home/pair/stuff/HttpServer/app/external -I/home/pair/stuff/HttpServer/rukh/include -isystem /home/pair/stuff/HttpServer/build/gcc14/rukh/liburing_ext-prefix/include -std=gnu++23 -O0 -g -o CMakeFiles/server.dir/src/routes/urlPathTestRoutes.cpp.o -c /home/pair/stuff/HttpServer/app/src/routes/urlPathTestRoutes.cpp",
+  "file": "/home/pair/stuff/HttpServer/app/src/routes/urlPathTestRoutes.cpp",
+  "output": "app/CMakeFiles/server.dir/src/routes/urlPathTestRoutes.cpp.o"
 }
 ]

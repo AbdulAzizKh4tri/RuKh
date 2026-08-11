@@ -1,0 +1,76 @@
+#include <nlohmann/json.hpp>
+
+#include <rukh/AsyncFileWriter.hpp>
+#include <rukh/HttpRequest.hpp>
+#include <rukh/HttpResponse.hpp>
+#include <rukh/MultipartParser.hpp>
+
+#include "routes/testRoutes.hpp"
+
+void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
+                            rukh::db::IDatabase *db) {
+  using namespace rukh;
+  using namespace nlohmann;
+
+  // POST /tests/forms/urlencoded
+  // Accepts URL-encoded form data, returns it as JSON.
+  // Response: { "username": "alice", "password": "secret" }
+  router.post("/tests/forms/urlencoded", [](HttpRequest &request) -> Task<Response> {
+    auto formData = co_await request.getFormData();
+    auto res =
+        HttpResponse(200, json{{"username", formData["username"][0]}, {"password", formData["password"][0]}}.dump());
+    res.headers.setHeaderLower("content-type", "application/json");
+    co_return res;
+  });
+
+  // POST /tests/forms/urlencoded/checkboxes
+  // Accepts URL-encoded form data, returns it as JSON.
+  // Response: { "username": "alice", "password": "secret", "terms": ["1", "2", "3"] }
+  router.post("/tests/forms/urlencoded/checkboxes", [](HttpRequest &request) -> Task<Response> {
+    auto formData = co_await request.getFormData();
+    auto terms = formData["terms"];
+    auto res = HttpResponse(
+        200,
+        json{{"username", formData["username"][0]}, {"password", formData["password"][0]}, {"terms", terms}}.dump());
+    res.headers.setHeaderLower("content-type", "application/json");
+    co_return res;
+  });
+
+  // POST /tests/forms/json
+  // Accepts JSON form data, returns it as JSON.
+  // Response: { "username": "alice", "password": "secret" }
+  router.post("/tests/forms/json", [](HttpRequest &request) -> Task<Response> {
+    auto body = co_await request.jsonBody();
+    auto res = HttpResponse(200, json{{"username", body["username"]}, {"password", body["password"]}}.dump());
+    res.headers.setHeaderLower("content-type", "application/json");
+    co_return res;
+  });
+
+  // POST /tests/forms/multipart
+  // Accepts multipart form data, returns it as JSON.
+  // Response: { "username": "alice", "password": "secret" }
+  router.post("/tests/forms/multipart", [](HttpRequest &request) -> Task<Response> {
+    MultipartParser mp(request);
+    std::string username, password;
+    std::vector<std::string> terms;
+    mp.onField("username", [&username](std::string v) -> Task<void> {
+      username = v;
+      co_return;
+    });
+    mp.storeFieldValue("password", password);
+    mp.storeFieldValues("terms", terms);
+
+    std::optional<AsyncFileWriter> writerOpt = AsyncFileWriter::open("./public/test.bin");
+    if (not writerOpt)
+      throw std::runtime_error("File issue");
+    mp.onFile("file", [&writerOpt](std::span<unsigned char> data) -> Task<void> {
+      co_await writerOpt->writeChunk(std::string_view(reinterpret_cast<char *>(data.data()), data.size()));
+    });
+
+    co_await mp.go();
+
+    HttpResponse res(200, json{{"username", username}, {"password", password}, {"terms", terms}}.dump());
+    res.headers.setHeaderLower("content-type", "application/json");
+    co_return res;
+  });
+}
