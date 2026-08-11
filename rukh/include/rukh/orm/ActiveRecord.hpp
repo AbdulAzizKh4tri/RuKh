@@ -92,7 +92,9 @@ public:
    * rollback.
    */
   Task<std::expected<size_t, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
-    return upsert(std::tuple{pkFieldPtrs()}, transaction);
+    if (persisted_)
+      return update(transaction);
+    return insert(transaction);
   }
 
   template <typename ConflictFieldsTuple>
@@ -117,7 +119,7 @@ public:
     co_return affectedRowCount;
   }
 
-  Task<std::expected<Model, db::DatabaseError>> insert(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<size_t, db::DatabaseError>> insert(db::ITransaction *transaction = nullptr) {
     Model *self = static_cast<Model *>(this);
     InsertQuery<Model> query;
     std::vector<Model> inputObjs{*self};
@@ -126,44 +128,44 @@ public:
     if (not result)
       co_return std::unexpected(result.error());
 
-    auto [_, objs] = *result;
+    auto [affectedRowCount, objs] = *result;
 
     if (not objs.empty()) {
       setPersisted();
       *self = objs[0];
     }
 
-    co_return *self;
+    co_return affectedRowCount;
   }
 
-  Task<std::expected<Model, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<size_t, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
     Predicate<Model> p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await UpdateQuery<Model>().where(p).execute(*self, transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
-    auto [_, objs] = *result;
+    auto [affectedRowCount, objs] = *result;
 
     if (not objs.empty())
       *self = objs[0];
 
-    co_return *self;
+    co_return affectedRowCount;
   }
 
-  Task<std::expected<Model, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
+  Task<std::expected<size_t, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
     Predicate<Model> p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await DeleteQuery<Model>().where(p).execute(transaction, true);
     if (not result)
       co_return std::unexpected(result.error());
 
-    auto [_, objs] = *result;
+    auto [affectedRowCount, objs] = *result;
     if (not objs.empty())
       *self = objs[0];
 
     resetPersisted();
 
-    co_return *self;
+    co_return affectedRowCount;
   }
 
   Task<std::expected<std::optional<Model>, db::DatabaseError>> reload(db::ITransaction *transaction = nullptr) {

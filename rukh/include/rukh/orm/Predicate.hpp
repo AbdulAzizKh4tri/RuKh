@@ -11,6 +11,7 @@
 #include <rukh/orm/Column.hpp>
 
 namespace rukh::orm {
+template <typename... Models> class SelectQuery;
 
 static constexpr std::string_view aliasList[] = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
                                                  "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"};
@@ -38,7 +39,7 @@ template <typename... Models> struct Predicate {
       "=", "!=", ">", "<", ">=", "<=", "LIKE", "IN", "NOT IN", "IS NULL", "IS NOT NULL", "BETWEEN"};
   static constexpr std::string_view to_string(Operator op) { return opStrings[static_cast<std::size_t>(op)]; }
 
-  constexpr bool isGroupOperator(Operator op) {
+  constexpr bool isGroupOperator(Operator op) const {
     switch (op) {
     case Operator::IN:
     case Operator::NOT_IN:
@@ -49,7 +50,7 @@ template <typename... Models> struct Predicate {
     }
   }
 
-  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE, STRING, FIELD_COMPARISON, EMPTY } predicateType;
+  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE, STRING, FIELD_COMPARISON, SUBQUERY } predicateType;
 
   std::string columnA;
   std::string columnB;
@@ -59,14 +60,23 @@ template <typename... Models> struct Predicate {
 
   std::vector<Predicate> children;
 
+  std::string lhsFunction;
+  std::string rhsFunction;
+
   //===============CONSTRUCTORS===============
 
-  Predicate(const std::string &str, const std::vector<db::DbValue> &values)
-      : predicateType(PredicateType::STRING), columnA(str), values(values) {}
+  // custom string escape hatches
+  Predicate(const std::string &str, const std::vector<db::DbValue> &vals)
+      : predicateType(PredicateType::STRING), columnA(str) {
+    values.insert(values.end(), vals.begin(), vals.end());
+  }
 
-  Predicate(const std::string &str, const db::DbValue &value)
-      : predicateType(PredicateType::STRING), columnA(str), values({value}) {}
+  Predicate(const std::string &col, Operator opr, const std::vector<db::DbValue> &vals)
+      : predicateType(PredicateType::LEAF), op(opr), columnA(col) {
+    values.insert(values.end(), vals.begin(), vals.end());
+  }
 
+  // bool preds
   Predicate(bool val) {
     if (val)
       predicateType = PredicateType::TRUE;
@@ -74,59 +84,76 @@ template <typename... Models> struct Predicate {
       predicateType = PredicateType::FALSE;
   }
 
-  Predicate(const std::string &col, Operator opr) : predicateType(PredicateType::LEAF) {
-    if (not(opr == Operator::IS_NULL || opr == Operator::IS_NOT_NULL))
-      throw rukh::OrmException("Predicate Construction: must provide operands");
-    columnA = col;
-    op = opr;
-  }
-
-  Predicate(const std::string &col, Operator opr, const db::DbValue &val) : predicateType(PredicateType::LEAF) {
-    if (isGroupOperator(opr))
-      throw rukh::OrmException("Predicate Construction with group operator: provide vector of values");
-    columnA = col;
-    op = opr;
-    values.push_back(val);
-  }
-
-  Predicate(const std::string &col, Operator opr, const std::vector<db::DbValue> &vals)
-      : predicateType(PredicateType::LEAF) {
-    if (not isGroupOperator(opr))
-      throw rukh::OrmException(
-          "Predicate Construction with vector: Only group operators should be provided with vectors.");
-    op = opr;
-    columnA = col;
-    values = vals;
-  }
-
-  template <typename FieldPtr>
-  Predicate(FieldPtr fieldPtr, Operator opr, const get_raw_field_t<FieldPtr> &val, const std::string &tableAlias = "")
-      : Predicate(getColumnWithTableAlias(fieldPtr, tableAlias), opr, val) {}
-
+  // field to values
   template <typename FieldPtr>
   Predicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
             const std::string &tableAlias)
-      : Predicate(getColumnWithTableAlias(fieldPtr, tableAlias), opr, vals) {}
+      : predicateType(PredicateType::LEAF), columnA(getColumnWithTableAlias(fieldPtr, tableAlias)), op(opr) {
+    values.insert(values.end(), vals.begin(), vals.end());
+  }
 
-  /*
-   * Table aliases are optional. Some "joins" may require them if there is ambiguity.
-   */
+  // field to values with functions
+  template <typename FieldPtr>
+  Predicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
+            const std::string &lhsFunc, const std::string &rhsFunc, const std::string &tableAlias)
+      : Predicate(fieldPtr, opr, vals, tableAlias) {
+    lhsFunction = lhsFunc;
+    rhsFunction = rhsFunc;
+  }
+
+  // field to Subquery
+  template <typename FieldPtr>
+  Predicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &tableAlias)
+      : predicateType(PredicateType::SubQuery), columnA(getColumnWithTableAlias(fieldPtr, tableAlias)), op(opr) {
+    auto sqlAndParams = subQuery.getSqlAndParams();
+    columnB = sqlAndParams.first;
+    values.insert(values.end(), sqlAndParams.second.begin(), sqlAndParams.second.end());
+  }
+
+  // field to Subquery with functions
+  template <typename FieldPtr>
+  Predicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &lhsFunc,
+            const std::string &tableAlias)
+      : Predicate(fieldPtr, opr, subQuery, tableAlias) {
+    lhsFunction = lhsFunc;
+  }
+
+  // field to field
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
   Predicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB,
             const std::pair<std::string, std::string> tableAliases)
-      : op(opr), predicateType(PredicateType::FIELD_COMPARISON) {
+      : op(opr), predicateType(PredicateType::FIELD_COMPARISON),
+        columnA(getColumnWithTableAlias(fieldPtrA, tableAliases.first)),
+        columnB(getColumnWithTableAlias(fieldPtrB, tableAliases.second)) {}
 
-    columnA = getColumnWithTableAlias(fieldPtrA, tableAliases.first);
-    columnB = getColumnWithTableAlias(fieldPtrB, tableAliases.second);
+  // field to field with functions
+  template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
+  Predicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB, const std::string &lhsFunc,
+            const std::string &rhsFunc, const std::pair<std::string, std::string> tableAliases)
+      : Predicate(fieldPtrA, opr, fieldPtrB, tableAliases) {
+    lhsFunction = lhsFunc;
+    rhsFunction = rhsFunc;
   }
 
-  Predicate(PredicateType k) : predicateType(k) {}
+  // Special case for between with functions
+  template <typename FieldTA, typename FieldTB, typename FieldTC, typename ModelA, typename ModelB, typename ModelC>
+  Predicate(FieldTA ModelA::*fieldPtrA, Operator opr, FieldTB ModelB::*fieldPtrB, FieldTC ModelC::*fieldPtrC,
+            const std::string &lhsFunc, const std::string &rhsFunc,
+            const std::tuple<std::string, std::string, std::string> tableAliases)
+      : op(opr), predicateType(PredicateType::LEAF),
+        columnA(lhsFunc + "(" + getColumnWithTableAlias(fieldPtrA, std::get<0>(tableAliases)) + ")") {
+
+    columnB = rhsFunc + "(" + getColumnWithTableAlias(fieldPtrB, std::get<1>(tableAliases)) + ") AND " + rhsFunc + "(" +
+              getColumnWithTableAlias(fieldPtrC, std::get<2>(tableAliases)) + ")";
+  }
+
+  Predicate(PredicateType p) : predicateType(p) {}
 
   //===============OPERATORS===============
 
   Predicate operator||(const Predicate &rhs) const {
     if (this->predicateType == PredicateType::TRUE || rhs.predicateType == PredicateType::TRUE)
-      return Predicate(PredicateType::TRUE);
+      return Predicate(true);
 
     if (this->predicateType == PredicateType::FALSE)
       return rhs;
@@ -142,7 +169,7 @@ template <typename... Models> struct Predicate {
 
   Predicate operator&&(const Predicate &rhs) const {
     if (this->predicateType == PredicateType::FALSE || rhs.predicateType == PredicateType::FALSE)
-      return Predicate(PredicateType::FALSE);
+      return Predicate(false);
 
     if (this->predicateType == PredicateType::TRUE)
       return rhs;
@@ -158,18 +185,31 @@ template <typename... Models> struct Predicate {
 
   //===============HELPERS===============
 
+  //===============NULL===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> isNull(FieldT Model::*fieldPtr, const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
+    return Predicate<Models...>(fieldPtr, Operator::IS_NULL, {}, tableAlias);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> isNotNull(FieldT Model::*fieldPtr, const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
+    return Predicate<Models...>(fieldPtr, Operator::IS_NOT_NULL, {}, tableAlias);
+  }
+
   //===============EQUALS===============
   template <typename FieldT, typename Model>
   static Predicate<Models...> equals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
-                                     const std::string &tableAlias = "") {
+                                     const std::string &tableAlias = "") { // field - val
     static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
 
-    return Predicate<Models...>(fieldPtr, Operator::EQUALS, val, tableAlias);
+    return Predicate<Models...>(fieldPtr, Operator::EQUALS, {val}, tableAlias);
   }
 
   template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
   static Predicate<Models...> equals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
-                                     const std::pair<std::string, std::string> tableAliases = {}) {
+                                     const std::pair<std::string, std::string> tableAliases = {}) { // field-field
     static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
                   "equals(): FieldPtr from a model not specified in Predicate<...>");
     static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
@@ -177,78 +217,387 @@ template <typename... Models> struct Predicate {
     return Predicate<Models...>(fieldPtrA, Operator::EQUALS, fieldPtrB, tableAliases);
   }
 
-  static Predicate<Models...> rawEquals(const std::string &innerQuery, const std::vector<db::DbValue> &vals) {
-    return Predicate<Models...>(wrapInParens(innerQuery), Operator::EQUALS, vals);
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> equals(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                     const std::string &tableAlias = "") { // field-subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
+    validateScalarSubQuery(subQuery, "EQUALS");
+    return Predicate<Models...>(fieldPtr, Operator::EQUALS, subQuery, tableAlias);
   }
 
   //===============IN===============
-  template <typename FieldPtr>
-  static Predicate<Models...> in(FieldPtr fieldPtr, const std::vector<remove_optional_t<FieldPtr>> &val,
-                                 const std::string &tableAlias = "") {
-    using Model = get_class_t<FieldPtr>;
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> in(FieldT Model::*fieldPtr, const std::vector<remove_optional_t<FieldT>> &vals,
+                                 const std::string &tableAlias = "") { // field-vals
     static_assert(is_in_tuple_v<Model, ModelsTuple>, "FieldPtr from a model not specified in Predicate<...>");
-    return in(Model::columnNameOf(fieldPtr), std::vector<db::DbValue>(val.begin(), val.end()), tableAlias);
+    return Predicate(fieldPtr, Operator::IN, vals, tableAlias);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> in(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                 const std::string &tableAlias = "") { // field-subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "equals(): FieldPtr from a model not specified in Predicate<...>");
+    if (subQuery.getColumnCount() != 1)
+      throw std::runtime_error("IN subquery must have one specified field (use yourQuery.field())");
+    return Predicate<Models...>(fieldPtr, Operator::IN, subQuery, tableAlias);
+  }
+
+  //===============NOT IN===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> notIn(FieldT Model::*fieldPtr, const std::vector<remove_optional_t<FieldT>> &vals,
+                                    const std::string &tableAlias = "") { // field - values
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "notIn(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::NOT_IN, vals, tableAlias);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> notIn(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                    const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "notIn(): FieldPtr from a model not specified in Predicate<...>");
+
+    if (subQuery.getColumnCount() != 1)
+      throw std::runtime_error("NOT IN subquery must have one specified field (use yourQuery.field())");
+
+    return Predicate<Models...>(fieldPtr, Operator::NOT_IN, subQuery, tableAlias);
+  }
+
+  //===============NOT EQUALS===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> notEquals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                        const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "notEquals(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::NOT_EQUALS, {val}, tableAlias);
+  }
+
+  template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
+  static Predicate<Models...> notEquals(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+                                        const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+    static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
+                  "notEquals(): FieldPtr from a model not specified in Predicate<...>");
+    static_assert(is_in_tuple_v<ModelB, ModelsTuple>, "FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtrA, Operator::NOT_EQUALS, fieldPtrB, tableAliases);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> notEquals(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                        const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "notEquals(): FieldPtr from a model not specified in Predicate<...>");
+
+    validateScalarSubQuery(subQuery, "NOT EQUALS");
+
+    return Predicate<Models...>(fieldPtr, Operator::NOT_EQUALS, subQuery, tableAlias);
+  }
+
+  //===============GREATER===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> greater(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                      const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::GREATER, {val}, tableAlias);
+  }
+
+  template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
+  static Predicate<Models...> greater(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+                                      const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+    static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
+                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+    static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
+                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtrA, Operator::GREATER, fieldPtrB, tableAliases);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> greater(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                      const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "greater(): FieldPtr from a model not specified in Predicate<...>");
+
+    validateScalarSubQuery(subQuery, "GREATER");
+
+    return Predicate<Models...>(fieldPtr, Operator::GREATER, subQuery, tableAlias);
+  }
+
+  //===============LESSER===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> lesser(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                     const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "lesser(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LESSER, {val}, tableAlias);
+  }
+
+  template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
+  static Predicate<Models...> lesser(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+                                     const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+    static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
+                  "lesser(): FieldPtr from a model not specified in Predicate<...>");
+    static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
+                  "lesser(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtrA, Operator::LESSER, fieldPtrB, tableAliases);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> lesser(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                     const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "lesser(): FieldPtr from a model not specified in Predicate<...>");
+
+    validateScalarSubQuery(subQuery, "LESSER");
+
+    return Predicate<Models...>(fieldPtr, Operator::LESSER, subQuery, tableAlias);
+  }
+
+  //===============GREATER OR EQUAL===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> greaterOrEqual(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                             const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::GREATER_OR_EQUAL, {val}, tableAlias);
+  }
+
+  template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
+  static Predicate<Models...>
+  greaterOrEqual(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+                 const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+    static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
+                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+    static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
+                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtrA, Operator::GREATER_OR_EQUAL, fieldPtrB, tableAliases);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> greaterOrEqual(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                             const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "greaterOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+
+    validateScalarSubQuery(subQuery, "GREATER OR EQUAL");
+
+    return Predicate<Models...>(fieldPtr, Operator::GREATER_OR_EQUAL, subQuery, tableAlias);
+  }
+
+  //===============LESSER OR EQUAL===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> lesserOrEqual(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                            const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LESSER_OR_EQUAL, {val}, tableAlias);
+  }
+
+  template <typename FieldTA, typename FieldTB, typename ModelA, typename ModelB>
+  static Predicate<Models...>
+  lesserOrEqual(FieldTA ModelA::*fieldPtrA, FieldTB ModelB::*fieldPtrB,
+                const std::pair<std::string, std::string> tableAliases = {}) { // field - field
+    static_assert(is_in_tuple_v<ModelA, ModelsTuple>,
+                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+    static_assert(is_in_tuple_v<ModelB, ModelsTuple>,
+                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtrA, Operator::LESSER_OR_EQUAL, fieldPtrB, tableAliases);
+  }
+
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> lesserOrEqual(FieldT Model::*fieldPtr, SelectQuery<Models...> &subQuery,
+                                            const std::string &tableAlias = "") { // field - subquery
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "lesserOrEqual(): FieldPtr from a model not specified in Predicate<...>");
+
+    validateScalarSubQuery(subQuery, "LESSER OR EQUAL");
+
+    return Predicate<Models...>(fieldPtr, Operator::LESSER_OR_EQUAL, subQuery, tableAlias);
+  }
+
+  //===============LIKE===============
+  template <typename FieldT, typename Model>
+    requires std::is_same_v<remove_optional_t<FieldT>, std::string>
+  static Predicate<Models...> like(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                   const std::string &tableAlias = "") { // field - val
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "like(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LIKE, {val}, tableAlias);
+  }
+
+  //===============ILIKE===============
+  template <typename FieldT, typename Model>
+    requires std::is_same_v<remove_optional_t<FieldT>, std::string>
+  static Predicate<Models...> ilike(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                    const std::string &tableAlias = "") {
+    static_assert(is_in_tuple_v<Model, ModelsTuple>, "ilike(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LIKE, {val}, "LOWER", "LOWER", tableAlias);
+  }
+
+  //===============CONTAINS===============
+  template <typename FieldT, typename Model>
+    requires std::is_same_v<remove_optional_t<FieldT>, std::string>
+  static Predicate<Models...> contains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                       const std::string &tableAlias = "") {
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "contains(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LIKE, {'%' + val + '%'}, tableAlias);
+  }
+
+  //===============ICONTAINS===============
+  template <typename FieldT, typename Model>
+    requires std::is_same_v<remove_optional_t<FieldT>, std::string>
+  static Predicate<Models...> iContains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                        const std::string &tableAlias = "") {
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "iContains(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LIKE, {'%' + val + '%'}, "LOWER", "LOWER", tableAlias);
+  }
+
+  //===============STARTS WITH===============
+  template <typename FieldT, typename Model>
+    requires std::is_same_v<remove_optional_t<FieldT>, std::string>
+  static Predicate<Models...> startsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                         const std::string &tableAlias = "") {
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "startsWith(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LIKE, {val + '%'}, tableAlias);
+  }
+
+  //===============ENDS WITH===============
+  template <typename FieldT, typename Model>
+    requires std::is_same_v<remove_optional_t<FieldT>, std::string>
+  static Predicate<Models...> endsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val,
+                                       const std::string &tableAlias = "") {
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "endsWith(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::LIKE, {'%' + val}, tableAlias);
+  }
+
+  //===============BETWEEN===============
+  template <typename FieldT, typename Model>
+  static Predicate<Models...> between(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val1,
+                                      const remove_optional_t<FieldT> &val2,
+                                      const std::string &tableAlias = "") { // field - val1 - val2
+    static_assert(is_in_tuple_v<Model, ModelsTuple>,
+                  "between(): FieldPtr from a model not specified in Predicate<...>");
+
+    return Predicate<Models...>(fieldPtr, Operator::BETWEEN, {val1, val2}, tableAlias);
   }
 
   //===============HELPERS END===============
+
   std::string resolvePredicates(std::vector<db::DbValue> &out_params) {
     switch (predicateType) {
 
     case PredicateType::LEAF: {
       std::string predicateString = " ";
-      if (values.empty()) {
-        predicateString += columnA + " " + std::string(to_string(op));
-      } else if (values.size() == 1) {
+
+      std::string lhs = columnA;
+      if (not lhsFunction.empty())
+        lhs = lhsFunction + "(" + lhs + ")";
+
+      if (op == Operator::IS_NULL || op == Operator::IS_NOT_NULL) {
+        predicateString += lhs + " " + std::string(to_string(op));
+        return predicateString;
+      }
+
+      if (not isGroupOperator(op)) {
         out_params.push_back(values[0]);
-        predicateString += columnA + " " + std::string(to_string(op)) + " ? ";
+
+        std::string rhs = "?";
+        if (not rhsFunction.empty())
+          rhs = rhsFunction + "(" + rhs + ")";
+
+        predicateString += lhs + " " + std::string(to_string(op)) + " " + rhs + " ";
 
         if (op == Operator::LIKE)
           predicateString += " ESCAPE '\\' ";
+      }
 
-      } else {
+      else { // group operators
         if (op == Operator::BETWEEN) {
           if (values.size() != 2)
             throw rukh::OrmException("BETWEEN predicate should have 2 values");
+
           out_params.push_back(values[0]);
           out_params.push_back(values[1]);
-          return columnA + " BETWEEN ? AND ?";
-        }
-        predicateString += columnA + " " + std::string(to_string(op)) + " ( ";
-        out_params.push_back(values[0]);
-        predicateString += " ? ";
 
-        for (int i = 1; i < values.size(); i++) {
+          std::string rhs1 = "?";
+          std::string rhs2 = "?";
+
+          if (not rhsFunction.empty()) {
+            rhs1 = rhsFunction + "(" + rhs1 + ")";
+            rhs2 = rhsFunction + "(" + rhs2 + ")";
+          }
+
+          return lhs + " BETWEEN " + rhs1 + " AND " + rhs2;
+        }
+
+        predicateString += lhs + " " + std::string(to_string(op)) + " ( ";
+
+        if (not values.empty()) {
+          out_params.push_back(values[0]);
+          predicateString += " ? ";
+        }
+
+        for (size_t i = 1; i < values.size(); i++) {
           out_params.push_back(values[i]);
           predicateString += ", ? ";
         }
+
         predicateString += " ) ";
       }
+
       return predicateString;
     }
+
     case PredicateType::STRING: {
       out_params.insert(out_params.end(), values.begin(), values.end());
       return ' ' + columnA + ' ';
     }
+
     case PredicateType::TRUE: {
       return " TRUE ";
     }
+
     case PredicateType::FALSE: {
       return " FALSE ";
     }
+
     case PredicateType::FIELD_COMPARISON: {
       return " " + columnA + " " + std::string(to_string(op)) + " " + columnB + " ";
     }
-    default: {
 
+    case PredicateType::SUBQUERY: {
+      out_params.insert(out_params.end(), values.begin(), values.end());
+      return lhsFunction + "(" + columnA + ") " + std::string(to_string(op)) + " ( " + columnB + " ) ";
+    }
+
+    default: {
       std::string s = "(";
 
       s += children[0].resolvePredicates(out_params);
+
       if (predicateType == PredicateType::AND)
         s += " AND ";
       else if (predicateType == PredicateType::OR)
         s += " OR ";
+
       s += children[1].resolvePredicates(out_params);
       s += ")";
+
       return s;
     }
     }
@@ -258,28 +607,84 @@ template <typename... Models> struct Predicate {
     std::string predicateString = "( ";
 
     switch (predicateType) {
-    case PredicateType::LEAF: {
 
-      predicateString += columnA + " " + std::string(to_string(op)) + "{ ";
-      for (auto &val : values) {
-        predicateString += " " + db::dbValueToString(val);
+    case PredicateType::LEAF: {
+      std::string lhs = columnA;
+
+      if (not lhsFunction.empty())
+        lhs = lhsFunction + "(" + lhs + ")";
+
+      if (op == Operator::IS_NULL || op == Operator::IS_NOT_NULL) { // IS_NULL or IS_NOT_NULL
+        predicateString += lhs + " " + std::string(to_string(op));
+        return predicateString + " )";
       }
-      predicateString += " })";
-      return predicateString;
+
+      if (not isGroupOperator(op)) { // non-group operators
+        std::string rhs = "?";
+
+        if (not rhsFunction.empty())
+          rhs = rhsFunction + "(" + rhs + ")";
+
+        predicateString += lhs + " " + std::string(to_string(op)) + " " + rhs + " ";
+
+        if (op == Operator::LIKE)
+          predicateString += " ESCAPE '\\' ";
+
+        return predicateString + ")";
+      }
+
+      // group operators
+      if (op == Operator::BETWEEN) {
+        if (values.size() != 2)
+          throw rukh::OrmException("BETWEEN predicate should have 2 values");
+
+        std::string rhs1 = "?";
+        std::string rhs2 = "?";
+
+        if (not rhsFunction.empty()) {
+          rhs1 = rhsFunction + "(" + rhs1 + ")";
+          rhs2 = rhsFunction + "(" + rhs2 + ")";
+        }
+
+        predicateString += lhs + " BETWEEN " + rhs1 + " AND " + rhs2;
+
+        return predicateString + " )";
+      }
+
+      predicateString += lhs + " " + std::string(to_string(op)) + " ( ";
+
+      if (not values.empty())
+        predicateString += " ? ";
+
+      for (size_t i = 1; i < values.size(); ++i)
+        predicateString += ", ? ";
+
+      predicateString += " )";
+
+      return predicateString + " )";
     }
+
     case PredicateType::STRING: {
       predicateString += columnA + " )";
       return predicateString;
     }
+
     case PredicateType::TRUE: {
       return " TRUE ";
     }
+
     case PredicateType::FALSE: {
       return " FALSE ";
     }
+
     case PredicateType::FIELD_COMPARISON: {
-      return " " + this->columnA + " " + std::string(to_string(this->op)) + " " + this->columnB + " ";
+      return " " + columnA + " " + std::string(to_string(op)) + " " + columnB + " ";
     }
+
+    case PredicateType::SUBQUERY: {
+      return " " + columnA + " " + std::string(to_string(op)) + " ( " + columnB + " ) ";
+    }
+
     default: {
       std::string s = "(";
 
@@ -292,6 +697,7 @@ template <typename... Models> struct Predicate {
 
       s += children[1].toString();
       s += ")";
+
       return s;
     }
     }
@@ -306,162 +712,13 @@ private:
     return tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr);
   }
 
-  static std::string wrapInParens(const std::string &str) { return "(" + str + ")"; }
+  static void validateScalarSubQuery(SelectQuery<Models...> &subQuery, const std::string &operatorName) {
+    if (subQuery.getLimit().value_or(0) != 1)
+      throw std::runtime_error(operatorName + " subquery must have a limit of 1");
+
+    if (subQuery.getColumnCount() != 1)
+      throw std::runtime_error(operatorName + " subquery must have one specified field (use yourQuery.field())");
+  }
 };
 
 } // namespace rukh::orm
-
-//
-//
-// //===============NOT IN===============
-// static Predicate<Model> notIn(const std::string &col, const std::vector<db::DbValue> &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate<Model>(col, Operator::NOT_IN, val);
-// }
-// template <typename FieldT>
-// static Predicate<Model> notIn(FieldT Model::*fieldPtr, const std::vector<remove_optional_t<FieldT>> &val) {
-//   return notIn(Model::columnNameOf(fieldPtr), std::vector<db::DbValue>(val.begin(), val.end()));
-// }
-//
-//
-// //===============NOT EQUALS===============
-// static Predicate<Model> notEquals(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::NOT_EQUALS, val);
-// }
-// template <typename FieldT>
-// static Predicate<Model> notEquals(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return notEquals(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============GREATER===============
-// static Predicate<Model> greater(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::GREATER, val);
-// }
-// template <typename FieldT>
-// static Predicate<Model> greater(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return greater(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============LESSER===============
-// static Predicate<Model> lesser(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::LESSER, val);
-// }
-// template <typename FieldT>
-// static Predicate<Model> lesser(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return lesser(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============GREATER OR EQUAL===============
-// static Predicate<Model> greaterOrEqual(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::GREATER_OR_EQUAL, val);
-// }
-// template <typename FieldT>
-// static Predicate<Model> greaterOrEqual(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return greaterOrEqual(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============LESSER OR EQUAL===============
-// static Predicate<Model> lesserOrEqual(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::LESSER_OR_EQUAL, val);
-// }
-// template <typename FieldT>
-// static Predicate<Model> lesserOrEqual(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return lesserOrEqual(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============LIKE===============
-// static Predicate<Model> like(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::LIKE, val);
-// }
-// template <typename FieldT>
-//   requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-// static Predicate<Model> like(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return like(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============ILIKE===============
-// static Predicate<Model> ilike(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//
-//   return Predicate(" LOWER(" + col + ") LIKE LOWER(?) ESCAPE '\\'", db::dbValueToString(val));
-// }
-// template <typename FieldT>
-//   requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-// static Predicate<Model> ilike(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return ilike(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============CONTAINS===============
-// static Predicate<Model> contains(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::LIKE, '%' + db::dbValueToString(val) + '%');
-// }
-// template <typename FieldT>
-//   requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-// static Predicate<Model> contains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return contains(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============ICONTAINS===============
-// static Predicate<Model> iContains(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate("LOWER(" + col + ") LIKE LOWER(?) ESCAPE '\\'", '%' + db::dbValueToString(val) + '%');
-// }
-// template <typename FieldT>
-//   requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-// static Predicate<Model> iContains(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return iContains(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============STARTS WITH===============
-// static Predicate<Model> startsWith(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::LIKE, db::dbValueToString(val) + '%');
-// }
-// template <typename FieldT>
-//   requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-// static Predicate<Model> startsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return startsWith(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============ENDS WITH===============
-// static Predicate<Model> endsWith(const std::string &col, const db::DbValue &val) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate(col, Operator::LIKE, '%' + db::dbValueToString(val));
-// }
-// template <typename FieldT>
-//   requires std::is_same_v<remove_optional_t<FieldT>, std::string>
-// static Predicate<Model> endsWith(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val) {
-//   return endsWith(Model::columnNameOf(fieldPtr), val);
-// }
-//
-// //===============BETWEEN===============
-// static Predicate<Model> between(const std::string &col, const db::DbValue &val1, const db::DbValue &val2) {
-//   if (not Model::isValidColumnName(col))
-//     throw rukh::OrmException("Predicate Construction: Invalid column name.");
-//   return Predicate<Model>(col, Operator::BETWEEN, {val1, val2});
-// }
-// template <typename FieldT>
-// static Predicate<Model> between(FieldT Model::*fieldPtr, const remove_optional_t<FieldT> &val1,
-//                                 const remove_optional_t<FieldT> &val2) {
-//   return between(Model::columnNameOf(fieldPtr), val1, val2);
-// }
-// //===============HELPERS END===================================================================

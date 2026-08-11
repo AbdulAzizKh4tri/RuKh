@@ -726,7 +726,7 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
       User patch;
       patch.name = "megaJoe";
       patch.password = "1234";
-      Pu pred = Pu("LOWER(name) LIKE LOWER(?) ESCAPE '\\'", '%' + db::dbValueToString("j") + '%');
+      Pu pred = Pu::iContains(&User::name, "j");
       pred = pred and Pu(true);
       auto [updatedCount, updatedRows] =
           unwrap(co_await User::bulkUpdate(patch, std::tuple{&User::name, &User::password}, pred), "bulkUpdate");
@@ -1112,6 +1112,467 @@ void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool
 
     json summary = runner.toJson();
     int status = summary["allPassed"].get<bool>() ? 200 : 500;
+    co_return HttpResponse(status, "application/json", summary.dump(2));
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /tests/db/predicates_test
+  // ---------------------------------------------------------------------------
+  router.get("/tests/db/predicates_test", [db](const HttpRequest &request) -> Task<Response> {
+    using namespace models;
+    using namespace testutil;
+
+    using Pu = Predicate<User>;
+
+    TestRunner runner;
+
+    // =========================================================================
+    // 0. Cleanup
+    // =========================================================================
+    co_await runner.run("cleanup", [db]() -> Task<void> {
+      unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
+
+      auto count = unwrap(co_await User::all().count(), "count");
+      expect(count == 0, "expected empty users table");
+    });
+
+    // =========================================================================
+    // 1. Seed predictable users
+    // =========================================================================
+    co_await runner.run("seed users", []() -> Task<void> {
+      std::vector<User> users = {
+          {.name = "Alice", .email = "alice@example.com", .age = 20, .password = "secret"},
+          {.name = "Bob", .email = "bob@example.com", .age = 25, .password = "secret"},
+          {.name = "Charlie", .email = "charlie@example.com", .age = 30, .password = "secret"},
+          {.name = "David", .email = "david@example.com", .age = 35, .password = "secret"},
+          {.name = "Diana", .email = "diana@example.com", .age = std::nullopt, .password = std::nullopt},
+      };
+
+      auto [insertedCount, insertedRows] = unwrap(co_await User::bulkInsert(users), "bulkInsert");
+
+      expect(insertedCount == 5, "expected 5 inserted users, got " + std::to_string(insertedCount));
+    });
+
+    // =========================================================================
+    // 2. EQUALS
+    // =========================================================================
+    co_await runner.run("equals", []() -> Task<void> {
+      auto pred = Pu::equals(&User::name, std::string("Alice"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "equals select");
+
+      expect(rows.size() == 1, "expected 1 row");
+      expect(rows[0].name == "Alice", "expected Alice");
+
+      expect(pred.toString() == "( a.name = ? )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 3. NOT_EQUALS
+    // =========================================================================
+    co_await runner.run("notEquals", []() -> Task<void> {
+      auto pred = Pu::notEquals(&User::name, std::string("Alice"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "notEquals select");
+
+      expect(rows.size() == 4, "expected 4 rows");
+
+      expect(pred.toString() == "( a.name != ? )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 4. GREATER
+    // =========================================================================
+    co_await runner.run("greater", []() -> Task<void> {
+      auto pred = Pu::greater(&User::age, 25);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "greater select");
+
+      expect(rows.size() == 2, "expected Charlie and David");
+      expect(pred.toString() == "( a.age > ? )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 5. LESSER
+    // =========================================================================
+    co_await runner.run("lesser", []() -> Task<void> {
+      auto pred = Pu::lesser(&User::age, 25);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "lesser select");
+
+      expect(rows.size() == 1, "expected only Alice");
+      expect(rows[0].name == "Alice", "expected Alice");
+
+      expect(pred.toString() == "( a.age < ? )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 6. GREATER OR EQUAL
+    // =========================================================================
+    co_await runner.run("greaterOrEqual", []() -> Task<void> {
+      auto pred = Pu::greaterOrEqual(&User::age, 30);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "greaterOrEqual select");
+
+      expect(rows.size() == 2, "expected Charlie and David");
+      expect(pred.toString() == "( a.age >= ? )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 7. LESSER OR EQUAL
+    // =========================================================================
+    co_await runner.run("lesserOrEqual", []() -> Task<void> {
+      auto pred = Pu::lesserOrEqual(&User::age, 25);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "lesserOrEqual select");
+
+      expect(rows.size() == 2, "expected Alice and Bob");
+      expect(pred.toString() == "( a.age <= ? )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 8. IS NULL
+    // =========================================================================
+    co_await runner.run("isNull", []() -> Task<void> {
+      auto pred = Pu::isNull(&User::age);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "isNull select");
+
+      expect(rows.size() == 1, "expected one user with NULL age");
+      expect(rows[0].name == "Diana", "expected Diana");
+
+      expect(pred.toString() == "( a.age IS NULL )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 9. IS NOT NULL
+    // =========================================================================
+    co_await runner.run("isNotNull", []() -> Task<void> {
+      auto pred = Pu::isNotNull(&User::age);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "isNotNull select");
+
+      expect(rows.size() == 4, "expected four users with non-null age");
+
+      expect(pred.toString() == "( a.age IS NOT NULL )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 10. LIKE
+    // =========================================================================
+    co_await runner.run("like", []() -> Task<void> {
+      auto pred = Pu::like(&User::name, std::string("A%"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "like select");
+
+      expect(rows.size() == 1, "expected Alice");
+      expect(rows[0].name == "Alice", "expected Alice");
+
+      expect(pred.toString() == "( a.name LIKE ?  ESCAPE '\\' )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 11. ILIKE
+    // =========================================================================
+    co_await runner.run("ilike", []() -> Task<void> {
+      auto pred = Pu::ilike(&User::name, std::string("alice"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "ilike select");
+
+      expect(rows.size() == 1, "expected Alice");
+      expect(rows[0].name == "Alice", "expected Alice");
+
+      expect(pred.toString() == "( LOWER(a.name) LIKE LOWER(?)  ESCAPE '\\' )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 12. CONTAINS
+    // =========================================================================
+    co_await runner.run("contains", []() -> Task<void> {
+      auto pred = Pu::contains(&User::name, std::string("li"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "contains select");
+
+      expect(rows.size() == 2, "expected Alice and Charlie");
+
+      expect(pred.toString() == "( a.name LIKE ?  ESCAPE '\\' )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 13. ICONTAINS
+    // =========================================================================
+    co_await runner.run("iContains", []() -> Task<void> {
+      auto pred = Pu::iContains(&User::name, std::string("AL"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "iContains select");
+
+      expect(rows.size() == 1, "expected Alice");
+      expect(rows[0].name == "Alice", "expected Alice");
+
+      expect(pred.toString() == "( LOWER(a.name) LIKE LOWER(?)  ESCAPE '\\' )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 14. STARTS WITH
+    // =========================================================================
+    co_await runner.run("startsWith", []() -> Task<void> {
+      auto pred = Pu::startsWith(&User::name, std::string("A"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "startsWith select");
+
+      expect(rows.size() == 1, "expected Alice");
+      expect(rows[0].name == "Alice", "expected Alice");
+    });
+
+    // =========================================================================
+    // 15. ENDS WITH
+    // =========================================================================
+    co_await runner.run("endsWith", []() -> Task<void> {
+      auto pred = Pu::endsWith(&User::name, std::string("e"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "endsWith select");
+
+      expect(rows.size() == 2, "expected Alice and Charlie");
+    });
+
+    // =========================================================================
+    // 16. IN
+    // =========================================================================
+    co_await runner.run("in", []() -> Task<void> {
+      auto pred = Pu::in(&User::name, std::vector<std::string>{"Alice", "Charlie", "Diana"});
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "in select");
+
+      expect(rows.size() == 3, "expected Alice, Charlie and Diana");
+
+      expect(pred.toString() == "( a.name IN (  ? , ? , ?  ) )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 17. NOT IN
+    // =========================================================================
+    co_await runner.run("notIn", []() -> Task<void> {
+      auto pred = Pu::notIn(&User::name, std::vector<std::string>{"Alice", "Bob"});
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "notIn select");
+
+      expect(rows.size() == 3, "expected Charlie, David and Diana");
+
+      expect(pred.toString() == "( a.name NOT IN (  ? , ?  ) )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 18. BETWEEN
+    // =========================================================================
+    co_await runner.run("between", []() -> Task<void> {
+      auto pred = Pu::between(&User::age, 25, 30);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "between select");
+
+      expect(rows.size() == 2, "expected Bob and Charlie");
+
+      expect(pred.toString() == "( a.age BETWEEN ? AND ? )", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 19. AND
+    // =========================================================================
+    co_await runner.run("and", []() -> Task<void> {
+      auto pred = Pu::greaterOrEqual(&User::age, 25) && Pu::lesserOrEqual(&User::age, 30);
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "and select");
+
+      expect(rows.size() == 2, "expected Bob and Charlie");
+
+      expect(pred.toString() == "(( a.age >= ? ) AND ( a.age <= ? ))", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 20. OR
+    // =========================================================================
+    co_await runner.run("or", []() -> Task<void> {
+      auto pred = Pu::equals(&User::name, std::string("Alice")) || Pu::equals(&User::name, std::string("Diana"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "or select");
+
+      expect(rows.size() == 2, "expected Alice and Diana");
+
+      expect(pred.toString() == "(( a.name = ? ) OR ( a.name = ? ))", "unexpected SQL: " + pred.toString());
+    });
+
+    // =========================================================================
+    // 21. Nested AND / OR
+    //
+    // (age >= 30 AND age <= 35) OR name = Diana
+    // =========================================================================
+    co_await runner.run("nested boolean predicates", []() -> Task<void> {
+      auto ageRange = Pu::greaterOrEqual(&User::age, 30) && Pu::lesserOrEqual(&User::age, 35);
+
+      auto pred = ageRange || Pu::equals(&User::name, std::string("Diana"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "nested select");
+
+      expect(rows.size() == 3, "expected Charlie, David and Diana");
+    });
+
+    // =========================================================================
+    // 22. TRUE / FALSE identity behavior
+    // =========================================================================
+    co_await runner.run("true false predicates", []() -> Task<void> {
+      auto namePred = Pu::equals(&User::name, std::string("Alice"));
+
+      auto trueAnd = namePred && Pu(true);
+      auto falseAnd = namePred && Pu(false);
+
+      auto trueOr = namePred || Pu(true);
+      auto falseOr = namePred || Pu(false);
+
+      auto rows = unwrap(co_await User::filter(trueAnd).select(), "true AND select");
+      expect(rows.size() == 1, "TRUE AND predicate should preserve predicate");
+
+      rows = unwrap(co_await User::filter(falseAnd).select(), "false AND select");
+      expect(rows.empty(), "FALSE AND predicate should return no rows");
+
+      rows = unwrap(co_await User::filter(trueOr).select(), "true OR select");
+      expect(rows.size() == 5, "TRUE OR predicate should return all rows");
+
+      rows = unwrap(co_await User::filter(falseOr).select(), "false OR select");
+      expect(rows.size() == 1, "FALSE OR predicate should preserve predicate");
+    });
+
+    // =========================================================================
+    // 23. Explicit table alias
+    // =========================================================================
+    co_await runner.run("explicit table alias", []() -> Task<void> {
+      auto pred = Pu::equals(&User::name, std::string("Alice"), "users");
+      expect(pred.toString() == "( users.name = ? )", "unexpected aliased SQL: " + pred.toString());
+      co_return;
+    });
+
+    // =========================================================================
+    // 24. Function predicates
+    // =========================================================================
+    co_await runner.run("function predicate", []() -> Task<void> {
+      auto pred = Pu::iContains(&User::name, std::string("LI"));
+
+      expect(pred.toString() == "( LOWER(a.name) LIKE LOWER(?)  ESCAPE '\\' )",
+             "unexpected function SQL: " + pred.toString());
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "function select");
+
+      expect(rows.size() == 2, "expected Alice and Charlie");
+    });
+
+    // =========================================================================
+    // 25. resolvePredicates() + parameter collection
+    // =========================================================================
+    co_await runner.run("resolve predicates", []() -> Task<void> {
+      auto pred = Pu::between(&User::age, 20, 30);
+
+      std::vector<db::DbValue> params;
+      auto sql = pred.resolvePredicates(params);
+
+      expect(sql == "a.age BETWEEN ? AND ?", "unexpected resolved SQL: " + sql);
+
+      expect(params.size() == 2, "expected 2 parameters, got " + std::to_string(params.size()));
+      co_return;
+    });
+
+    // =========================================================================
+    // 26. Predicate composition + parameter ordering
+    // =========================================================================
+    co_await runner.run("parameter ordering", []() -> Task<void> {
+      auto pred =
+          Pu::equals(&User::name, std::string("Alice")) && Pu::greater(&User::age, 18) && Pu::isNotNull(&User::email);
+
+      std::vector<db::DbValue> params;
+      auto sql = pred.resolvePredicates(params);
+
+      expect(params.size() == 2, "expected 2 parameters, got " + std::to_string(params.size()));
+
+      expect(sql.find("a.name = ?") != std::string::npos, "name predicate missing: " + sql);
+
+      expect(sql.find("a.age > ?") != std::string::npos, "age predicate missing: " + sql);
+
+      expect(sql.find("a.email IS NOT NULL") != std::string::npos, "IS NOT NULL predicate missing: " + sql);
+      co_return;
+    });
+
+    // =========================================================================
+    // 27. Field-to-field comparison
+    //
+    // This tests PredicateType::FIELD_COMPARISON directly. We don't execute it
+    // because comparing arbitrary User columns isn't necessarily meaningful.
+    // =========================================================================
+    co_await runner.run("field comparison", []() -> Task<void> {
+      auto pred = Pu::equals(&User::age, &User::id);
+
+      expect(pred.toString() == " a.age = a.id ", "unexpected field comparison SQL: " + pred.toString());
+
+      std::vector<db::DbValue> params;
+      auto sql = pred.resolvePredicates(params);
+
+      expect(sql == " a.age = a.id ", "unexpected resolved field comparison SQL: " + sql);
+
+      expect(params.empty(), "field comparison should have no parameters");
+      co_return;
+    });
+
+    // =========================================================================
+    // 28. Complex predicate actually executed
+    //
+    // (age >= 20 AND age <= 30) AND name != Bob
+    // => Alice + Charlie
+    // =========================================================================
+    co_await runner.run("complex predicate", []() -> Task<void> {
+      auto ageRange = Pu::between(&User::age, 20, 30);
+
+      auto pred = ageRange && Pu::notEquals(&User::name, std::string("Bob"));
+
+      auto rows = unwrap(co_await User::filter(pred).select(), "complex select");
+
+      expect(rows.size() == 2, "expected Alice and Charlie");
+
+      for (const auto &user : rows) {
+        expect(user.name == "Alice" || user.name == "Charlie", "unexpected user in result: " + *user.name);
+      }
+    });
+
+    // =========================================================================
+    // 29. Empty IN / NOT IN
+    //
+    // These are worth testing because resolvePredicates() has special handling
+    // based on values.size().
+    // =========================================================================
+    co_await runner.run("empty IN predicates", []() -> Task<void> {
+      auto pred = Pu::in(&User::name, std::vector<std::string>{});
+
+      std::vector<db::DbValue> params;
+      auto sql = pred.resolvePredicates(params);
+
+      expect(params.empty(), "empty IN should have no parameters");
+
+      // The current implementation treats empty values as a non-group
+      // predicate and emits `name IN ?`, so this test intentionally documents
+      // the current behavior. If empty IN should instead become FALSE, change
+      // the implementation and this assertion.
+      expect(sql.find("a.name IN") != std::string::npos, "expected IN predicate in SQL: " + sql);
+      co_return;
+    });
+
+    // =========================================================================
+    // 30. Final cleanup
+    // =========================================================================
+    co_await runner.run("final cleanup", []() -> Task<void> {
+      unwrap(co_await User::bulkDestroy({true}), "bulkDestroy");
+
+      auto count = unwrap(co_await User::all().count(), "count");
+      expect(count == 0, "expected empty users table after cleanup");
+    });
+
+    json summary = runner.toJson();
+    int status = summary["allPassed"].get<bool>() ? 200 : 500;
+
     co_return HttpResponse(status, "application/json", summary.dump(2));
   });
 }
