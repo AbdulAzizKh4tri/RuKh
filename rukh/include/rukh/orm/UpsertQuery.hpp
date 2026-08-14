@@ -168,7 +168,7 @@ private:
     return oss.str();
   }
 
-  static inline std::string &modelColumnListString() {
+  static inline const std::string &modelColumnListString() {
     static const std::string cached = [] {
       std::ostringstream oss;
       bool first = true;
