@@ -65,17 +65,20 @@ struct User : ActiveRecord<User, int64_t> {
 
     using Through = Follow<User>;
     static constexpr auto throughField1 = ThroughField{
-        .throughPtr = &Through::follower, .modelPtr = User::pkFieldPtr(), .throughPtrType = ThroughPtrType::DEFINER};
+        .throughPtr = &Through::followee, .modelPtr = User::pkFieldPtr(), .throughPtrModel = ThroughPtrModel::A};
     static constexpr auto throughField2 = ThroughField{
-        .throughPtr = &Through::followee, .modelPtr = User::pkFieldPtr(), .throughPtrType = ThroughPtrType::TARGET};
+        .throughPtr = &Through::follower, .modelPtr = User::pkFieldPtr(), .throughPtrModel = ThroughPtrModel::B};
 
     return std::tuple{
-        manyToOne<User>(&User::bestFriend).withRelatedName("best_friends"),
-        manyToOne<User>(&User::mother).withRelatedName("children"),
+        manyToOne<User>(&User::bestFriend).withRelatedName<"best_friends">(),
+        manyToOne<User>(&User::mother).withRelatedName<"children">(),
         manyToManyRelation<User, User, DTM>()
-            .withRelationName("friendship")
+            .withRelationName<"friendship">()
             .withSymmetryMode<SymmetryMode::DOUBLE_ROW>(),
-        manyToManyRelation<User, User, Through, throughField1, throughField2>().withRelationName("follows")};
+        manyToManyRelation<User, User, Through, throughField1, throughField2>()
+            .withRelationName<"follows">()
+            .withReciprocalName<"followers">(),
+    };
   }
 };
 

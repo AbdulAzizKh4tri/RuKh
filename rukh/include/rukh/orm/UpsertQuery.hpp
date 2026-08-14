@@ -41,13 +41,20 @@ public:
     return *this;
   }
 
+  UpsertQuery &onConflictDoNothing() {
+    doNothing_ = true;
+    return *this;
+  }
+
   template <typename FieldPtr> UpsertQuery &updateFields(FieldPtr fieldPtr) {
+    doNothing_ = false;
     columnsToUpdate_.push_back(Model::columnNameOf(fieldPtr));
     return *this;
   }
 
 private:
   std::string sql_;
+  bool doNothing_ = false;
   std::vector<std::string> columnsToUpdate_;
   std::vector<std::string> conflictColumns_;
   std::vector<rukh::db::DbValue> params_;
@@ -57,7 +64,10 @@ private:
     std::ostringstream ss;
     ss << sqlInit << " VALUES " << valuesListStringAndParams(objs);
 
-    ss << " ON CONFLICT " << conflictColumnList() << " DO UPDATE SET " << modelUpdateValueList();
+    if (doNothing_)
+      ss << " ON CONFLICT " << conflictColumnList() << " DO NOTHING";
+    else
+      ss << " ON CONFLICT " << conflictColumnList() << " DO UPDATE SET " << modelUpdateValueList();
 
     if (returning)
       ss << " RETURNING *";
@@ -158,7 +168,7 @@ private:
     return oss.str();
   }
 
-  static inline const std::string &modelColumnListString() {
+  static inline std::string &modelColumnListString() {
     static const std::string cached = [] {
       std::ostringstream oss;
       bool first = true;
@@ -177,11 +187,11 @@ private:
     return cached;
   }
 
-  static inline const bool columnShouldBeSkipped(AutoGenerate policy) {
+  static inline bool columnShouldBeSkipped(AutoGenerate policy) {
     return policy == AutoGenerate::DB_INCREMENT or policy == AutoGenerate::DEFAULT or policy == AutoGenerate::DB_NOW;
   }
 
-  static inline const bool columnShouldBeSkipped(AutoUpdate policy) {
+  static inline bool columnShouldBeSkipped(AutoUpdate policy) {
     return policy == AutoUpdate::DB_NOW or policy == AutoUpdate::LOCKED;
   }
 

@@ -297,8 +297,9 @@ public:
 
   SelectQuery<Models...> &reset() {
     this->wherePredicate = std::nullopt;
+    tableAlias_ = std::nullopt;
     columns_.clear();
-    this->params_.clear();
+    params_.clear();
     orderBy_.clear();
     groupBy_.clear();
     limit_ = std::nullopt;
@@ -362,84 +363,82 @@ private:
     std::ostringstream ss;
 
     if (setQueryType) {
+      if (not groupBy_.empty() or havingPredicate_)
+        throw rukh::OrmException("groupBy()/having() cannot be combined with union/intersect/except queries");
+
       auto result1 = children[0].getSqlAndParams(depth + 1);
       auto result2 = children[1].getSqlAndParams(depth + 1);
-
       auto sql1 = result1.first;
       auto sql2 = result2.first;
 
       if (children[0].setQueryType)
-        sql1 = "SELECT " + std::string(distinct_ ? "DISTINCT" : "") + " * FROM ( " + sql1 + ") AS sub_" +
-               std::to_string(depth) + "_0";
+        sql1 = "SELECT * FROM ( " + sql1 + ") AS sub_" + std::to_string(depth) + "_0";
 
       if (children[1].setQueryType)
-        sql2 = "SELECT " + std::string(distinct_ ? "DISTINCT" : "") + " * FROM ( " + sql2 + ") AS sub_" +
-               std::to_string(depth) + "_1";
+        sql2 = "SELECT * FROM ( " + sql2 + ") AS sub_" + std::to_string(depth) + "_1";
 
       ss << sql1 << to_string(*setQueryType) << sql2;
-      sql_ = ss.str();
       params_ = result1.second;
       params_.insert(params_.end(), result2.second.begin(), result2.second.end());
-      return;
-    }
-
-    ss << "SELECT " << (distinct_ ? " DISTINCT " : "");
-
-    if (columns_.empty()) {
-      constexpr auto mainModelColumns = Model::columns();
-      bool first = true;
-      std::apply(
-          [&](auto &&...col) {
-            auto addColumn = [&](auto &&c) {
-              if (!first)
-                ss << ", ";
-              ss << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>)) << "." << c.dbName;
-              first = false;
-            };
-            (addColumn(col), ...);
-          },
-          mainModelColumns);
     } else {
-      ss << columns_.at(0);
-    }
+      ss << "SELECT " << (distinct_ ? " DISTINCT " : "");
 
-    for (size_t i = 1; i < columns_.size(); i++) {
-      ss << ", " << columns_.at(i);
-    }
+      if (columns_.empty()) {
+        constexpr auto mainModelColumns = Model::columns();
+        bool first = true;
+        std::apply(
+            [&](auto &&...col) {
+              auto addColumn = [&](auto &&c) {
+                if (not first)
+                  ss << ", ";
+                ss << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>)) << "." << c.dbName;
+                first = false;
+              };
+              (addColumn(col), ...);
+            },
+            mainModelColumns);
+      } else {
+        ss << columns_.at(0);
+      }
 
-    ss << " FROM " << std::string(Model::tableName) << " AS "
-       << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
+      for (size_t i = 1; i < columns_.size(); i++) {
+        ss << ", " << columns_.at(i);
+      }
 
-    if (joins_) {
-      for (auto &join : *joins_) {
-        ss << join.type << join.tableName << " AS " << join.tableAlias << " ON "
-           << join.condition.resolvePredicates(params_);
+      ss << " FROM " << std::string(Model::tableName) << " AS "
+         << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
+
+      if (joins_) {
+        for (auto &join : *joins_) {
+          ss << join.type << join.tableName << " AS " << join.tableAlias << " ON "
+             << join.condition.resolvePredicates(params_);
+        }
+      }
+
+      if (this->wherePredicate) {
+        ss << " WHERE " << (*this->wherePredicate).resolvePredicates(params_);
+      }
+
+      if (not groupBy_.empty()) {
+        ss << " GROUP BY " << groupBy_.at(0);
+        for (size_t i = 1; i < groupBy_.size(); i++) {
+          ss << ", " << groupBy_.at(i);
+        }
+        if (havingPredicate_) {
+          ss << " HAVING " << havingPredicate_.value().resolvePredicates(params_);
+        }
       }
     }
 
-    if (this->wherePredicate) {
-      ss << " WHERE " << (*this->wherePredicate).resolvePredicates(params_);
-    }
-
-    if (!groupBy_.empty()) {
-      ss << " GROUP BY " << groupBy_.at(0);
-      for (size_t i = 1; i < groupBy_.size(); i++) {
-        ss << ", " << groupBy_.at(i);
-      }
-
-      if (havingPredicate_) {
-        ss << " HAVING " << havingPredicate_.value().resolvePredicates(params_);
-      }
-    }
-
-    if (!orderBy_.empty()) {
+    // From here down applies whether this is a plain select or a compound (union/etc.) result.
+    if (not orderBy_.empty()) {
       ss << " ORDER BY " << orderBy_.at(0).first;
       if (orderBy_.at(0).second == Sorting::DESC)
         ss << " DESC";
       for (size_t i = 1; i < orderBy_.size(); i++) {
         ss << ", " << orderBy_.at(i).first;
         if (orderBy_.at(i).second == Sorting::DESC)
-          ss << " DESC ";
+          ss << " DESC";
       }
     }
 

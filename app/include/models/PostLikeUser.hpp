@@ -11,10 +11,10 @@
 namespace models {
 using namespace rukh::orm;
 
-template <typename TargetModel, typename DefinerModel>
-struct PostLike : public ActiveRecord<PostLike<TargetModel, DefinerModel>, int64_t> {
-  using Target = TargetModel;
-  using Definer = DefinerModel;
+template <typename UserTmp, typename PostTmp>
+struct PostLike : public ActiveRecord<PostLike<UserTmp, PostTmp>, int64_t> {
+  using A = UserTmp;
+  using B = PostTmp;
 
   static constexpr std::string_view tableName = "post_like_user";
 
@@ -41,8 +41,8 @@ struct PostLike : public ActiveRecord<PostLike<TargetModel, DefinerModel>, int64
 
   static constexpr auto relations() {
     return std::tuple{
-        manyToOne<Target>(&PostLike::userId).template onDelete<OnDelete::CASCADE>().withRelatedName("user_likes"),
-        manyToOne<Definer>(&PostLike::postId).template onDelete<OnDelete::CASCADE>().withRelatedName("post_likes"),
+        manyToOne<A>(&PostLike::userId).template onDelete<OnDelete::CASCADE>().template withRelatedName<"user_likes">(),
+        manyToOne<B>(&PostLike::postId).template onDelete<OnDelete::CASCADE>().template withRelatedName<"post_likes">(),
     };
   }
 

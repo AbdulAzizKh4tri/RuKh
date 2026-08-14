@@ -1,3 +1,4 @@
+#include "models/Follow.hpp"
 #include "routes/testRoutes.hpp"
 
 #include <nlohmann/json.hpp>
@@ -314,29 +315,29 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
       unwrap(co_await post2.save(), "re-assign post2");
 
       // ---------- A. Call from the DEFINER side first (Post) ----------
-      auto cnt = unwrap(co_await post1.upsertRelation<User, "likes">(alice), "post1 likes alice");
+      auto cnt = unwrap(co_await post1.addRelation<"likes", User>(alice), "post1 likes alice");
       expect(cnt == 1, "expected 1 from Post side");
 
       // Idempotent
-      cnt = unwrap(co_await post1.upsertRelation<User, "likes">(alice), "post1 likes alice again");
+      cnt = unwrap(co_await post1.addRelation<"likes", User>(alice), "post1 likes alice again");
       expect(cnt == 0, "expected 0 on duplicate");
 
       // ---------- B. Call from the TARGET side (User) ----------
-      cnt = unwrap(co_await bob.upsertRelation<Post, "likes">(post1), "bob likes post1");
+      cnt = unwrap(co_await bob.addRelation<"likes", Post>(post1), "bob likes post1");
       expect(cnt == 1, "bob like insert");
 
       // ---------- C. manyRelated from both sides ----------
-      auto aliceLikes = unwrap(co_await alice.manyRelated<Post, "likes">().select(), "alice likes");
+      auto aliceLikes = unwrap(co_await alice.manyRelated<"likes", Post>().select(), "alice likes");
       expect(aliceLikes.size() == 1, "Alice should like 1 post so far");
 
-      auto post1Likers = unwrap(co_await post1.manyRelated<User, "likes">().select(), "post1 likers");
+      auto post1Likers = unwrap(co_await post1.manyRelated<"likes", User>().select(), "post1 likers");
       expect(post1Likers.size() == 2, "post1 should have 2 likers (alice + bob)");
 
       // ---------- D. remove ----------
-      auto removed = unwrap(co_await alice.removeRelation<Post, "likes">(post1), "remove like");
+      auto removed = unwrap(co_await alice.removeRelation<"likes", Post>(post1), "remove like");
       expect(removed == 1, "expected 1 row removed");
 
-      aliceLikes = unwrap(co_await alice.manyRelated<Post, "likes">().select(), "after remove");
+      aliceLikes = unwrap(co_await alice.manyRelated<"likes", Post>().select(), "after remove");
       expect(aliceLikes.empty(), "Alice should have 0 likes left");
     });
 
@@ -349,10 +350,10 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
       likeRow.postId = post1.id;
       // likedAt is auto-generated
 
-      auto cnt = unwrap(co_await Post::upsertRelationThrough<User, "likes">(likeRow), "upsert through obj");
+      auto cnt = unwrap(co_await Post::upsertRelationThrough<"likes", User>(likeRow), "upsert through obj");
       expect(cnt >= 1, "through upsert failed");
 
-      auto charlieLikes = unwrap(co_await charlie.manyRelated<Post, "likes">().select(), "charlie likes");
+      auto charlieLikes = unwrap(co_await charlie.manyRelated<"likes", Post>().select(), "charlie likes");
       expect(charlieLikes.size() == 1 && charlieLikes[0].id == post1.id, "charlie should like post1");
     });
 
@@ -361,29 +362,29 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
     // =========================================================================
     co_await runner.run("symmetric M2M friendship (DOUBLE_ROW)", [&]() -> Task<void> {
       // Alice ↔ Bob
-      auto cnt = unwrap(co_await alice.upsertRelation<User, "friendship">(bob), "friend alice-bob");
+      auto cnt = unwrap(co_await alice.addRelation<"friendship", User>(bob), "friend alice-bob");
       expect(cnt == 2, "DOUBLE_ROW should insert 2 rows"); // one each direction
 
       // Idempotent
-      cnt = unwrap(co_await alice.upsertRelation<User, "friendship">(bob), "friend again");
+      cnt = unwrap(co_await alice.addRelation<"friendship", User>(bob), "friend again");
       expect(cnt == 0, "should be 0 on duplicate");
 
       // Alice ↔ Charlie
-      cnt = unwrap(co_await alice.upsertRelation<User, "friendship">(charlie), "friend alice-charlie");
+      cnt = unwrap(co_await alice.addRelation<"friendship", User>(charlie), "friend alice-charlie");
       expect(cnt == 2, "second friendship");
 
       // Query both directions
-      auto aliceFriends = unwrap(co_await alice.manyRelated<User, "friendship">().select(), "alice friends");
+      auto aliceFriends = unwrap(co_await alice.manyRelated<"friendship", User>().select(), "alice friends");
       expect(aliceFriends.size() == 2, "Alice should have 2 friends");
 
-      auto bobFriends = unwrap(co_await bob.manyRelated<User, "friendship">().select(), "bob friends");
+      auto bobFriends = unwrap(co_await bob.manyRelated<"friendship", User>().select(), "bob friends");
       expect(bobFriends.size() == 1 && bobFriends[0].id == alice.id, "Bob should only see Alice");
 
       // Remove (should delete both rows)
-      auto removed = unwrap(co_await alice.removeRelation<User, "friendship">(bob), "unfriend");
+      auto removed = unwrap(co_await alice.removeRelation<"friendship", User>(bob), "unfriend");
       expect(removed == 2, "DOUBLE_ROW remove should delete 2 rows");
 
-      aliceFriends = unwrap(co_await alice.manyRelated<User, "friendship">().select(), "after unfriend");
+      aliceFriends = unwrap(co_await alice.manyRelated<"friendship", User>().select(), "after unfriend");
       expect(aliceFriends.size() == 1, "only Charlie left");
     });
 
@@ -392,32 +393,30 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
     // =========================================================================
     co_await runner.run("asymmetric M2M follows", [&]() -> Task<void> {
       // Alice follows Bob
-      auto cnt = unwrap(co_await alice.upsertRelation<User, "follows">(bob), "alice follows bob");
+      auto cnt = unwrap(co_await alice.addRelation<"follows", User>(bob), "alice follows bob");
       expect(cnt == 1, "follow insert");
 
       // Bob follows Alice (different direction – allowed)
-      cnt = unwrap(co_await bob.upsertRelation<User, "follows">(alice), "bob follows alice");
+      cnt = unwrap(co_await bob.addRelation<"follows", User>(alice), "bob follows alice");
       expect(cnt == 1, "reverse follow");
 
       // Alice follows Charlie
-      cnt = unwrap(co_await alice.upsertRelation<User, "follows">(charlie), "alice follows charlie");
+      cnt = unwrap(co_await alice.addRelation<"follows", User>(charlie), "alice follows charlie");
       expect(cnt == 1, "second follow");
 
       // Query following (FORWARD)
-      auto aliceFollowing =
-          unwrap(co_await alice.manyRelated<User, "follows">(LookupDirection::FORWARD).select(), "alice following");
+      auto aliceFollowing = unwrap(co_await alice.manyRelated<"follows", User>().select(), "alice following");
       expect(aliceFollowing.size() == 2, "Alice should follow 2 people");
 
       // Query followers (REVERSE)
-      auto aliceFollowers =
-          unwrap(co_await alice.manyRelated<User, "follows">(LookupDirection::REVERSE).select(), "alice followers");
+      auto aliceFollowers = unwrap(co_await alice.manyRelated<"followers", User>().select(), "alice followers");
       expect(aliceFollowers.size() == 1 && aliceFollowers[0].id == bob.id, "Alice should have 1 follower (Bob)");
 
       // Remove
-      auto removed = unwrap(co_await alice.removeRelation<User, "follows">(bob), "unfollow");
+      auto removed = unwrap(co_await alice.removeRelation<"follows", User>(bob), "unfollow");
       expect(removed == 1, "unfollow count");
 
-      aliceFollowing = unwrap(co_await alice.manyRelated<User, "follows">().select(), "after unfollow");
+      aliceFollowing = unwrap(co_await alice.manyRelated<"follows", User>().select(), "after unfollow");
       expect(aliceFollowing.size() == 1, "only Charlie left");
     });
 
@@ -431,7 +430,7 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
       f.randomNum = 42;
       f.str = "hello";
 
-      auto cnt = unwrap(co_await User::upsertRelationThrough<User, "follows">(f), "upsert follow with extras");
+      auto cnt = unwrap(co_await User::upsertRelationThrough<"follows", User>(f), "upsert follow with extras");
       expect(cnt >= 1, "follow with extras failed");
     });
 
@@ -460,10 +459,10 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
       User lonely = {.name = "Lonely", .email = "lonely@example.com"};
       unwrap(co_await lonely.save(), "lonely save");
 
-      auto friends = unwrap(co_await lonely.manyRelated<User, "friendship">().select(), "lonely friends");
+      auto friends = unwrap(co_await lonely.manyRelated<"friendship", User>().select(), "lonely friends");
       expect(friends.empty(), "lonely should have 0 friends");
 
-      auto following = unwrap(co_await lonely.manyRelated<User, "follows">().select(), "lonely following");
+      auto following = unwrap(co_await lonely.manyRelated<"follows", User>().select(), "lonely following");
       expect(following.empty(), "lonely should follow 0");
 
       auto posts = unwrap(co_await lonely.related<Post>().select(), "lonely posts");

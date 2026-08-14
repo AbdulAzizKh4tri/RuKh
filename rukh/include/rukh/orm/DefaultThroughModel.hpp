@@ -7,19 +7,19 @@
 
 namespace rukh::orm {
 
-template <typename TargetModel, typename DefinerModel, FixedString TableName>
-struct DefaultThroughModel : public ActiveRecord<DefaultThroughModel<TargetModel, DefinerModel, TableName>, int64_t> {
+template <typename ModelA, typename ModelB, FixedString TableName>
+struct DefaultThroughModel : public ActiveRecord<DefaultThroughModel<ModelA, ModelB, TableName>, int64_t> {
 
-  using TargetPkType = TargetModel::PkType;
-  using DefinerPkType = DefinerModel::PkType;
-  using Target = TargetModel;
-  using Definer = DefinerModel;
+  using PkAType = ModelA::PkType;
+  using PkBType = ModelB::PkType;
+  using A = ModelA;
+  using B = ModelB;
 
   static constexpr std::string_view tableName = TableName.view();
 
   int64_t id;
-  TargetPkType targetPk;
-  DefinerPkType definerPk;
+  PkAType pkA;
+  PkBType pkB;
 
   static constexpr auto columns() {
     return std::tuple{
@@ -27,21 +27,21 @@ struct DefaultThroughModel : public ActiveRecord<DefaultThroughModel<TargetModel
                .dbName = "id",
                .isPrimaryKey = true,
                .autoGenerateMode = AutoGenerate::DB_INCREMENT},
-        Column{.fieldPtr = &DefaultThroughModel::targetPk, .dbName = "pkA"},
-        Column{.fieldPtr = &DefaultThroughModel::definerPk, .dbName = "pkB"},
+        Column{.fieldPtr = &DefaultThroughModel::pkA, .dbName = "pkA"},
+        Column{.fieldPtr = &DefaultThroughModel::pkB, .dbName = "pkB"},
     };
   }
 
   static constexpr auto relations() {
     return std::tuple{
-        manyToOne<Target>(&DefaultThroughModel::targetPk).template onDelete<OnDelete::CASCADE>(),
-        manyToOne<Definer>(&DefaultThroughModel::definerPk).template onDelete<OnDelete::CASCADE>(),
+        manyToOne<A>(&DefaultThroughModel::pkA).template onDelete<OnDelete::CASCADE>(),
+        manyToOne<B>(&DefaultThroughModel::pkB).template onDelete<OnDelete::CASCADE>(),
     };
   }
 
   static auto constraints() {
     return std::tuple{
-        makeUniqueTogether(&DefaultThroughModel::targetPk, &DefaultThroughModel::definerPk),
+        makeUniqueTogether(&DefaultThroughModel::pkA, &DefaultThroughModel::pkB),
     };
   }
 };

@@ -32,8 +32,8 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
     return static_cast<Derived &>(*this);
   }
 
-  constexpr Derived &withRelatedName(const std::string_view name) {
-    relatedName = name;
+  template <FixedString Name> constexpr Derived &withRelatedName() {
+    relatedName = Name.view();
     return static_cast<Derived &>(*this);
   }
 
@@ -42,8 +42,8 @@ template <typename TargetModel, typename DefinerModel, typename FkFieldPtrsTuple
     return static_cast<Derived &>(*this);
   }
 
-  constexpr Derived &withConstraintName(const std::string_view name) {
-    constraintName = name;
+  template <FixedString Name> constexpr Derived &withConstraintName() {
+    constraintName = Name.view();
     return static_cast<Derived &>(*this);
   }
 
@@ -107,14 +107,14 @@ constexpr auto oneToOne(FieldTypes DefinerModel::*...ptrs) {
 }
 //=================================================================================================================
 
-enum class ThroughPtrType { TARGET, DEFINER };
+enum class ThroughPtrModel { A, B };
 
 template <typename ThroughPtr, typename ModelPtr> struct ThroughField {
   using Model = get_class_t<ModelPtr>;
 
   const ThroughPtr throughPtr;
   const ModelPtr modelPtr;
-  const ThroughPtrType throughPtrType;
+  const ThroughPtrModel throughPtrModel;
 };
 
 /*
@@ -134,51 +134,132 @@ enum class SymmetryMode {
   NONE,
   SINGLE_ROW,
   DOUBLE_ROW,
+  DB_SINGLE_ROW,
+  DB_DOUBLE_ROW,
 };
 
-template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
+//=================================================================================================================
+//========================================UGLY DefaultThroughModel Checker========================================
+template <typename ModelA, typename ModelB, FixedString TableName> struct DefaultThroughModel;
+template <typename T> struct IsDefaultThroughModel : std::false_type {};
+
+template <typename A, typename B, FixedString Name>
+struct IsDefaultThroughModel<DefaultThroughModel<A, B, Name>> : std::true_type {};
+
+template <typename T>
+concept DefaultThroughModelType = IsDefaultThroughModel<T>::value;
+//=================================================================================================================
+
+template <typename ModelA, typename ModelB, typename ThroughModel, ThroughField... ThroughFields>
 struct ManyToManyRelation {
-  using Target = TargetModel;
-  using Definer = DefinerModel;
+  using A = ModelA;
+  using B = ModelB;
   using Through = ThroughModel;
 
-  static constexpr auto throughFields = std::tuple{ThroughFields...};
-  static constexpr size_t throughFieldCount = sizeof...(ThroughFields);
+  static constexpr auto throughFields = [] {
+    if constexpr (sizeof...(ThroughFields) > 0) {
+      static_assert(not DefaultThroughModelType<Through>, "Cannot pass ThroughFields when using DefaultThroughModel");
+      return std::tuple{ThroughFields...};
+    } else {
+      static_assert(DefaultThroughModelType<Through>, "Must pass ThroughFields for non-default through models");
+      return std::tuple{ThroughField{&Through::pkA, ModelA::pkFieldPtr(), ThroughPtrModel::A},
+                        ThroughField{&Through::pkB, ModelB::pkFieldPtr(), ThroughPtrModel::B}};
+    }
+  }();
+  using ThroughFieldTuple = decltype(throughFields);
+  static constexpr size_t throughFieldCount = std::tuple_size_v<ThroughFieldTuple>;
+
+  static constexpr bool isSelfReferential = std::is_same_v<ModelA, ModelB>;
+
   static_assert(throughFieldCount == 0 or throughFieldCount >= 2, "Must map fields of both models");
+  static_assert(
+      throughFieldCount % 2 == 0 or not isSelfReferential,
+      "Self-referential relations must have an even number of through fields (2x the throughfields in the model)");
+
   static constexpr RelationType relationType = RelationType::MANY_TO_MANY;
 
   std::string_view relationName = "";
+  std::string_view reciprocalName = "";
   SymmetryMode symmetryMode = SymmetryMode::NONE;
 
-  // Not needed if only one manyToMany relation exists between two models.
-  constexpr ManyToManyRelation &withRelationName(const std::string_view name) {
-    relationName = name;
+  template <FixedString Name> constexpr ManyToManyRelation &withRelationName() {
+    relationName = Name.view();
+    return *this;
+  }
+
+  template <FixedString Name> constexpr ManyToManyRelation &withReciprocalName() {
+    static_assert(isSelfReferential, "reciprocalName only applies to self-referential relations");
+    reciprocalName = Name.view();
     return *this;
   }
 
   template <SymmetryMode sm> constexpr ManyToManyRelation &withSymmetryMode() {
-    static_assert((sm != SymmetryMode::NONE and throughFieldCount % 2 == 0 and std::is_same_v<Target, Definer>) or
-                      (sm == SymmetryMode::NONE),
-                  "Symmetric relations can only be self-referencing (Let me know if I'm wrong).");
+    static_assert(sm == SymmetryMode::NONE or isSelfReferential, "Symmetric relations can only be self-referencing");
     symmetryMode = sm;
     return *this;
   }
+
+  constexpr bool isValid() const {
+    const bool isSymmetric = (symmetryMode != SymmetryMode::NONE);
+    if constexpr (isSelfReferential)
+      return isSymmetric xor (reciprocalName == "");
+    else
+      return true;
+  }
+
+  static constexpr auto getThroughFieldPtrs() {
+    return [&]<size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(std::tuple{std::get<I>(throughFields).throughPtr}...);
+    }(std::make_index_sequence<throughFieldCount>{});
+  }
+
+  template <ThroughPtrModel T> static constexpr auto getThroughFields() {
+    constexpr auto result = []<std::size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getThroughFieldIf<T, I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<ThroughFieldTuple>>{});
+    return result;
+  }
+
+  template <ThroughPtrModel T, std::size_t I> static constexpr auto getThroughFieldIf() {
+    if constexpr (std::get<I>(throughFields).throughPtrModel == T)
+      return std::tuple{std::get<I>(throughFields)};
+    else
+      return std::tuple{};
+  }
+
+  static Through mirrorThroughObj(const Through &throughObj) {
+    constexpr auto throughFieldsA = getThroughFields<ThroughPtrModel::A>();
+    constexpr auto throughFieldsB = getThroughFields<ThroughPtrModel::B>();
+    constexpr size_t fieldCountA = std::tuple_size_v<decltype(throughFieldsA)>;
+    constexpr size_t fieldCountB = std::tuple_size_v<decltype(throughFieldsB)>;
+
+    ThroughModel mirror = throughObj;
+
+    [&]<size_t... I>(std::index_sequence<I...>) { // setting mirrorB = throughObjA
+      (
+          [&] {
+            const auto aValue = throughObj.*((std::get<I>(throughFieldsA)).throughPtr);
+            mirror.*((std::get<I>(throughFieldsB)).throughPtr) = aValue;
+          }(),
+          ...);
+    }(std::make_index_sequence<fieldCountA>{});
+    [&]<size_t... I>(std::index_sequence<I...>) { // setting mirrorA = throughObjB
+      (
+          [&] {
+            const auto bValue = throughObj.*((std::get<I>(throughFieldsB)).throughPtr);
+            mirror.*((std::get<I>(throughFieldsA)).throughPtr) = bValue;
+          }(),
+          ...);
+    }(std::make_index_sequence<fieldCountB>{});
+    return mirror;
+  }
 };
 
-/*
- * TargetModel: The target of this relationship. Generally to be thought of as the parent model.
- *
- * DefinerModel: The one defining the relation.
- *
- * ThroughModel: The intermediate model aka the join table. Like a User_x_Group.
- * You may use DefaultThroughModel if you don't care about additional data, and you have non-composite keys.
- *
- * ThroughFields: Ignore if using DefaultThroughModel. Otherwise provide the
- * mapping from ThroughModel's fields to the Target/Definer Models' fields.
- */
-template <typename TargetModel, typename DefinerModel, typename ThroughModel, ThroughField... ThroughFields>
+template <typename ModelA, typename ModelB, typename ThroughModel, ThroughField... ThroughFields>
 constexpr auto manyToManyRelation() {
-  return ManyToManyRelation<TargetModel, DefinerModel, ThroughModel, ThroughFields...>();
-};
+  constexpr auto result = ManyToManyRelation<ModelA, ModelB, ThroughModel, ThroughFields...>();
+  static_assert(result.isValid(), "Invalid many-to-many relation, check reciprocals/symmetry mode");
+  return result;
+}
 
 } // namespace rukh::orm
