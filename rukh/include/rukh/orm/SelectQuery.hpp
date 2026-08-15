@@ -18,6 +18,7 @@
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
+#include <tuple>
 
 namespace rukh::orm {
 
@@ -99,13 +100,26 @@ public:
   template <typename FieldPtr>
   SelectQuery &field(FieldPtr fieldPtr, const std::string &func = "", const std::string &tableAlias = "",
                      const std::string &columnAlias = "") {
-    columns_.push_back(getFinalColumn(fieldPtr, func, tableAlias, columnAlias));
+    columns_.push_back(getFullColumnString(fieldPtr, func, tableAlias, columnAlias));
+    return *this;
+  }
+
+  template <typename M> SelectQuery &allColumns(const std::string tableAlias = "") {
+    static_assert(is_in_tuple_v<M, ModelsTuple>, "allColumns model not found in provided SelectQuery Model types");
+    std::apply(
+        [&](auto &&...cols) {
+          (columns_.push_back(getFullColumnString(cols.fieldPtr, "", tableAlias,
+                                                  tableAlias.empty() ? std::string(cols.dbName)
+                                                                     : tableAlias + "_" + std::string(cols.dbName))),
+           ...);
+        },
+        M::columns());
     return *this;
   }
 
   template <typename FieldPtr>
   SelectQuery &orderBy(FieldPtr fieldPtr, Sorting sorting = Sorting::ASC, const std::string &tableAlias = "") {
-    orderBy_.emplace_back(getFinalColumn(fieldPtr, "", tableAlias, ""), sorting);
+    orderBy_.emplace_back(getFullColumnString(fieldPtr, "", tableAlias, ""), sorting);
     return *this;
   }
 
@@ -139,7 +153,7 @@ public:
   }
 
   template <typename FieldPtr> SelectQuery &groupBy(FieldPtr fieldPtr, const std::string &tableAlias = "") {
-    groupBy_.push_back(getFinalColumn(fieldPtr, "", tableAlias, ""));
+    groupBy_.push_back(getFullColumnString(fieldPtr, "", tableAlias, ""));
     return *this;
   }
 
@@ -342,9 +356,8 @@ private:
   }
 
   template <typename FieldPtr>
-  std::string getFinalColumn(FieldPtr fieldPtr, const std::string &func, const std::string &tableAlias,
-                             const std::string &columnAlias) {
-
+  std::string getFullColumnString(FieldPtr fieldPtr, const std::string &func, const std::string &tableAlias,
+                                  const std::string &columnAlias) {
     using FieldPtrModel = get_class_t<FieldPtr>;
     std::string asColumnAlias = columnAlias.empty() ? "" : " AS " + columnAlias;
     std::string col;

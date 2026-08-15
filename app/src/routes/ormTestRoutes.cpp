@@ -10,6 +10,7 @@
 #include "TestRunner.hpp"
 #include "models/Post.hpp"
 #include "models/User.hpp"
+#include "rukh/orm/SelectQuery.hpp"
 
 void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
                            rukh::db::IDatabase *db) {
@@ -340,6 +341,24 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
       aliceLikes = unwrap(co_await alice.manyRelated<"likes", Post>().select(), "after remove");
       expect(aliceLikes.empty(), "Alice should have 0 likes left");
     });
+
+    SelectQuery<Post, User> query("p");
+    using Pred = Predicate<Post, User>;
+
+    auto p = Pred::equals(&Post::user, &User::id, {"p", "u"});
+    query.join<User>(p, "u");
+    query.allColumns<Post>("p");
+    query.allColumns<User>("u");
+    auto queryResult = unwrap(co_await query.execute());
+    SPDLOG_DEBUG(queryResult.toString());
+    std::vector<std::tuple<Post, User>> result = hydrateJoined<std::tuple<Post, User>>(queryResult, "p", "u");
+
+    for (const auto postUser : result) {
+      SPDLOG_DEBUG("============================================================");
+      SPDLOG_DEBUG(std::get<0>(postUser).toString(1));
+      SPDLOG_DEBUG(std::get<1>(postUser).toString(1));
+      SPDLOG_DEBUG("----");
+    }
 
     // =========================================================================
     // 6. Many-to-many with extra fields on through model (PostLike.likedAt)
