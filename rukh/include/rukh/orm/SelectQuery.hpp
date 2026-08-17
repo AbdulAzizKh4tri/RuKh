@@ -22,12 +22,23 @@
 
 namespace rukh::orm {
 
+template <typename... Models> class SelectQuery;
+
+struct Cte {
+  enum class Type { RECURSIVE, NONRECURSIVE };
+
+  std::string name;
+  std::string sql;
+  std::vector<db::DbValue> params;
+  Type type = Type::NONRECURSIVE;
+};
+
 enum class Sorting { DESC, ASC };
 enum class JoinType { INNER, LEFT, RIGHT, FULL, CROSS };
 enum class SetQueryType { UNION, UNION_ALL, INTERSECT, INTERSECT_ALL, EXCEPT, EXCEPT_ALL };
 
 template <typename... Models>
-class SelectQuery : public QueryBase<SelectQuery<Models...>>, public WhereClause<SelectQuery<Models...>, Models...> {
+class SelectQuery : public QueryBase, public WhereClause<SelectQuery<Models...>, Models...> {
   /*
    * Every Query has a Main Model, the first one defined in the template params.
    * This is the only one that can use methods like update, getOne, etc.
@@ -90,34 +101,101 @@ public:
   SelectQuery &join(const Predicate<Models...> &predicate, const std::optional<std::string> tableAlias = std::nullopt,
                     JoinType joinType = JoinType::INNER) {
     static_assert(is_in_tuple_v<JoinModel, ModelsTuple>, "JoinModel not found in provided SelectQuery Model types");
-    if (not joins_)
-      joins_ = std::vector<Join>();
-    joins_->emplace_back(JoinModel::tableName, (tableAlias.value_or(getAlias(get_index_of_v<JoinModel, ModelsTuple>))),
-                         to_string(joinType), predicate);
+    joins_.emplace_back(std::string(JoinModel::tableName),
+                        (tableAlias.value_or(getAlias(get_index_of_v<JoinModel, ModelsTuple>))), to_string(joinType),
+                        predicate);
     return *this;
   }
 
-  template <typename FieldPtr>
-  SelectQuery &field(FieldPtr fieldPtr, const std::string &func = "", const std::string &tableAlias = "",
-                     const std::string &columnAlias = "") {
+  SelectQuery &join(const std::string &tableName, const Predicate<Models...> &predicate, const std::string tableAlias,
+                    JoinType joinType = JoinType::INNER) {
+    if (tableAlias.empty())
+      throw OrmException("Must provide table alias for string based tableName");
+    joins_.emplace_back(tableName, tableAlias, to_string(joinType), predicate);
+    return *this;
+  }
+
+  SelectQuery &withCte(const std::string &name, const SelectQuery &query, Cte::Type type = Cte::Type::NONRECURSIVE) {
+    bool isRecursive = type == Cte::Type::RECURSIVE;
+
+    if (isRecursive and (not(query.setQueryType) or not(*query.setQueryType == SetQueryType::UNION or
+                                                        *query.setQueryType == SetQueryType::UNION_ALL)))
+      throw OrmException("Recursive CTE must have UNION or UNION ALL query");
+
+    if (isRecursive and query.hasRecursive_)
+      throw OrmException("Can only have 1 recursive CTE");
+
+    if (hasRecursive_ and isRecursive)
+      throw OrmException("Can only have 1 recursive CTE");
+    hasRecursive_ = hasRecursive_ or isRecursive;
+
+    auto [sql, params] = query.getSqlAndParams();
+    ctes_.emplace_back(name, sql, params, type);
+    return *this;
+  }
+
+  SelectQuery &withCte(const Cte &cte) {
+    bool isRecursive = cte.type == Cte::Type::RECURSIVE;
+    if (hasRecursive_ and isRecursive)
+      throw OrmException("Can only have 1 recursive CTE");
+    hasRecursive_ = hasRecursive_ or isRecursive;
+
+    ctes_.push_back(cte);
+    return *this;
+  }
+
+  SelectQuery &from(const std::string &tableName, const std::string &tableAlias) {
+    tableName_ = tableName;
+    if (tableAlias.empty())
+      tableAlias_ = std::nullopt;
+    else
+      tableAlias_ = tableAlias;
+    return *this;
+  }
+
+  template <FieldPointer FieldPtr>
+  SelectQuery &field(FieldPtr fieldPtr, const std::string &tableAlias = "", const std::string &columnAlias = "") {
+    columns_.push_back(getFullColumnString(fieldPtr, "", tableAlias, columnAlias));
+    return *this;
+  }
+
+  template <FieldPointer FieldPtr>
+  SelectQuery &functionField(const std::string &func, FieldPtr fieldPtr, const std::string &tableAlias = "",
+                             const std::string &columnAlias = "") {
     columns_.push_back(getFullColumnString(fieldPtr, func, tableAlias, columnAlias));
     return *this;
   }
 
-  template <typename M> SelectQuery &allColumns(const std::string tableAlias = "") {
+  SelectQuery &column(const std::string &column, const std::string &tableAlias = "",
+                      const std::string &columnAlias = "") {
+    columns_.push_back(getFullColumnString(column, "", tableAlias, columnAlias));
+    return *this;
+  }
+
+  SelectQuery &functionColumn(const std::string &func, const std::string &column, const std::string &tableAlias = "",
+                              const std::string &columnAlias = "") {
+    columns_.push_back(getFullColumnString(column, func, tableAlias, columnAlias));
+    return *this;
+  }
+
+  template <typename M> SelectQuery &allColumns(const std::string tableAlias = "", const std::string aliasPrefix = "") {
     static_assert(is_in_tuple_v<M, ModelsTuple>, "allColumns model not found in provided SelectQuery Model types");
     std::apply(
         [&](auto &&...cols) {
-          (columns_.push_back(getFullColumnString(cols.fieldPtr, "", tableAlias,
-                                                  tableAlias.empty() ? std::string(cols.dbName)
-                                                                     : tableAlias + "_" + std::string(cols.dbName))),
+          (columns_.push_back(getFullColumnString(
+               cols.fieldPtr, "", tableAlias, aliasPrefix.empty() ? "" : aliasPrefix + "_" + std::string(cols.dbName))),
            ...);
         },
         M::columns());
     return *this;
   }
 
-  template <typename FieldPtr>
+  SelectQuery &orderBy(const std::string &column, Sorting sorting = Sorting::ASC, const std::string &tableAlias = "") {
+    orderBy_.emplace_back(getFullColumnString(column, "", tableAlias, ""), sorting);
+    return *this;
+  }
+
+  template <FieldPointer FieldPtr>
   SelectQuery &orderBy(FieldPtr fieldPtr, Sorting sorting = Sorting::ASC, const std::string &tableAlias = "") {
     orderBy_.emplace_back(getFullColumnString(fieldPtr, "", tableAlias, ""), sorting);
     return *this;
@@ -152,7 +230,7 @@ public:
     return *this;
   }
 
-  template <typename FieldPtr> SelectQuery &groupBy(FieldPtr fieldPtr, const std::string &tableAlias = "") {
+  template <FieldPointer FieldPtr> SelectQuery &groupBy(FieldPtr fieldPtr, const std::string &tableAlias = "") {
     groupBy_.push_back(getFullColumnString(fieldPtr, "", tableAlias, ""));
     return *this;
   }
@@ -164,9 +242,9 @@ public:
 
   // Count the number of rows
   Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams();
-    auto countSql = "SELECT COUNT(*) FROM (" + sql_ + ")";
-    auto queryResult = co_await this->dispatch(transaction, countSql, this->params_);
+    auto [sql, params] = buildSelectSqlAndSetParams();
+    auto countSql = "SELECT COUNT(*) FROM (" + sql + ")";
+    auto queryResult = co_await this->dispatch(transaction, countSql, params);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -178,9 +256,9 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(0, 2);
+    auto [sql, params] = buildSelectSqlAndSetParams(0, 2);
 
-    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+    auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -191,7 +269,7 @@ public:
     if (rowCount < 1)
       throw rukh::OrmException("getOne(): Found no matching rows");
 
-    co_return hydrate<Model>(queryResult->rows[0]);
+    co_return hydrateModel<Model>(queryResult->rows[0]);
   }
 
   /*
@@ -199,8 +277,8 @@ public:
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<std::optional<Model>, db::DatabaseError>> getOneOptional(db::ITransaction *transaction) {
-    buildSelectSqlAndSetParams(0, 2);
-    auto queryResult = co_await this->dispatch(transaction, sql_, params_);
+    auto [sql, params] = buildSelectSqlAndSetParams(0, 2);
+    auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -209,44 +287,44 @@ public:
       throw rukh::OrmException("getOptional(): Got more than one row when expected only one");
     if (rowCount == 0)
       co_return std::nullopt;
-    co_return hydrate<Model>(queryResult->rows[0]);
+    co_return hydrateModel<Model>(queryResult->rows[0]);
   };
 
   /*
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<std::vector<Model>, db::DatabaseError>> select(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams();
-    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+    auto [sql, params] = buildSelectSqlAndSetParams();
+    auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
-    co_return hydrate<Model>(*queryResult);
+    co_return hydrateModel<Model>(*queryResult);
   }
 
   /*
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(0, 1);
+    auto [sql, params] = buildSelectSqlAndSetParams(0, 1);
 
-    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+    auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
     if (queryResult->rows.empty())
       co_return std::nullopt;
 
-    co_return hydrate<Model>(queryResult->rows[0]);
+    co_return hydrateModelRow<Model>(queryResult->rows[0]);
   }
 
   /*
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams(0, 1);
+    auto [sql, params] = buildSelectSqlAndSetParams(0, 1);
 
-    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+    auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
@@ -291,57 +369,46 @@ public:
 
   // Returns unhydrated QueryResult Object
   Task<std::expected<db::QueryResult, db::DatabaseError>> execute(db::ITransaction *transaction = nullptr) {
-    buildSelectSqlAndSetParams();
-    auto queryResult = co_await this->dispatch(transaction, this->sql_, this->params_);
+    auto [sql, params] = buildSelectSqlAndSetParams();
+    auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
     co_return queryResult;
   }
 
-  std::string getSql() {
-    buildSelectSqlAndSetParams();
-    return this->sql_;
+  std::string getSql() const {
+    auto [sql, _] = buildSelectSqlAndSetParams();
+    return sql;
   }
 
-  std::pair<std::string, std::vector<db::DbValue>> getSqlAndParams(size_t depth = 0) {
-    buildSelectSqlAndSetParams(depth);
-    return {this->sql_, this->params_};
-  }
-
-  SelectQuery<Models...> &reset() {
-    this->wherePredicate = std::nullopt;
-    tableAlias_ = std::nullopt;
-    columns_.clear();
-    params_.clear();
-    orderBy_.clear();
-    groupBy_.clear();
-    limit_ = std::nullopt;
-    offset_ = std::nullopt;
-    return *this;
+  std::pair<std::string, std::vector<db::DbValue>> getSqlAndParams(size_t depth = 0) const {
+    return buildSelectSqlAndSetParams(depth);
   }
 
   size_t getColumnCount() const { return columns_.size(); }
 
 private:
   struct Join {
-    std::string_view tableName;
+    std::string tableName;
     std::string tableAlias;
     std::string_view type;
     Predicate<Models...> condition;
   };
 
-  std::string sql_;
+  std::string tableName_ = std::string(Model::tableName);
   std::optional<std::string> tableAlias_ = std::nullopt;
-  std::optional<std::vector<Join>> joins_ = std::nullopt;
+  std::vector<Join> joins_;
   std::vector<std::string> columns_;
-  std::vector<db::DbValue> params_;
   std::vector<std::pair<std::string, Sorting>> orderBy_;
   std::vector<std::string> groupBy_;
   std::optional<size_t> limit_;
   std::optional<size_t> offset_;
   std::optional<Predicate<Models...>> havingPredicate_ = std::nullopt;
   bool distinct_ = false;
+
+  std::vector<Cte> ctes_;
+  bool hasRecursive_ = false;
 
   static constexpr std::string_view joinTypeStrings[] = {" JOIN ", " LEFT JOIN ", " RIGHT JOIN ", " FULL JOIN ",
                                                          " CROSS JOIN "};
@@ -355,7 +422,7 @@ private:
     return setQueryTypeStrings[static_cast<std::size_t>(setType)];
   }
 
-  template <typename FieldPtr>
+  template <FieldPointer FieldPtr>
   std::string getFullColumnString(FieldPtr fieldPtr, const std::string &func, const std::string &tableAlias,
                                   const std::string &columnAlias) {
     using FieldPtrModel = get_class_t<FieldPtr>;
@@ -366,14 +433,35 @@ private:
     } else {
       col = tableAlias + "." + FieldPtrModel::columnNameOf(fieldPtr);
     }
-    return (func.empty() ? func + "(" + col + ")" : col) + asColumnAlias;
+    return (not func.empty() ? func + "(" + col + ")" : col) + asColumnAlias;
+  }
+
+  std::string getFullColumnString(const std::string &column, const std::string &func, const std::string &tableAlias,
+                                  const std::string &columnAlias) {
+    std::string asColumnAlias = columnAlias.empty() ? "" : " AS " + columnAlias;
+    std::string col;
+    if (tableAlias.empty()) {
+      col = column;
+    } else {
+      col = tableAlias + "." + column;
+    }
+    return (not func.empty() ? func + "(" + col + ")" : col) + asColumnAlias;
   }
 
   // TODO: make bulidSelectSQLAndSetParams const
 
-  void buildSelectSqlAndSetParams(const size_t depth = 0, std::optional<size_t> limit = std::nullopt) {
-    params_.clear();
+  std::pair<std::string, std::vector<db::DbValue>>
+  buildSelectSqlAndSetParams(const size_t depth = 0, std::optional<size_t> limit = std::nullopt) const {
+    std::vector<db::DbValue> params;
     std::ostringstream ss;
+
+    bool firstCte = true;
+    for (const Cte &cte : ctes_) {
+      ss << (firstCte ? "WITH " : " , ") << (firstCte and hasRecursive_ ? " RECURSIVE " : "") << cte.name << " AS ( "
+         << cte.sql << " ) ";
+      params.insert(params.end(), cte.params.begin(), cte.params.end());
+      firstCte = false;
+    }
 
     if (setQueryType) {
       if (not groupBy_.empty() or havingPredicate_)
@@ -385,18 +473,22 @@ private:
       auto sql2 = result2.first;
 
       if (children[0].setQueryType)
-        sql1 = "SELECT * FROM ( " + sql1 + ") AS sub_" + std::to_string(depth) + "_0";
+        sql1 = " SELECT * FROM ( " + sql1 + ") AS sub_" + std::to_string(depth) + "_0";
 
       if (children[1].setQueryType)
-        sql2 = "SELECT * FROM ( " + sql2 + ") AS sub_" + std::to_string(depth) + "_1";
+        sql2 = " SELECT * FROM ( " + sql2 + ") AS sub_" + std::to_string(depth) + "_1";
 
       ss << sql1 << to_string(*setQueryType) << sql2;
-      params_ = result1.second;
-      params_.insert(params_.end(), result2.second.begin(), result2.second.end());
+      params = result1.second;
+      params.insert(params.end(), result2.second.begin(), result2.second.end());
     } else {
-      ss << "SELECT " << (distinct_ ? " DISTINCT " : "");
+      ss << " SELECT " << (distinct_ ? " DISTINCT " : "");
 
       if (columns_.empty()) {
+        if (tableName_ != Model::tableName) {
+          throw OrmException("Must provide SELECT column list when overriding tableName");
+        }
+
         constexpr auto mainModelColumns = Model::columns();
         bool first = true;
         std::apply(
@@ -418,18 +510,17 @@ private:
         ss << ", " << columns_.at(i);
       }
 
-      ss << " FROM " << std::string(Model::tableName) << " AS "
-         << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
+      ss << " FROM " << tableName_ << " AS " << tableAlias_.value_or(getAlias(get_index_of_v<Model, ModelsTuple>));
 
-      if (joins_) {
-        for (auto &join : *joins_) {
+      if (not joins_.empty()) {
+        for (auto &join : joins_) {
           ss << join.type << join.tableName << " AS " << join.tableAlias << " ON "
-             << join.condition.resolvePredicates(params_);
+             << join.condition.resolvePredicates(params);
         }
       }
 
       if (this->wherePredicate) {
-        ss << " WHERE " << (*this->wherePredicate).resolvePredicates(params_);
+        ss << " WHERE " << (*this->wherePredicate).resolvePredicates(params);
       }
 
       if (not groupBy_.empty()) {
@@ -438,7 +529,7 @@ private:
           ss << ", " << groupBy_.at(i);
         }
         if (havingPredicate_) {
-          ss << " HAVING " << havingPredicate_.value().resolvePredicates(params_);
+          ss << " HAVING " << havingPredicate_.value().resolvePredicates(params);
         }
       }
     }
@@ -466,7 +557,7 @@ private:
     }
 
     ss << " ";
-    sql_ = ss.str();
+    return {ss.str(), params};
   }
 };
 

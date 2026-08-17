@@ -6,7 +6,7 @@
 #include "routes/testRoutes.hpp"
 
 void registerCookieTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                              rukh::ThreadPool *threadPool, rukh::db::IDatabase *db) {
+                              rukh::ThreadPool *threadPool) {
   using namespace rukh;
   using namespace nlohmann;
 

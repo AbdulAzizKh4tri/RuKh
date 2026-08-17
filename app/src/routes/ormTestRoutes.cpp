@@ -6,14 +6,16 @@
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
 #include <rukh/db/ScopedTransaction.hpp>
+#include <rukh/orm/OrmConfig.hpp>
 
 #include "TestRunner.hpp"
 #include "models/Post.hpp"
 #include "models/User.hpp"
 #include "rukh/orm/SelectQuery.hpp"
 
-void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
-                           rukh::db::IDatabase *db) {
+void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool) {
+  auto db = rukh::orm::OrmConfig::db;
+
   using namespace rukh;
   using namespace nlohmann;
 
@@ -347,8 +349,8 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
 
     auto p = Pred::equals(&Post::user, &User::id, {"p", "u"});
     query.join<User>(p, "u");
-    query.allColumns<Post>("p");
-    query.allColumns<User>("u");
+    query.allColumns<Post>("p", "p");
+    query.allColumns<User>("u", "u");
     auto queryResult = unwrap(co_await query.execute());
     SPDLOG_DEBUG(queryResult.toString());
     std::vector<std::tuple<Post, User>> result = hydrateJoined<std::tuple<Post, User>>(queryResult, "p", "u");
@@ -961,6 +963,260 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
     json summary = runner.toJson();
     int status = summary["allPassed"].get<bool>() ? 200 : 500;
 
+    co_return HttpResponse(status, "application/json", summary.dump(2));
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /tests/orm/cte_test
+  // ---------------------------------------------------------------------------
+  router.get("/tests/orm/cte_test", [db](const HttpRequest &request) -> Task<Response> {
+    using namespace models;
+    using namespace testutil;
+    using Pu = Predicate<User>;
+
+    TestRunner runner;
+
+    // =========================================================================
+    // 0. Cleanup – start from a known-empty state
+    // =========================================================================
+    co_await runner.run("cleanup", [db]() -> Task<void> {
+      unwrap(co_await User::bulkDestroy(Pu(true)), "User bulkDestroy");
+
+      expect(unwrap(co_await User::queryAll().count(), "count") == 0, "users not empty");
+    });
+
+    // =========================================================================
+    // 1. Seed users
+    // =========================================================================
+    User alice, betty, bob, charlie, diana, jack, johnny;
+    co_await runner.run("seed users", [&]() -> Task<void> {
+      alice = {.name = "Alice", .email = "alice@example.com", .age = 55};
+      betty = {.name = "Betty", .email = "betty@example.com", .age = 17};
+      bob = {.name = "Bob", .email = "bob@example.com", .age = 28};
+      charlie = {.name = "Charlie", .email = "charlie@example.com", .age = 25};
+      diana = {.name = "Diana", .email = "diana@example.com", .age = 35};
+      jack = {.name = "Jack", .email = "jack@example.com", .age = 17};
+      johnny = {.name = "Johnny", .email = "johnny@example.com", .age = 1};
+
+      unwrap(co_await alice.save(), "alice save");
+      unwrap(co_await betty.save(), "betty save");
+      unwrap(co_await bob.save(), "bob save");
+
+      charlie.mother = alice;
+      diana.mother = alice;
+
+      unwrap(co_await charlie.save(), "charlie save");
+      unwrap(co_await diana.save(), "diana save");
+
+      jack.mother = diana;
+      johnny.mother = betty;
+      unwrap(co_await jack.save(), "jack save");
+      unwrap(co_await johnny.save(), "johnny save");
+
+      expect(alice.id > 0 and betty.id > 0 and bob.id > 0 and charlie.id > 0 and diana.id > 0 and jack.id > 0 and
+                 johnny.id > 0,
+             "ids not set");
+    });
+
+    // =========================================================================
+    // 2. Basic CTE
+    // =========================================================================
+    co_await runner.run("basic CTE", [&]() -> Task<void> {
+      auto adultUsers = User::filter(Pu::greaterOrEqual(&User::age, 18));
+
+      auto mainQuery =
+          User::filter(Pu::lesser(&User::age, 30)).withCte("adults", adultUsers).from("adults", "a").allColumns<User>();
+
+      auto adultsBelow30 = unwrap(co_await mainQuery.select(), "selecting users");
+      expect(adultsBelow30.size() == 2, "expected 2 adults below 30");
+    });
+
+    // =========================================================================
+    // 3. CTE within CTE
+    // =========================================================================
+    co_await runner.run("CTE within CTE", [&]() -> Task<void> {
+      auto adultUsers = User::filter((Pu::greater(&User::age, 18)));
+
+      auto adultUsersBelow30 = User::queryAll()
+                                   .withCte("adults", adultUsers)
+                                   .allColumns<User>()
+                                   .from("adults", "a")
+                                   .where(Pu::lesser(&User::age, 30));
+
+      auto mainQuery =
+          User::queryAll().withCte("adultsBelow30", adultUsersBelow30).allColumns<User>().from("adultsBelow30", "a");
+
+      auto adultsBelow30 = unwrap(co_await mainQuery.select(), "selecting users");
+      expect(adultsBelow30.size() == 2, "expected 2 adults below 30");
+    });
+
+    charlie.mother = alice;
+    diana.mother = alice;
+    jack.mother = diana;
+    johnny.mother = betty;
+
+    unwrap(co_await charlie.save(), "charlie save");
+    unwrap(co_await diana.save(), "diana save");
+    unwrap(co_await jack.save(), "jack save");
+    unwrap(co_await johnny.save(), "johnny save");
+
+    // =========================================================================
+    // 4. Join CTE
+    // =========================================================================
+    co_await runner.run("Join-ing with a CTE", [&]() -> Task<void> {
+      auto motherStats = User::queryAll()
+                             .field(&User::mother)
+                             .functionField("COUNT", &User::id, "", "childCount")
+                             .where(Pu::isNotNull(&User::mother))
+                             .groupBy(&User::mother);
+
+      auto mainQuery = User::queryAll("u")
+                           .withCte("motherStats", motherStats)
+                           .field(&User::name, "u", "name")
+                           .column("childCount", "ms", "childCount")
+                           .join("motherStats", Pu("u.id", Operator::EQUALS, "ms.mother"), "ms")
+                           .orderBy("childCount", Sorting::DESC, "ms");
+
+      db::QueryResult mainQueryResult = unwrap(co_await mainQuery.execute(), "selecting users");
+
+      using childCountTuple = std::tuple<std::string, int64_t>;
+      auto childCounts = hydrateTuple<childCountTuple>(mainQueryResult, std::make_tuple("name", "childCount"));
+
+      expect(childCounts.size() == 3, "expected 3 users with children");
+    });
+
+    // =========================================================================
+    // 6. Multiple CTEs
+    // =========================================================================
+    co_await runner.run("Multiple CTEs", [&]() -> Task<void> {
+      auto adults = User::filter((Pu::greaterOrEqual(&User::age, 18)));
+
+      auto motherStats = User::queryAll()
+                             .field(&User::mother)
+                             .functionField("COUNT", &User::id, "", "childCount")
+                             .where(Pu::isNotNull(&User::mother))
+                             .groupBy(&User::mother);
+
+      auto mainQuery = User::queryAll()
+                           .withCte("adults", adults)
+                           .withCte("motherStats", motherStats)
+                           .column("name", "a")
+                           .column("age", "a")
+                           .column("childCount", "ms")
+                           .from("adults", "a")
+                           .join("motherStats", Pu("a.id", Operator::EQUALS, "ms.mother"), "ms")
+                           .orderBy("childCount", Sorting::DESC, "ms");
+
+      auto queryResult = unwrap(co_await mainQuery.execute(), "selecting users");
+
+      auto adultMothers = hydrateTuple<std::tuple<std::string, int64_t, int64_t>>(
+          queryResult, std::make_tuple("name", "age", "childCount"));
+
+      expect(adultMothers.size() == 2, "expected 2 adults with children");
+    });
+
+    jack.bestFriend = betty;
+    charlie.bestFriend = bob;
+    diana.bestFriend = alice;
+    bob.bestFriend = diana;
+    unwrap(co_await jack.save(), "jack save");
+    unwrap(co_await charlie.save(), "charlie save");
+    unwrap(co_await diana.save(), "diana save");
+    unwrap(co_await bob.save(), "bob save");
+
+    // =========================================================================
+    // 7. CTE referenced multiple times
+    // =========================================================================
+    co_await runner.run("CTE referenced multiple times", [&]() -> Task<void> {
+      auto adults = User::filter((Pu::greaterOrEqual(&User::age, 18)));
+
+      auto mainQuery = User::queryAll()
+                           .withCte("adults", adults)
+                           .column("name", "a", "username")
+                           .column("name", "b", "friendname")
+                           .from("adults", "a")
+                           .join("adults", Pu("a.best_friend", Operator::EQUALS, "b.id"), "b");
+
+      auto queryResult = unwrap(co_await mainQuery.execute(), "selecting users");
+
+      auto adultsFriendships =
+          hydrateTuple<std::tuple<std::string, std::string>>(queryResult, std::make_tuple("username", "friendname"));
+
+      expect(adultsFriendships.size() == 3, "expected 3 adults with best friends");
+    });
+
+    // =========================================================================
+    // 8. CTE unused
+    // =========================================================================
+    co_await runner.run("CTE unused", [&]() -> Task<void> {
+      auto adults = User::filter((Pu::greaterOrEqual(&User::age, 18)));
+
+      auto mainQuery = User::queryAll().withCte("adults", adults);
+
+      auto allUsers = unwrap(co_await mainQuery.select(), "selecting users");
+
+      expect(allUsers.size() == 7, "expected 7 users");
+    });
+
+    // =========================================================================
+    // 9. CTE name collision with tableName
+    // =========================================================================
+    co_await runner.run("CTE name collision with tableName", [&]() -> Task<void> {
+      Cte cte{.name = "users", .sql = "SELECT 123 as id, 'fake' as name"};
+      auto mainQuery = User::queryAll().withCte(cte).column("id", "u").column("name", "u").from("users", "u");
+      auto queryResult = unwrap(co_await mainQuery.execute(), "selecting users");
+      expect(queryResult.size() == 1, "expected 1 row");
+    });
+
+    // =========================================================================
+    // 10. CTE chain
+    // =========================================================================
+    co_await runner.run("CTE chain", [&]() -> Task<void> {
+      auto adults = User::filter((Pu::greaterOrEqual(&User::age, 18)));
+      auto youngAdults = User::filter((Pu::lesser(&User::age, 30, "b"))).allColumns<User>("b").from("adults", "b");
+      auto namedAdults = User::filter((Pu::isNotNull(&User::name, "y"))).allColumns<User>("y").from("youngAdults", "y");
+
+      auto mainQuery = User::queryAll()
+                           .withCte("adults", adults)
+                           .withCte("youngAdults", youngAdults)
+                           .withCte("namedAdults", namedAdults)
+                           .column("name", "a")
+                           .from("namedAdults", "a");
+
+      auto queryResult = unwrap(co_await mainQuery.execute(), "selecting users");
+      expect(queryResult.size() == 2, "expected 2 users");
+    });
+
+    // =========================================================================
+    // 11. Recursive CTE
+    // =========================================================================
+    co_await runner.run("Recursive CTE - Ancestors", [&]() -> Task<void> {
+      auto query = [](User user) {
+        auto base = User::filter(Pu::equals(&User::id, user));
+        auto recursive = User::queryAll().join("ancestors", Pu::equals(&User::id, &User::mother, {"a", "x"}), "x");
+
+        auto mainQuery = SelectQuery<User>()
+                             .withCte("ancestors", base.unionQuery(recursive), Cte::Type::RECURSIVE)
+                             .allColumns<User>()
+                             .from("ancestors", "a");
+        return mainQuery;
+      };
+
+      auto jacksAncestors = unwrap(co_await query(jack).select(), "selecting jack's ancestors");
+      expect(jacksAncestors.size() == 3, "expected 3 ancestors");
+
+      auto johnnysAncestors = unwrap(co_await query(johnny).select(), "selecting johnny's ancestors");
+      expect(johnnysAncestors.size() == 2, "expected 2 ancestors");
+    });
+
+    // =========================================================================
+    // Final cleanup (optional – keeps DB tidy)
+    // =========================================================================
+    co_await runner.run("final cleanup",
+                        []() -> Task<void> { unwrap(co_await User::bulkDestroy({true}), "final User"); });
+
+    json summary = runner.toJson();
+    int status = summary["allPassed"].get<bool>() ? 200 : 500;
     co_return HttpResponse(status, "application/json", summary.dump(2));
   });
 }

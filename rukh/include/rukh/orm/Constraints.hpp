@@ -25,7 +25,7 @@ template <typename Model, typename... FieldT> inline constexpr auto makeUniqueTo
 }
 
 struct CheckColumnResolver {
-  template <typename... Models, typename FieldPtr> static std::string resolve(FieldPtr fieldPtr, const std::string &) {
+  template <typename... Models, FieldPointer FieldPtr> static std::string resolve(FieldPtr fieldPtr, const std::string &) {
 
     using FieldPtrModel = get_class_t<FieldPtr>;
     return FieldPtrModel::columnNameOf(fieldPtr);

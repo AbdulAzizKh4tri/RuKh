@@ -10,7 +10,8 @@
 namespace rukh::orm {
 
 template <typename Model, typename FieldT>
-bool hydrateColumn(Model &obj, const Column<Model, FieldT> &col, const db::Row &row, const std::string &prefix = "") {
+bool hydrateModelColumn(Model &obj, const Column<Model, FieldT> &col, const db::Row &row,
+                        const std::string &prefix = "") {
   std::string lookupName = prefix.empty() ? std::string(col.dbName) : (prefix + "_" + std::string(col.dbName));
   if constexpr (OptionalT<FieldT>) {
     if (row.isNull(lookupName)) {
@@ -35,7 +36,7 @@ bool hydrateColumn(Model &obj, const Column<Model, FieldT> &col, const db::Row &
   }
 }
 
-template <typename Model> Model hydrate(const rukh::db::Row &row) {
+template <typename Model> Model hydrateModelRow(const rukh::db::Row &row) {
   Model obj;
   bool ok = true;
 
@@ -44,7 +45,7 @@ template <typename Model> Model hydrate(const rukh::db::Row &row) {
         auto handle = [&](auto &&c) {
           if (not ok)
             return;
-          ok = hydrateColumn(obj, c, row);
+          ok = hydrateModelColumn(obj, c, row);
         };
         (handle(col), ...);
       },
@@ -58,18 +59,10 @@ template <typename Model> Model hydrate(const rukh::db::Row &row) {
   return obj;
 }
 
-template <typename Model> std::vector<Model> hydrate(const rukh::db::QueryResult &queryResult) {
+template <typename Model> std::vector<Model> hydrateModel(const rukh::db::QueryResult &queryResult) {
   std::vector<Model> result;
   for (auto &row : queryResult.rows) {
-    result.push_back(hydrate<Model>(row));
-  }
-  return result;
-}
-
-template <typename Model> std::vector<Model> hydrate(const std::vector<rukh::db::Row> &rows) {
-  std::vector<Model> result;
-  for (auto &row : rows) {
-    result.push_back(hydrate<Model>(row));
+    result.push_back(hydrateModelRow<Model>(row));
   }
   return result;
 }
@@ -85,7 +78,7 @@ void hydrateModelAt(const rukh::db::Row &row, ModelsTuple &objTuple, const Alias
         auto handle = [&](auto &&c) {
           if (not ok)
             return;
-          ok = hydrateColumn(obj, c, row, alias);
+          ok = hydrateModelColumn(obj, c, row, alias);
         };
         (handle(col), ...);
       },
@@ -112,10 +105,62 @@ ModelsTuple hydrateJoinedRow(const rukh::db::Row &row, Aliases... aliases) {
 }
 
 template <typename ModelsTuple, typename... Aliases>
-auto hydrateJoined(const rukh::db::QueryResult &queryResult, Aliases... aliases) {
+std::vector<ModelsTuple> hydrateJoined(const rukh::db::QueryResult &queryResult, Aliases... aliases) {
   std::vector<ModelsTuple> result;
   for (const auto &row : queryResult.rows) {
     result.push_back(hydrateJoinedRow<ModelsTuple>(row, aliases...));
+  }
+  return result;
+}
+
+template <size_t I, Tuple TypesTuple, Tuple ColumnNamesTuple>
+bool hydrateTupleValueAt(const db::Row &row, TypesTuple &valuesTuple, ColumnNamesTuple ColumnNames) {
+
+  using ValueType = std::tuple_element_t<I, TypesTuple>;
+  ValueType &result = std::get<I>(valuesTuple);
+  const auto columnName = std::get<I>(ColumnNames);
+
+  if constexpr (OptionalT<ValueType>) {
+    if (row.isNull(columnName)) {
+      result = std::nullopt;
+      return true;
+    }
+
+    auto val = row.as<typename ValueType::value_type>(columnName);
+    if (not val) {
+      SPDLOG_ERROR("Failed to hydrate column: {}", columnName);
+      return false;
+    }
+
+    result = std::move(*val);
+    return true;
+  } else {
+    auto val = row.as<ValueType>(columnName);
+    if (not val) {
+      SPDLOG_ERROR("Failed to hydrate column: {}", columnName);
+      return false;
+    }
+    result = std::move(*val);
+    return true;
+  }
+}
+
+template <Tuple TypesTuple, Tuple ColumnNamesTuple>
+TypesTuple hydrateTupleRow(const rukh::db::Row &row, ColumnNamesTuple columnNames) {
+  TypesTuple valuesTuple;
+
+  [&]<size_t... I>(std::index_sequence<I...>) {
+    (hydrateTupleValueAt<I>(row, valuesTuple, columnNames), ...);
+  }(std::make_index_sequence<std::tuple_size_v<TypesTuple>>{});
+
+  return valuesTuple;
+}
+
+template <Tuple TypesTuple, Tuple ColumnNamesTuple>
+std::vector<TypesTuple> hydrateTuple(const rukh::db::QueryResult &queryResult, ColumnNamesTuple columnNames) {
+  std::vector<TypesTuple> result;
+  for (const auto &row : queryResult.rows) {
+    result.push_back(hydrateTupleRow<TypesTuple>(row, columnNames));
   }
   return result;
 }

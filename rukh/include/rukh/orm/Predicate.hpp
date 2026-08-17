@@ -50,7 +50,19 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
     }
   }
 
-  enum class PredicateType { LEAF, AND, OR, TRUE, FALSE, STRING, FIELD_COMPARISON, SUBQUERY } predicateType;
+  enum class PredicateType {
+    LEAF,
+    AND,
+    OR,
+    TRUE,
+    FALSE,
+    STRING,
+    FIELD_COMPARISON,
+    SUBQUERY,
+    EXISTS,
+    NOT_EXISTS,
+    RAW
+  } predicateType;
 
   std::string columnA;
   std::string columnB;
@@ -76,6 +88,11 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
     values.insert(values.end(), vals.begin(), vals.end());
   }
 
+  BasePredicate(const std::string &lhs, Operator opr, const std::string &rhs, const std::vector<db::DbValue> &vals = {})
+      : predicateType(PredicateType::RAW), op(opr), columnA(lhs), columnB(rhs) {
+    values.insert(values.end(), vals.begin(), vals.end());
+  }
+
   // bool preds
   BasePredicate(bool val) {
     if (val)
@@ -85,7 +102,7 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
   }
 
   // field to values
-  template <typename FieldPtr>
+  template <FieldPointer FieldPtr>
   BasePredicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
                 const std::string &tableAlias)
       : predicateType(PredicateType::LEAF), columnA(getColumnWithAlias(fieldPtr, tableAlias)), op(opr) {
@@ -93,7 +110,7 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
   }
 
   // field to values with functions
-  template <typename FieldPtr>
+  template <FieldPointer FieldPtr>
   BasePredicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
                 const std::string &lhsFunc, const std::string &rhsFunc, const std::string &tableAlias)
       : BasePredicate(fieldPtr, opr, vals, tableAlias) {
@@ -102,20 +119,28 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
   }
 
   // field to Subquery
-  template <typename FieldPtr>
+  template <FieldPointer FieldPtr>
   BasePredicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &tableAlias)
-      : predicateType(PredicateType::SubQuery), columnA(getColumnWithAlias(fieldPtr, tableAlias)), op(opr) {
+      : predicateType(PredicateType::SUBQUERY), columnA(getColumnWithAlias(fieldPtr, tableAlias)), op(opr) {
     auto sqlAndParams = subQuery.getSqlAndParams();
     columnB = sqlAndParams.first;
     values.insert(values.end(), sqlAndParams.second.begin(), sqlAndParams.second.end());
   }
 
   // field to Subquery with functions
-  template <typename FieldPtr>
+  template <FieldPointer FieldPtr>
   BasePredicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &lhsFunc,
                 const std::string &tableAlias)
       : BasePredicate(fieldPtr, opr, subQuery, tableAlias) {
     lhsFunction = lhsFunc;
+  }
+
+  // Exists Subquery
+  BasePredicate(SelectQuery<Models...> &subQuery, bool exists)
+      : predicateType(exists ? PredicateType::EXISTS : PredicateType::NOT_EXISTS) {
+    auto [sql, params] = subQuery.getSqlAndParams();
+    columnA = sql;
+    values.insert(values.end(), params.begin(), params.end());
   }
 
   // field to field
@@ -185,6 +210,16 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
 
   //===============HELPERS===============
 
+  //===============EXISTS===============
+  //
+  static BasePredicate<ColumnResolver, Models...> exists(SelectQuery<Models...> &subQuery) { // field - val
+    return BasePredicate<ColumnResolver, Models...>(subQuery, true);
+  }
+
+  static BasePredicate<ColumnResolver, Models...> notExists(SelectQuery<Models...> &subQuery) { // field - val
+    return BasePredicate<ColumnResolver, Models...>(subQuery, false);
+  }
+
   //===============NULL===============
   template <typename FieldT, typename Model>
   static BasePredicate<ColumnResolver, Models...> isNull(FieldT Model::*fieldPtr,
@@ -247,7 +282,7 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
     static_assert(is_in_tuple_v<Model, ModelsTuple>,
                   "equals(): FieldPtr from a model not specified in BasePredicate<...>");
     if (subQuery.getColumnCount() != 1)
-      throw std::runtime_error("IN subquery must have one specified field (use yourQuery.field())");
+      throw OrmException("IN subquery must have one specified field (use yourQuery.field())");
     return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::IN, subQuery, tableAlias);
   }
 
@@ -269,7 +304,7 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
                   "notIn(): FieldPtr from a model not specified in BasePredicate<...>");
 
     if (subQuery.getColumnCount() != 1)
-      throw std::runtime_error("NOT IN subquery must have one specified field (use yourQuery.field())");
+      throw OrmException("NOT IN subquery must have one specified field (use yourQuery.field())");
 
     return BasePredicate<ColumnResolver, Models...>(fieldPtr, Operator::NOT_IN, subQuery, tableAlias);
   }
@@ -523,7 +558,7 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
 
   //===============HELPERS END===============
 
-  std::string resolvePredicates(std::vector<db::DbValue> &out_params) {
+  std::string resolvePredicates(std::vector<db::DbValue> &out_params) const {
     switch (predicateType) {
 
     case PredicateType::LEAF: {
@@ -608,6 +643,21 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
     case PredicateType::SUBQUERY: {
       out_params.insert(out_params.end(), values.begin(), values.end());
       return lhsFunction + "(" + columnA + ") " + std::string(to_string(op)) + " ( " + columnB + " ) ";
+    }
+
+    case PredicateType::EXISTS: {
+      out_params.insert(out_params.end(), values.begin(), values.end());
+      return " EXISTS (" + columnA + ") ";
+    }
+
+    case PredicateType::NOT_EXISTS: {
+      out_params.insert(out_params.end(), values.begin(), values.end());
+      return " NOT EXISTS (" + columnA + ") ";
+    }
+
+    case PredicateType::RAW: {
+      out_params.insert(out_params.end(), values.begin(), values.end());
+      return " " + columnA + " " + std::string(to_string(op)) + " " + columnB + " ";
     }
 
     default: {
@@ -729,21 +779,22 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
   }
 
 private:
-  template <typename FieldPtr> static std::string getColumnWithAlias(FieldPtr fieldPtr, const std::string &tableAlias) {
+  template <FieldPointer FieldPtr>
+  static std::string getColumnWithAlias(FieldPtr fieldPtr, const std::string &tableAlias) {
     return ColumnResolver::template resolve<Models...>(fieldPtr, tableAlias);
   }
 
   static void validateScalarSubQuery(SelectQuery<Models...> &subQuery, const std::string &operatorName) {
     if (subQuery.getLimit().value_or(0) != 1)
-      throw std::runtime_error(operatorName + " subquery must have a limit of 1");
+      throw OrmException(operatorName + " subquery must have a limit of 1");
 
     if (subQuery.getColumnCount() != 1)
-      throw std::runtime_error(operatorName + " subquery must have one specified field (use yourQuery.field())");
+      throw OrmException(operatorName + " subquery must have one specified field (use yourQuery.field())");
   }
 };
 
 struct DefaultColumnResolver {
-  template <typename... Models, typename FieldPtr>
+  template <typename... Models, FieldPointer FieldPtr>
   static std::string resolve(FieldPtr fieldPtr, const std::string &tableAlias) {
 
     using FieldPtrModel = get_class_t<FieldPtr>;

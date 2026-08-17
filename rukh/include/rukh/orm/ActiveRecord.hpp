@@ -41,8 +41,16 @@ public:
     co_return co_await SelectQuery<Model>().where(buildPkPredicate(pkVal)).first(transaction);
   }
 
-  static SelectQuery<Model> queryAll() { return SelectQuery<Model>(); }
-  static SelectQuery<Model> filter(const Predicate<Model> &p) { return SelectQuery<Model>().where(p); }
+  static SelectQuery<Model> queryAll(const std::string tableAlias = "") {
+    if (tableAlias.empty())
+      return SelectQuery<Model>();
+    return SelectQuery<Model>(tableAlias);
+  }
+  static SelectQuery<Model> filter(const Predicate<Model> &p, const std::string tableAlias = "") {
+    if (tableAlias.empty())
+      return SelectQuery<Model>().where(p);
+    return SelectQuery<Model>(tableAlias).where(p);
+  }
 
   static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   bulkInsert(const std::vector<Model> &objs, bool returning = false, db::ITransaction *transaction = nullptr) {
@@ -779,7 +787,7 @@ public:
     }(std::make_index_sequence<std::tuple_size_v<decltype(fkRelations())>>{});
   }
 
-  template <typename FieldPtr> static Column<Model, FieldPtr> getColumnObject(FieldPtr Model::*fieldPtr) {
+  template <FieldPointer FieldPtr> static Column<Model, FieldPtr> getColumnObject(FieldPtr Model::*fieldPtr) {
     Column<Model, FieldPtr> result;
     bool found = false;
     std::apply(

@@ -5,8 +5,8 @@
 
 #include "routes/testRoutes.hpp"
 
-void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
-                             rukh::db::IDatabase *db) {
+void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
+                             rukh::ThreadPool *threadPool) {
   using namespace rukh;
   using namespace nlohmann;
 

@@ -18,8 +18,7 @@
 // TODO: figure out proper aliasing (VEERY LOWW priority)
 namespace rukh::orm {
 
-template <typename Model>
-class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryBase<UpdateQuery<Model>> {
+template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryBase {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
@@ -30,10 +29,10 @@ public:
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
-    co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
+    co_return std::make_pair(queryResult->affectedRows, hydrateModel<Model>(*queryResult));
   }
 
-  template <typename FieldPtr> UpdateQuery &field(FieldPtr fieldPtr) {
+  template <FieldPointer FieldPtr> UpdateQuery &field(FieldPtr fieldPtr) {
     columns_.push_back(Model::columnNameOf(fieldPtr));
     return *this;
   }

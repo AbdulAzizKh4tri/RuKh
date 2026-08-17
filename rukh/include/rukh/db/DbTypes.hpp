@@ -65,6 +65,10 @@ struct QueryResult {
   std::vector<Row> rows;
   std::shared_ptr<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>> columns;
 
+  size_t size() const { return rows.size(); }
+
+  Row operator[](const size_t index) const { return rows[index]; }
+
   std::string toString() const {
     std::ostringstream ss;
     constexpr int COL_WIDTH = 16;

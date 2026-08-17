@@ -19,7 +19,7 @@ namespace rukh::orm {
 // TODO: add conflict field validation. Decide what an empty conflictColumns_ means.
 //
 // TODO: Figure out a way to know whether it's an update or an insert (Without schema changes, or getting DB specific.).
-template <typename Model> class UpsertQuery : public QueryBase<UpsertQuery<Model>> {
+template <typename Model> class UpsertQuery : public QueryBase {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const std::vector<Model> &objs, db::ITransaction *transaction = nullptr, bool returning = false) {
@@ -33,7 +33,7 @@ public:
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
-    co_return std::make_pair(queryResult->affectedRows, hydrate<Model>(*queryResult));
+    co_return std::make_pair(queryResult->affectedRows, hydrateModel<Model>(*queryResult));
   }
 
   template <typename FieldPtr> UpsertQuery &conflictFields(FieldPtr fieldPtr) {

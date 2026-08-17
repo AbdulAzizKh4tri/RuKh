@@ -7,11 +7,10 @@
 
 namespace rukh::orm {
 
-template <typename Derived> class QueryBase {
-protected:
-  db::IDatabase *db_ = OrmConfig::db;
+class QueryBase {
+  inline static db::IDatabase *db_ = OrmConfig::db;
 
-  Task<std::expected<db::QueryResult, db::DatabaseError>>
+  static Task<std::expected<db::QueryResult, db::DatabaseError>>
   dispatch(db::ITransaction *transaction, const std::string &sql, const std::vector<db::DbValue> &params) {
     if (transaction)
       return transaction->executeQuery(sql, params);

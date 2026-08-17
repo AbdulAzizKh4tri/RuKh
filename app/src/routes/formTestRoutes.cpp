@@ -7,8 +7,8 @@
 
 #include "routes/testRoutes.hpp"
 
-void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
-                            rukh::db::IDatabase *db) {
+void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
+                            rukh::ThreadPool *threadPool) {
   using namespace rukh;
   using namespace nlohmann;
 

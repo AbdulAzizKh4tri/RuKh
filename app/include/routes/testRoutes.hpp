@@ -3,40 +3,37 @@
 #include <rukh/ErrorFactory.hpp>
 #include <rukh/Router.hpp>
 #include <rukh/ThreadPool.hpp>
-#include <rukh/db/IDatabase.hpp>
 
-void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
-                             rukh::db::IDatabase *db);
+void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
+                             rukh::ThreadPool *threadPool);
 
 void registerCookieTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                              rukh::ThreadPool *threadPool, rukh::db::IDatabase *db);
+                              rukh::ThreadPool *threadPool);
 
 void registerSessionTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                               rukh::ThreadPool *threadPool, rukh::db::IDatabase *db);
+                               rukh::ThreadPool *threadPool);
 
 void registerUrlPathTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                               rukh::ThreadPool *threadPool, rukh::db::IDatabase *db);
+                               rukh::ThreadPool *threadPool);
 
 void registerStreamTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                              rukh::ThreadPool *threadPool, rukh::db::IDatabase *db);
+                              rukh::ThreadPool *threadPool);
 
 void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                                  rukh::ThreadPool *threadPool, rukh::db::IDatabase *db);
+                                  rukh::ThreadPool *threadPool);
 
-void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
-                            rukh::db::IDatabase *db);
+void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool);
 
-void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool,
-                           rukh::db::IDatabase *db);
+void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool);
 
 inline void registerAllTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                                  rukh::ThreadPool *threadPool, rukh::db::IDatabase *db) {
-  registerBasicTestRoutes(router, errorFactory, threadPool, db);
-  registerCookieTestRoutes(router, errorFactory, threadPool, db);
-  registerSessionTestRoutes(router, errorFactory, threadPool, db);
-  registerUrlPathTestRoutes(router, errorFactory, threadPool, db);
-  registerStreamTestRoutes(router, errorFactory, threadPool, db);
-  registerThreadPoolTestRoutes(router, errorFactory, threadPool, db);
-  registerFormTestRoutes(router, errorFactory, threadPool, db);
-  registerOrmTestRoutes(router, errorFactory, threadPool, db);
+                                  rukh::ThreadPool *threadPool) {
+  registerBasicTestRoutes(router, errorFactory, threadPool);
+  registerCookieTestRoutes(router, errorFactory, threadPool);
+  registerSessionTestRoutes(router, errorFactory, threadPool);
+  registerUrlPathTestRoutes(router, errorFactory, threadPool);
+  registerStreamTestRoutes(router, errorFactory, threadPool);
+  registerThreadPoolTestRoutes(router, errorFactory, threadPool);
+  registerFormTestRoutes(router, errorFactory, threadPool);
+  registerOrmTestRoutes(router, errorFactory, threadPool);
 }
