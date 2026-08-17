@@ -450,34 +450,6 @@ public:
     co_return delResult->first;
   }
 
-  template <typename Relation> bool isSelfSmallerThan(const Model &obj) const {
-    const Model *self = static_cast<const Model *>(this);
-
-    bool smaller = false;
-    bool decided = false;
-
-    [&]<size_t... I>(std::index_sequence<I...>) {
-      (
-          [&] {
-            if (decided)
-              return;
-
-            const auto &lhs = self->*(std::get<I>(Relation::throughFields).modelPtr);
-            const auto &rhs = obj.*(std::get<I>(Relation::throughFields).modelPtr);
-
-            if (lhs < rhs) {
-              decided = true;
-              smaller = true;
-            } else if (rhs < lhs) {
-              decided = true;
-            }
-          }(),
-          ...);
-    }(std::make_index_sequence<Relation::throughFieldCount>{});
-
-    return smaller;
-  }
-
   template <FixedString RelationName = "", typename RelatedModel>
   auto manyRelated(db::ITransaction *transaction = nullptr) {
     static constexpr RelationLookup relLookup = getManyToManyRelation<RelationName, RelatedModel>();
@@ -535,76 +507,6 @@ public:
     query.template join<Through>(joinPred, "T");
     query.where(wherePred);
     return query;
-  }
-
-  template <typename Relation> struct RelationLookup {
-    Relation relation;
-    bool isReciprocal;
-    bool isSelfRef;
-    bool callerIsA;
-    bool otherIsB;
-  };
-
-  template <FixedString RelationName = "", typename RelatedModel> static constexpr auto getManyToManyRelation() {
-    static constexpr auto relTupleSelf = getManyToManyRelationByName<RelationName>();
-    static constexpr auto relTupleOther = RelatedModel::template getManyToManyRelationByName<RelationName>();
-
-    static constexpr size_t relTupleSelfSize = std::tuple_size_v<decltype(relTupleSelf)>;
-    static constexpr size_t relTupleOtherSize = std::tuple_size_v<decltype(relTupleOther)>;
-
-    static_assert(relTupleSelfSize == 2 or relTupleOtherSize == 2, "No relation found with that name.");
-    static_assert(std::is_same_v<Model, RelatedModel> or not(relTupleSelfSize == 2 and relTupleOtherSize == 2),
-                  "Multiple relations found with that name.");
-
-    static constexpr auto relation = [&] {
-      if constexpr (relTupleSelfSize == 2) {
-        return std::get<0>(relTupleSelf);
-      } else {
-        return std::get<0>(relTupleOther);
-      }
-    }();
-    static constexpr bool isReciprocal = [&] {
-      if constexpr (relTupleSelfSize == 2) {
-        return std::get<1>(relTupleSelf);
-      } else {
-        return std::get<1>(relTupleOther);
-      }
-    }();
-
-    using Relation = decltype(relation);
-    using A = Relation::A;
-    using B = Relation::B;
-
-    static_assert((std::is_same_v<A, Model> and std::is_same_v<B, RelatedModel>) or
-                      (std::is_same_v<A, RelatedModel> and std::is_same_v<B, Model>),
-                  "ManyToManyRelation was found, but there was a type mismatch. Check your template params");
-
-    static constexpr RelationLookup r{
-        .relation = relation,
-        .isReciprocal = isReciprocal,
-        .isSelfRef = std::is_same_v<A, B>,
-        .callerIsA = std::is_same_v<A, Model>,
-        .otherIsB = std::is_same_v<B, RelatedModel>,
-    };
-    return r;
-  }
-
-  template <FixedString RelationName = ""> static constexpr auto getManyToManyRelationByName() {
-    static constexpr auto result = []<size_t... I>(std::index_sequence<I...>) {
-      return std::tuple_cat(getManyToManyRelationIfNamed<RelationName, I>()...);
-    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::manyToManyRelations())>>{});
-    static_assert(std::tuple_size_v<decltype(result)> <= 2, "Multiple relations found with that name.");
-    return result;
-  }
-
-  template <FixedString RelationName = "", size_t I> static constexpr auto getManyToManyRelationIfNamed() {
-    static constexpr auto rel = std::get<I>(Model::manyToManyRelations());
-    if constexpr (rel.relationName == RelationName.view())
-      return std::tuple{rel, false};
-    else if constexpr (rel.reciprocalName == RelationName.view())
-      return std::tuple{rel, true};
-    else
-      return std::tuple<>();
   }
 
   /*
@@ -704,6 +606,24 @@ public:
       return std::tuple_cat(getRelationIfFk<I>()...);
     }(std::make_index_sequence<std::tuple_size_v<decltype(rels)>>{});
     return result;
+  }
+
+  template <FixedString RelationName = ""> static constexpr auto getManyToManyRelationByName() {
+    static constexpr auto result = []<size_t... I>(std::index_sequence<I...>) {
+      return std::tuple_cat(getManyToManyRelationIfNamed<RelationName, I>()...);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(Model::manyToManyRelations())>>{});
+    static_assert(std::tuple_size_v<decltype(result)> <= 2, "Multiple relations found with that name.");
+    return result;
+  }
+
+  template <FixedString RelationName = "", size_t I> static constexpr auto getManyToManyRelationIfNamed() {
+    static constexpr auto rel = std::get<I>(Model::manyToManyRelations());
+    if constexpr (rel.relationName == RelationName.view())
+      return std::tuple{rel, false};
+    else if constexpr (rel.reciprocalName == RelationName.view())
+      return std::tuple{rel, true};
+    else
+      return std::tuple<>();
   }
 
   static constexpr auto manyToManyRelations() {
@@ -911,6 +831,86 @@ private:
   }
 
   //==============================Many to Many==============================
+
+  template <typename Relation> struct RelationLookup {
+    Relation relation;
+    bool isReciprocal;
+    bool isSelfRef;
+    bool callerIsA;
+    bool otherIsB;
+  };
+
+  template <FixedString RelationName = "", typename RelatedModel> static constexpr auto getManyToManyRelation() {
+    static constexpr auto relTupleSelf = getManyToManyRelationByName<RelationName>();
+    static constexpr auto relTupleOther = RelatedModel::template getManyToManyRelationByName<RelationName>();
+
+    static constexpr size_t relTupleSelfSize = std::tuple_size_v<decltype(relTupleSelf)>;
+    static constexpr size_t relTupleOtherSize = std::tuple_size_v<decltype(relTupleOther)>;
+
+    static_assert(relTupleSelfSize == 2 or relTupleOtherSize == 2, "No relation found with that name.");
+    static_assert(std::is_same_v<Model, RelatedModel> or not(relTupleSelfSize == 2 and relTupleOtherSize == 2),
+                  "Multiple relations found with that name.");
+
+    static constexpr auto relation = [&] {
+      if constexpr (relTupleSelfSize == 2) {
+        return std::get<0>(relTupleSelf);
+      } else {
+        return std::get<0>(relTupleOther);
+      }
+    }();
+    static constexpr bool isReciprocal = [&] {
+      if constexpr (relTupleSelfSize == 2) {
+        return std::get<1>(relTupleSelf);
+      } else {
+        return std::get<1>(relTupleOther);
+      }
+    }();
+
+    using Relation = decltype(relation);
+    using A = Relation::A;
+    using B = Relation::B;
+
+    static_assert((std::is_same_v<A, Model> and std::is_same_v<B, RelatedModel>) or
+                      (std::is_same_v<A, RelatedModel> and std::is_same_v<B, Model>),
+                  "ManyToManyRelation was found, but there was a type mismatch. Check your template params");
+
+    static constexpr RelationLookup r{
+        .relation = relation,
+        .isReciprocal = isReciprocal,
+        .isSelfRef = std::is_same_v<A, B>,
+        .callerIsA = std::is_same_v<A, Model>,
+        .otherIsB = std::is_same_v<B, RelatedModel>,
+    };
+    return r;
+  }
+
+  template <typename Relation> bool isSelfSmallerThan(const Model &obj) const {
+    const Model *self = static_cast<const Model *>(this);
+
+    bool smaller = false;
+    bool decided = false;
+
+    [&]<size_t... I>(std::index_sequence<I...>) {
+      (
+          [&] {
+            if (decided)
+              return;
+
+            const auto &lhs = self->*(std::get<I>(Relation::throughFields).modelPtr);
+            const auto &rhs = obj.*(std::get<I>(Relation::throughFields).modelPtr);
+
+            if (lhs < rhs) {
+              decided = true;
+              smaller = true;
+            } else if (rhs < lhs) {
+              decided = true;
+            }
+          }(),
+          ...);
+    }(std::make_index_sequence<Relation::throughFieldCount>{});
+
+    return smaller;
+  }
 
   template <size_t I> static constexpr auto getRelationIfManyToMany() {
     using RelationsTuple = decltype(Model::relations());
