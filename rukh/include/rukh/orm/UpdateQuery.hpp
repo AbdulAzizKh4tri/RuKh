@@ -10,7 +10,7 @@
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
-#include <rukh/orm/QueryBase.hpp>
+#include <rukh/orm/QueryDispatcher.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
 #include <sstream>
@@ -18,7 +18,7 @@
 // TODO: figure out proper aliasing (VEERY LOWW priority)
 namespace rukh::orm {
 
-template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryBase {
+template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryDispatcher {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {

@@ -14,7 +14,7 @@
 #include <rukh/orm/DeleteQuery.hpp>
 #include <rukh/orm/InsertQuery.hpp>
 #include <rukh/orm/Predicate.hpp>
-#include <rukh/orm/QueryBase.hpp>
+#include <rukh/orm/QueryDispatcher.hpp>
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
@@ -38,7 +38,7 @@ enum class JoinType { INNER, LEFT, RIGHT, FULL, CROSS };
 enum class SetQueryType { UNION, UNION_ALL, INTERSECT, INTERSECT_ALL, EXCEPT, EXCEPT_ALL };
 
 template <typename... Models>
-class SelectQuery : public QueryBase, public WhereClause<SelectQuery<Models...>, Models...> {
+class SelectQuery : public QueryDispatcher, public WhereClause<SelectQuery<Models...>, Models...> {
   /*
    * Every Query has a Main Model, the first one defined in the template params.
    * This is the only one that can use methods like update, getOne, etc.

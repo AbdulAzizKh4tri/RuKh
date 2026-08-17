@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <spdlog/spdlog.h>
+#include <sstream>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/Task.hpp>
@@ -10,13 +11,12 @@
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
-#include <rukh/orm/QueryBase.hpp>
+#include <rukh/orm/QueryDispatcher.hpp>
 #include <rukh/orm/hydrators.hpp>
-#include <sstream>
 
 namespace rukh::orm {
 
-template <typename Model> class InsertQuery : public QueryBase {
+template <typename Model> class InsertQuery : public QueryDispatcher {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const std::vector<Model> &objs, db::ITransaction *transaction = nullptr, bool returning = false) {

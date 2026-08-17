@@ -10,13 +10,13 @@
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/Predicate.hpp>
-#include <rukh/orm/QueryBase.hpp>
+#include <rukh/orm/QueryDispatcher.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
 
 namespace rukh::orm {
 
-template <typename Model> class DeleteQuery : public WhereClause<DeleteQuery<Model>, Model>, public QueryBase {
+template <typename Model> class DeleteQuery : public WhereClause<DeleteQuery<Model>, Model>, public QueryDispatcher {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(db::ITransaction *transaction = nullptr, bool returning = false) {

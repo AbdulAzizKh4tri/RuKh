@@ -11,7 +11,7 @@
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
-#include <rukh/orm/QueryBase.hpp>
+#include <rukh/orm/QueryDispatcher.hpp>
 #include <rukh/orm/hydrators.hpp>
 
 namespace rukh::orm {
@@ -19,7 +19,7 @@ namespace rukh::orm {
 // TODO: add conflict field validation. Decide what an empty conflictColumns_ means.
 //
 // TODO: Figure out a way to know whether it's an update or an insert (Without schema changes, or getting DB specific.).
-template <typename Model> class UpsertQuery : public QueryBase {
+template <typename Model> class UpsertQuery : public QueryDispatcher {
 public:
   Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const std::vector<Model> &objs, db::ITransaction *transaction = nullptr, bool returning = false) {

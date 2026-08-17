@@ -7,7 +7,7 @@
 
 namespace rukh::orm {
 
-class QueryBase {
+class QueryDispatcher {
 public:
   static Task<std::expected<db::QueryResult, db::DatabaseError>>
   dispatch(db::ITransaction *transaction, const std::string &sql, const std::vector<db::DbValue> &params) {
