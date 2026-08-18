@@ -69,7 +69,7 @@ public:
       char *errMsg = nullptr;
       sqlite3_exec(conn->dbConnection, "ROLLBACK;", nullptr, nullptr, &errMsg);
       if (errMsg) {
-        SPDLOG_ERROR("{}", errMsg);
+        SPDLOG_CRITICAL("Failed to rollback transaction with abadonFn: {}", errMsg);
         sqlite3_free(errMsg);
       }
       releaseConnection(conn);
@@ -89,7 +89,7 @@ public:
     Sqlite3Transaction *t = dynamic_cast<Sqlite3Transaction *>(transaction);
 
     if (t == nullptr) {
-      SPDLOG_ERROR("Sqlite3Db::endTransaction() called with a Transaction not created by Sqlite3Db");
+      SPDLOG_CRITICAL("Sqlite3Db::endTransaction() called with a Transaction not created by Sqlite3Db");
       return;
     }
 

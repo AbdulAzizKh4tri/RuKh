@@ -9,7 +9,7 @@ namespace rukh {
 EpollInstance::EpollInstance() {
   epoll_fd_ = ::epoll_create1(EPOLL_CLOEXEC);
   if (epoll_fd_ == -1) {
-    SPDLOG_ERROR("ERROR: {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR: {}", strerror(errno));
     throw std::runtime_error("Failed to create epoll instance");
   }
 }
@@ -44,7 +44,7 @@ int EpollInstance::add(int fd, uint32_t events, int data) {
   event.data.fd = data;
   int ret = ::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
   if (ret == -1) {
-    SPDLOG_ERROR("ERROR (fd: {}): {}", fd, strerror(errno));
+    SPDLOG_CRITICAL("ERROR (fd: {}): {}", fd, strerror(errno));
     throw std::runtime_error("Failed to add fd " + std::to_string(fd) + " to epoll");
   }
   return ret;
@@ -69,7 +69,7 @@ int EpollInstance::modify(int fd, uint32_t events, int data) {
 
   int ret = ::epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &event);
   if (ret == -1) {
-    SPDLOG_ERROR("ERROR (fd: {}): {}", fd, strerror(errno));
+    SPDLOG_CRITICAL("ERROR (fd: {}): {}", fd, strerror(errno));
     throw std::runtime_error("Failed to modify epoll, fd=" + std::to_string(fd));
   }
   return ret;
@@ -81,7 +81,7 @@ int EpollInstance::remove(int fd) {
     if (errno == ENOENT) {
       return 0;
     }
-    SPDLOG_ERROR("ERROR (fd: {}): {}", fd, strerror(errno));
+    SPDLOG_CRITICAL("ERROR (fd: {}): {}", fd, strerror(errno));
     throw std::runtime_error("Failed to remove fd " + std::to_string(fd) + " from epoll");
   }
   return ret;

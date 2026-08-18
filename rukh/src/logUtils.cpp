@@ -1,64 +1,97 @@
 #include <rukh/logUtils.hpp>
 
+#include <spdlog/async.h>
 #include <spdlog/common.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 namespace rukh {
 
-void configureLog(bool on, std::string file) {
-  if (!on) {
+struct LogColors {
+  static constexpr std::string_view trace = "\033[38;2;120;120;140m";
+  static constexpr std::string_view debug = "\033[38;2;88;166;255m";
+  static constexpr std::string_view info = "\033[38;2;80;200;120m";
+  static constexpr std::string_view warn = "\033[38;2;255;196;80m";
+  static constexpr std::string_view error = "\033[38;2;245;90;90m";
+  static constexpr std::string_view critical = "\033[38;2;255;45;55m";
+};
+
+std::shared_ptr<spdlog::async_logger> configureLog(bool on, const std::string &file, bool console) {
+
+  if (not on) {
     spdlog::set_level(spdlog::level::off);
-    return;
+    return {};
   }
 
-  spdlog::set_level(spdlog::level::trace);
+  static constexpr std::string_view filePattern = "[%m-%d %H:%M] [T%t] [%l] %v";
+  static constexpr std::string_view consolePattern = "\033[38;2;120;120;140m"
+                                                     "[%m-%d %H:%M] [T%t] %^[%l] %v%$";
 
-  if (file != "") {
-    auto fileLogger = spdlog::basic_logger_mt("server", file, true);
-    //[thread %t]
-    fileLogger->set_pattern("[%m-%d %H:%M] [%^%l%$] %v");
-    spdlog::set_default_logger(fileLogger);
-    return;
+  spdlog::init_thread_pool(8192, 1); // queue size, 1 backend thread
+
+  std::vector<spdlog::sink_ptr> sinks;
+
+  if (console) {
+    auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    consoleSink->set_pattern(std::string(consolePattern));
+
+    // TRACE grey
+    consoleSink->set_color(spdlog::level::trace, LogColors::trace);
+    // DEBUG blue
+    consoleSink->set_color(spdlog::level::debug, LogColors::debug);
+    // INFO green
+    consoleSink->set_color(spdlog::level::info, LogColors::info);
+    // WARN yellow
+    consoleSink->set_color(spdlog::level::warn, LogColors::warn);
+    // ERROR red
+    consoleSink->set_color(spdlog::level::err, LogColors::error);
+    // CRITICAL stronger red
+    consoleSink->set_color(spdlog::level::critical, LogColors::critical);
+
+    sinks.push_back(consoleSink);
   }
 
-  //[thread %t]
-  spdlog::set_pattern("[%m-%d %H:%M] [%^%l%$] %v");
-}
+  if (not file.empty()) {
+    auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(file, true);
+    fileSink->set_pattern(std::string(filePattern));
+    sinks.push_back(fileSink);
+  }
 
-std::string_view statusColor(int statusCode) {
-  if (statusCode < 300)
-    return Color::Green;
-  if (statusCode < 500)
-    return Color::Yellow;
-  return Color::Red;
+  if (sinks.empty())
+    throw std::runtime_error("configureLog: logging on but no sink (console=false and file empty)");
+
+  auto logger = std::make_shared<spdlog::async_logger>("server", sinks.begin(), sinks.end(), spdlog::thread_pool(),
+                                                       spdlog::async_overflow_policy::block);
+
+  logger->set_level(spdlog::level::trace);
+  logger->flush_on(spdlog::level::warn);
+  spdlog::flush_every(std::chrono::seconds(3));
+  spdlog::set_default_logger(logger);
+
+  return logger;
 }
 
 void logRequest(const HttpRequest &req, const HttpResponse &res) {
   int status = res.getStatusCode();
   if (status >= 500) {
-    SPDLOG_ERROR("{}{}{}  {:<8} {:<20}  {:<16}:{:<6}", statusColor(status), status, Color::Reset, req.getMethod(),
-                 req.getPath(), req.getIp(), req.getPort());
+    SPDLOG_ERROR("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
   } else if (status >= 400) {
-    SPDLOG_WARN("{}{}{}  {:<8} {:<20}  {:<16}:{:<6}", statusColor(status), status, Color::Reset, req.getMethod(),
-                req.getPath(), req.getIp(), req.getPort());
+    SPDLOG_WARN("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
   } else {
-    SPDLOG_INFO("{}{}{}  {:<8} {:<20}  {:<16}:{:<6}", statusColor(status), status, Color::Reset, req.getMethod(),
-                req.getPath(), req.getIp(), req.getPort());
+    SPDLOG_INFO("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
   }
 }
 
 void logRequest(const HttpRequest &req, const HttpStreamResponse &res) {
   int status = res.getStatusCode();
   if (status >= 500) {
-    SPDLOG_ERROR("{}{}{}  {:<8} {:<20}  {:<16}:{:<6}", statusColor(status), status, Color::Reset, req.getMethod(),
-                 req.getPath(), req.getIp(), req.getPort());
+    SPDLOG_ERROR("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
   } else if (status >= 400) {
-    SPDLOG_WARN("{}{}{}  {:<8} {:<20}  {:<16}:{:<6}", statusColor(status), status, Color::Reset, req.getMethod(),
-                req.getPath(), req.getIp(), req.getPort());
+    SPDLOG_WARN("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
   } else {
-    SPDLOG_INFO("{}{}{}  {:<8} {:<20}  {:<16}:{:<6}", statusColor(status), status, Color::Reset, req.getMethod(),
-                req.getPath(), req.getIp(), req.getPort());
+    SPDLOG_INFO("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
   }
 }
+
 } // namespace rukh

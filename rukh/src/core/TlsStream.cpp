@@ -23,7 +23,7 @@ TlsStream::TlsStream(int fd, SSL_CTX *ctx, sockaddr_storage addr, socklen_t len)
 
   int flag = 1;
   if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
-    SPDLOG_ERROR("ERROR on setsockopt {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR on setsockopt {}", strerror(errno));
     throw std::runtime_error("Failed to set TCP_NODELAY");
   };
 }

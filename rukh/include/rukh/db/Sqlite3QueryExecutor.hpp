@@ -43,7 +43,8 @@ public:
       int rc = sqlite3_prepare_v3(dbConnection, sql.c_str(), -1, SQLITE_PREPARE_PERSISTENT, &stmt, nullptr);
       if (rc != SQLITE_OK) {
         std::string err = sqlite3_errmsg(dbConnection);
-        SPDLOG_ERROR("SQL error: {}", err);
+        SPDLOG_CRITICAL("Failure to prepare SQL statement: {}", err);
+        SPDLOG_ERROR("SQL: {}", sql.c_str());
         return std::unexpected(DatabaseError{DbErrorType::QUERY_ERROR, err});
       }
       statements[sql] = stmt;

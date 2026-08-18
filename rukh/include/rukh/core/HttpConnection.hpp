@@ -346,7 +346,7 @@ public:
         response = buildErrorResponse(500, e.what());
         keepAlive_ = false;
       } catch (...) {
-        SPDLOG_ERROR("Unknown Exception");
+        SPDLOG_CRITICAL("Unknown Exception");
         response = buildErrorResponse(500);
         keepAlive_ = false;
       }
@@ -368,7 +368,7 @@ public:
       //=== Send: plain response ===
       if (HttpResponse *res = std::get_if<HttpResponse>(&response)) {
         if (res->getStatusCode() < 0) {
-          SPDLOG_ERROR("Prevented: Trying to send response with negative status code");
+          SPDLOG_CRITICAL("Prevented: Trying to send response with negative status code");
           co_return;
         }
 
@@ -508,7 +508,7 @@ private:
     keepAlive_ = false;
     response.headers.setHeaderLower("connection", "close");
     if (response.getStatusCode() == -1) {
-      SPDLOG_ERROR("Prevented: Trying to send response with status code -1");
+      SPDLOG_CRITICAL("Prevented: Trying to send response with status code -1");
       co_return;
     }
 

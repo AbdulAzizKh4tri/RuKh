@@ -1,6 +1,8 @@
 #include <filesystem>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <spdlog/common.h>
+#include <spdlog/sinks/ansicolor_sink.h>
 #include <spdlog/spdlog.h>
 
 #include <rukh/HttpResponse.hpp>
@@ -33,7 +35,7 @@ int main() {
   std::cout << "How many threads?" << std::endl;
   std::cin >> N;
 
-  configureLog(logging.contains('y'), "");
+  configureLog(logging.contains('y'), "server.log", true);
   SPDLOG_DEBUG("C++ standard: {}", __cplusplus);
 
   Router router(getErrorFactory());

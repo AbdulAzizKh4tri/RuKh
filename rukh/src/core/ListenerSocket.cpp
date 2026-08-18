@@ -19,14 +19,14 @@ ListenerSocket::ListenerSocket(std::string const &host, std::string port) {
 
   int gai = getaddrinfo(host_.c_str(), port_.c_str(), &hints, &raw);
   if (gai != 0) {
-    SPDLOG_ERROR("ERROR on getaddrinfo {}", gai_strerror(gai));
+    SPDLOG_CRITICAL("ERROR on getaddrinfo {}", gai_strerror(gai));
     throw std::runtime_error("Failed to locate address");
   }
   res.reset(raw);
 
   socket_ = Socket(socket(res->ai_family, res->ai_socktype, res->ai_protocol));
   if (!socket_) {
-    SPDLOG_ERROR("Failed to create socket {}", strerror(errno));
+    SPDLOG_CRITICAL("Failed to create socket {}", strerror(errno));
     throw std::runtime_error("Failed to create socket");
   }
 
@@ -35,7 +35,7 @@ ListenerSocket::ListenerSocket(std::string const &host, std::string port) {
 
 void ListenerSocket::listen(int backlog) {
   if (::listen(socket_.getFd(), backlog) < 0) {
-    SPDLOG_ERROR("ERROR on listening {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR on listening {}", strerror(errno));
     throw std::runtime_error("Failed to listen on socket");
   }
   SPDLOG_INFO("Listening on {}:{}", host_, port_);
@@ -48,7 +48,7 @@ std::optional<TlsStream> ListenerSocket::acceptTls(SSL_CTX *ctx) {
   if (newSocket_fd < 0) {
     if (errno == EAGAIN || errno == EWOULDBLOCK)
       return std::nullopt;
-    SPDLOG_ERROR("ERROR on accepting: {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR on accepting: {}", strerror(errno));
     throw std::runtime_error("Failed to accept connection");
   }
   return TlsStream(newSocket_fd, ctx, addr, len);
@@ -61,7 +61,7 @@ std::optional<TcpStream> ListenerSocket::accept() {
   if (newSocket_fd < 0) {
     if (errno == EAGAIN || errno == EWOULDBLOCK)
       return std::nullopt;
-    SPDLOG_ERROR("ERROR on accepting: {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR on accepting: {}", strerror(errno));
     throw std::runtime_error("Failed to accept connection");
   }
   return TcpStream(newSocket_fd, addr, len);
@@ -82,17 +82,17 @@ int ListenerSocket::getFd() { return socket_.getFd(); }
 void ListenerSocket::bind_socket(std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> &res) {
   int reuse = 1;
   if (setsockopt(socket_.getFd(), SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0) {
-    SPDLOG_ERROR("ERROR on setsockopt {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR on setsockopt {}", strerror(errno));
     throw std::runtime_error("Failed to set reuse address");
   }
 
   if (setsockopt(socket_.getFd(), SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(int)) < 0) {
-    SPDLOG_ERROR("ERROR on setsockopt {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR on setsockopt {}", strerror(errno));
     throw std::runtime_error("Failed to set reuse port");
   }
 
   if (bind(socket_.getFd(), res->ai_addr, res->ai_addrlen) < 0) {
-    SPDLOG_ERROR("ERROR on binding {}", strerror(errno));
+    SPDLOG_CRITICAL("ERROR on binding {}", strerror(errno));
     throw std::runtime_error("Failed to bind socket");
   }
 }

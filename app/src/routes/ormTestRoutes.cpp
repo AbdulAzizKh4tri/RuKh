@@ -1196,7 +1196,7 @@ void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &error
         auto recursive = User::queryAll().join("ancestors", Pu::equals(&User::id, &User::mother, {"a", "x"}), "x");
 
         auto mainQuery = SelectQuery<User>()
-                             .withCte("ancestors", base.unionQuery(recursive), Cte::Type::RECURSIVE)
+                             .withCte("ancestorsss", base.unionQuery(recursive), Cte::Type::RECURSIVE)
                              .allColumns<User>()
                              .from("ancestors", "a");
         return mainQuery;

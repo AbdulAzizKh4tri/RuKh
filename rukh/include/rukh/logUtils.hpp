@@ -1,6 +1,7 @@
 #pragma once
 
-#include <string_view>
+#include <spdlog/async.h>
+#include <string>
 
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
@@ -8,19 +9,24 @@
 
 namespace rukh {
 
-void configureLog(bool on = true, std::string file = "");
-
-// ANSI color codes
-namespace Color {
-constexpr std::string_view Reset = "\033[0m";
-constexpr std::string_view Green = "\033[32m";
-constexpr std::string_view Yellow = "\033[33m";
-constexpr std::string_view Red = "\033[31m";
-} // namespace Color
-
-std::string_view statusColor(int statusCode);
+/*
+ * Configure the application's default logger.
+ *
+ * @param on       Enable/disable logging globally.
+ * @param file     Log file path. Empty to disable file logging.
+ * @param console  Enable console logging.
+ *
+ * @return The configured async logger, or nullptr if logging is disabled.
+ *
+ * The returned logger can be customized further by the caller.
+ * Its sinks() contain the active sinks:
+ *   - stdout_color_sink_mt  (if console == true)
+ *   - basic_file_sink_mt    (if file is non-empty)
+ */
+std::shared_ptr<spdlog::async_logger> configureLog(bool on = true, const std::string &file = "", bool console = true);
 
 void logRequest(const HttpRequest &req, const HttpResponse &res);
 
 void logRequest(const HttpRequest &req, const HttpStreamResponse &res);
+
 } // namespace rukh
