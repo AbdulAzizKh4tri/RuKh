@@ -61,7 +61,7 @@ public:
   void markRootFinished(void *addr);
 
 private:
-  EpollInstance epoll_;
+  core::EpollInstance epoll_;
   std::vector<core::Task<void>> ownedTasks_;
   std::unordered_map<void *, size_t> ownedTaskMap_;
   std::queue<ReadyTask> readyQueue_;

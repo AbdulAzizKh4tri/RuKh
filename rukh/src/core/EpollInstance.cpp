@@ -4,13 +4,16 @@
 #include <spdlog/spdlog.h>
 #include <sys/epoll.h>
 #include <unistd.h>
-namespace rukh {
+
+#include <rukh/Exceptions.hpp>
+
+namespace rukh::core {
 
 EpollInstance::EpollInstance() {
   epoll_fd_ = ::epoll_create1(EPOLL_CLOEXEC);
   if (epoll_fd_ == -1) {
     SPDLOG_CRITICAL("ERROR: {}", strerror(errno));
-    throw std::runtime_error("Failed to create epoll instance");
+    throw EpollException("Failed to create epoll instance");
   }
 }
 
@@ -32,12 +35,14 @@ bool EpollInstance::isValid() const noexcept { return epoll_fd_ != -1; }
 
 EpollInstance::operator bool() const noexcept { return epoll_fd_ != -1; }
 
+/// Release fd from RAII
 int EpollInstance::release() noexcept {
   int fd = epoll_fd_;
   epoll_fd_ = -1;
   return fd;
 }
 
+/// Add fd to epoll with events such as (EPOLLIN | EPOLLET). check man epoll_event for more.
 int EpollInstance::add(int fd, uint32_t events, int data) {
   epoll_event event = {};
   event.events = events;
@@ -45,11 +50,12 @@ int EpollInstance::add(int fd, uint32_t events, int data) {
   int ret = ::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
   if (ret == -1) {
     SPDLOG_CRITICAL("ERROR (fd: {}): {}", fd, strerror(errno));
-    throw std::runtime_error("Failed to add fd " + std::to_string(fd) + " to epoll");
+    throw EpollException("Failed to add fd " + std::to_string(fd) + " to epoll");
   }
   return ret;
 }
 
+/// Two syscalls, use the add / modify methods if possible.
 int EpollInstance::addOrModify(int fd, uint32_t events, int data) {
   epoll_event event = {};
   event.events = events;
@@ -58,10 +64,11 @@ int EpollInstance::addOrModify(int fd, uint32_t events, int data) {
   if (ret == -1 && errno == EEXIST)
     return modify(fd, events, data);
   if (ret == -1)
-    throw std::runtime_error("Failed to add/modify fd " + std::to_string(fd));
+    throw EpollException("Failed to add/modify fd " + std::to_string(fd));
   return ret;
 }
 
+/// Modify fd events
 int EpollInstance::modify(int fd, uint32_t events, int data) {
   epoll_event event = {};
   event.events = events;
@@ -70,11 +77,12 @@ int EpollInstance::modify(int fd, uint32_t events, int data) {
   int ret = ::epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &event);
   if (ret == -1) {
     SPDLOG_CRITICAL("ERROR (fd: {}): {}", fd, strerror(errno));
-    throw std::runtime_error("Failed to modify epoll, fd=" + std::to_string(fd));
+    throw EpollException("Failed to modify epoll, fd=" + std::to_string(fd));
   }
   return ret;
 }
 
+/// Remove fd events
 int EpollInstance::remove(int fd) {
   int ret = ::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
   if (ret == -1) {
@@ -82,11 +90,15 @@ int EpollInstance::remove(int fd) {
       return 0;
     }
     SPDLOG_CRITICAL("ERROR (fd: {}): {}", fd, strerror(errno));
-    throw std::runtime_error("Failed to remove fd " + std::to_string(fd) + " from epoll");
+    throw EpollException("Failed to remove fd " + std::to_string(fd) + " from epoll");
   }
   return ret;
 }
 
+/// Wait for events
+/// @param events An array of @c epoll_events to be filled
+/// @param maxevents The maximum number of events to be returned
+/// @param timeout The maximum wait time in milliseconds
 int EpollInstance::wait(epoll_event *events, int maxevents, int timeout) {
   for (;;) {
     int numEvents = ::epoll_wait(epoll_fd_, events, maxevents, timeout);
@@ -94,19 +106,10 @@ int EpollInstance::wait(epoll_event *events, int maxevents, int timeout) {
       if (errno == EINTR) {
         continue;
       }
-      throw std::runtime_error("Failed to wait for events");
+      throw EpollException("Failed to wait for events");
     }
     return numEvents;
   }
-}
-
-std::vector<epoll_event> EpollInstance::wait(int maxevents, int timeout) {
-  if (maxevents <= 0)
-    return {};
-  std::vector<epoll_event> events(maxevents);
-  int numEvents = wait(events.data(), maxevents, timeout);
-  events.resize(numEvents);
-  return events;
 }
 
 void EpollInstance::close_epoll_instance() noexcept {
@@ -115,4 +118,4 @@ void EpollInstance::close_epoll_instance() noexcept {
     epoll_fd_ = -1;
   }
 }
-} // namespace rukh
+} // namespace rukh::core
