@@ -51,6 +51,7 @@ template <typename C, typename T> struct get_class<T C::*> {
 template <typename T> using get_class_t = typename get_class<T>::type;
 
 //=============
+// check whether all the fieldPtrs in a given tuple point to an optional<>
 template <typename TupleType>
 concept AllOptionalFieldPtrs = []<std::size_t... I>(std::index_sequence<I...>) consteval {
   return (... && OptionalT<get_field_t<std::tuple_element_t<I, TupleType>>>);
