@@ -13,3 +13,7 @@ external/
 *.gif
 */test.db-*
 tetherIP.hpp
+
+
+# temporarily
+docs/*
