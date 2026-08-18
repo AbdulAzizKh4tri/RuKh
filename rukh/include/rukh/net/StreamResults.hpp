@@ -10,7 +10,7 @@
 
 namespace rukh::net {
 
-/// HandshakeResult
+/// Handshake Result
 enum class HandshakeResult { DONE, WANT_READ, WANT_WRITE, ERROR, NO_TLS };
 
 struct ReceiveResult {

@@ -31,7 +31,7 @@ public:
       if (state_ == State::CHUNK_SIZE) {
         auto it = std::search(io.readBufferBegin(), io.readBufferEnd(), crlf.begin(), crlf.end());
         while (it == io.readBufferEnd()) {
-          handleIO(co_await io.read(deadline));
+          handleIO(co_await io.read(ServerConfig::MAX_CONTENT_LENGTH, deadline));
           it = std::search(io.readBufferBegin(), io.readBufferEnd(), crlf.begin(), crlf.end());
         }
 
@@ -63,7 +63,7 @@ public:
 
       if (state_ == State::CHUNK_BODY) {
         if (io.getReadBufferSize() == 0)
-          handleIO(co_await io.read(deadline));
+          handleIO(co_await io.read(ServerConfig::MAX_CONTENT_LENGTH, deadline));
 
         size_t toCopy = std::min({io.getReadBufferSize(), chunkRemaining_, buf.size() - written});
         std::memcpy(buf.data() + written, io.readBufferData(), toCopy);
@@ -79,7 +79,7 @@ public:
 
       if (state_ == State::CHUNK_CRLF) {
         while (io.getReadBufferSize() < 2)
-          handleIO(co_await io.read(deadline));
+          handleIO(co_await io.read(ServerConfig::MAX_CONTENT_LENGTH, deadline));
 
         if (io.readBufferData()[0] != '\r' || io.readBufferData()[1] != '\n')
           co_return std::unexpected(ChunkError::MALFORMED);
@@ -99,7 +99,7 @@ public:
 
         auto it = std::search(io.readBufferBegin(), io.readBufferEnd(), crlf2.begin(), crlf2.end());
         while (it == io.readBufferEnd()) {
-          handleIO(co_await io.read(deadline));
+          handleIO(co_await io.read(ServerConfig::MAX_CONTENT_LENGTH, deadline));
           it = std::search(io.readBufferBegin(), io.readBufferEnd(), crlf2.begin(), crlf2.end());
         }
 

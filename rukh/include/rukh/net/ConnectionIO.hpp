@@ -15,6 +15,7 @@
 
 namespace rukh::net {
 
+/// Read Result
 enum class ReadResult {
   DATA,
   CLOSED,
@@ -24,6 +25,7 @@ enum class ReadResult {
   TIMED_OUT,
 };
 
+/// Write Result
 enum class WriteResult {
   OK,
   ERROR,
@@ -33,12 +35,14 @@ enum class WriteResult {
 /// Stream wrapper for easier co_await-able non-blocking reads and writes
 template <typename Stream> class ConnectionIO {
 public:
+  /// Read Data Awaitable
   struct ReadDataAwaitable {
     ConnectionIO &io;
     std::chrono::steady_clock::time_point deadline;
     size_t maxBufferSize;
     ReadResult result = ReadResult::WOULD_BLOCK;
 
+    /// suspends if blocked on read
     bool await_ready() noexcept {
       result = io.drainIntoReadBuffer(maxBufferSize);
       return result != ReadResult::WOULD_BLOCK;
@@ -55,17 +59,19 @@ public:
     }
   };
 
+  /// Write Data Awaitable
   struct WriteDataAwaitable {
     ConnectionIO &io;
     int inactivitySeconds;
     bool error = false;
 
+    /// suspends if blocked on write
     bool await_ready() noexcept {
-      if (!io.flushFromWriteBuffer()) {
+      if (not io.flushFromWriteBuffer()) {
         error = true;
         return true;
       }
-      return !io.hasPendingWrites();
+      return not io.hasPendingWrites();
     }
 
     void await_suspend(std::coroutine_handle<> h) noexcept {
@@ -92,13 +98,14 @@ public:
   ConnectionIO(std::shared_ptr<Stream> stream) : stream_(std::move(stream)) {}
 
   [[nodiscard]] ReadDataAwaitable
-  read(std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max(),
-       size_t maxBufferSize = ServerConfig::MAX_CONTENT_LENGTH) noexcept {
+  read(size_t maxBufferSize,
+       std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max()) noexcept {
     return {*this, deadline, maxBufferSize};
   }
 
   [[nodiscard]] WriteDataAwaitable write(int inactivitySeconds = 0) noexcept { return {*this, inactivitySeconds}; }
 
+  /// Tries to drain whatever data is available in the kernel buffer into the read buffer up to maxBufferSize.
   ReadResult drainIntoReadBuffer(size_t maxBufferSize) {
     bool gotData = false;
 
@@ -131,6 +138,7 @@ public:
     }
   }
 
+  /// Tries to write data until the write buffer is empty.
   bool flushFromWriteBuffer() {
     while (hasPendingWrites()) {
       ssize_t n = stream_->send(std::span(writeBufferBegin(), writeBufferEnd()));
@@ -148,10 +156,12 @@ public:
   std::vector<unsigned char>::const_iterator writeBufferBegin() const { return writeBuffer_.begin() + writeOffset_; }
   std::vector<unsigned char>::const_iterator writeBufferEnd() const { return writeBuffer_.end(); }
 
+  /// Add data to be written to the stream.
   void enqueue(std::vector<unsigned char> data) { writeBuffer_.insert(writeBuffer_.end(), data.begin(), data.end()); }
 
   bool hasPendingWrites() const { return getWriteBufferSize() > 0; }
 
+  /// Lazy erasure from readBuffer_
   void eraseFromReadBuffer(size_t n) {
     readOffset_ += n;
     if (readOffset_ > readBuffer_.size() / 2) {
@@ -160,6 +170,7 @@ public:
     }
   }
 
+  /// Lazy erasure from writeBuffer_
   void eraseFromWriteBuffer(size_t n) {
     writeOffset_ += n;
     if (writeOffset_ > writeBuffer_.size() / 2) {
@@ -193,7 +204,10 @@ public:
   std::string getIp() const { return stream_->getIp(); }
   uint16_t getPort() const { return stream_->getPort(); }
   int getFd() const { return stream_->getFd(); }
+
+  /// Handshake through stream @c TlsStream::handshake
   HandshakeResult handshake() { return stream_->handshake(); }
+  /// reset connection through stream (RST) @c TcpStream::resetConnection @c TlsStream::resetConnection
   void resetConnection() { stream_->resetConnection(); }
 
 private:
