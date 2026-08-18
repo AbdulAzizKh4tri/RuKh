@@ -35,14 +35,12 @@ bool EpollInstance::isValid() const noexcept { return epoll_fd_ != -1; }
 
 EpollInstance::operator bool() const noexcept { return epoll_fd_ != -1; }
 
-/// Release fd from RAII
 int EpollInstance::release() noexcept {
   int fd = epoll_fd_;
   epoll_fd_ = -1;
   return fd;
 }
 
-/// Add fd to epoll with events such as (EPOLLIN | EPOLLET). check man epoll_event for more.
 int EpollInstance::add(int fd, uint32_t events, int data) {
   epoll_event event = {};
   event.events = events;
@@ -55,7 +53,6 @@ int EpollInstance::add(int fd, uint32_t events, int data) {
   return ret;
 }
 
-/// Two syscalls, use the add / modify methods if possible.
 int EpollInstance::addOrModify(int fd, uint32_t events, int data) {
   epoll_event event = {};
   event.events = events;
@@ -68,7 +65,6 @@ int EpollInstance::addOrModify(int fd, uint32_t events, int data) {
   return ret;
 }
 
-/// Modify fd events
 int EpollInstance::modify(int fd, uint32_t events, int data) {
   epoll_event event = {};
   event.events = events;
@@ -82,7 +78,6 @@ int EpollInstance::modify(int fd, uint32_t events, int data) {
   return ret;
 }
 
-/// Remove fd events
 int EpollInstance::remove(int fd) {
   int ret = ::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
   if (ret == -1) {
@@ -95,10 +90,6 @@ int EpollInstance::remove(int fd) {
   return ret;
 }
 
-/// Wait for events
-/// @param events An array of @c epoll_events to be filled
-/// @param maxevents The maximum number of events to be returned
-/// @param timeout The maximum wait time in milliseconds
 int EpollInstance::wait(epoll_event *events, int maxevents, int timeout) {
   for (;;) {
     int numEvents = ::epoll_wait(epoll_fd_, events, maxevents, timeout);

@@ -38,12 +38,12 @@ public:
       return result != ReadResult::WOULD_BLOCK;
     }
 
-    void await_suspend(std::coroutine_handle<> h) noexcept { tl_executor->waitForRead(io.getFd(), h, deadline); }
+    void await_suspend(std::coroutine_handle<> h) noexcept { core::tl_executor->waitForRead(io.getFd(), h, deadline); }
 
     ReadResult await_resume() noexcept {
       if (result != ReadResult::WOULD_BLOCK)
         return result;
-      if (tl_timed_out)
+      if (core::tl_timed_out)
         return ReadResult::TIMED_OUT;
       return io.drainIntoReadBuffer(maxBufferSize);
     }
@@ -65,20 +65,20 @@ public:
     void await_suspend(std::coroutine_handle<> h) noexcept {
       auto deadline = inactivitySeconds ? now() + std::chrono::seconds(inactivitySeconds)
                                         : std::chrono::steady_clock::time_point::max();
-      tl_executor->enableWriteEvents(io.getFd());
-      tl_executor->waitForWrite(io.getFd(), h, deadline);
+      core::tl_executor->enableWriteEvents(io.getFd());
+      core::tl_executor->waitForWrite(io.getFd(), h, deadline);
     }
 
     WriteResult await_resume() noexcept {
       if (error)
         return WriteResult::ERROR;
-      if (tl_timed_out)
+      if (core::tl_timed_out)
         return WriteResult::TIMED_OUT;
       if (!io.flushFromWriteBuffer())
         return WriteResult::ERROR;
 
       if (not io.hasPendingWrites())
-        tl_executor->disableWriteEvents(io.getFd());
+        core::tl_executor->disableWriteEvents(io.getFd());
       return WriteResult::OK;
     }
   };

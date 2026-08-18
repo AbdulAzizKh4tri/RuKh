@@ -82,8 +82,8 @@ void HttpServer::run(int N) {
 }
 
 void HttpServer::workerMain() {
-  Executor executor;
-  tl_executor = &executor;
+  core::Executor executor;
+  core::tl_executor = &executor;
   std::vector<std::unique_ptr<ListenerSocket>> tcpListeners, tlsListeners;
 
   for (auto &config : listenersConfigs_) {
@@ -100,25 +100,25 @@ void HttpServer::workerMain() {
 
   for (auto &listener : tcpListeners) {
     listener->listen(listenBacklog_);
-    tl_executor->spawn(tcpAcceptLoop(*listener));
+    core::tl_executor->spawn(tcpAcceptLoop(*listener));
   }
 
   for (auto &listener : tlsListeners) {
     listener->listen(listenBacklog_);
-    tl_executor->spawn(tlsAcceptLoop(*listener));
+    core::tl_executor->spawn(tlsAcceptLoop(*listener));
   }
 
-  tl_executor->run(shutdown_);
+  core::tl_executor->run(shutdown_);
 }
 
 ErrorFactory &HttpServer::getErrorFactory() { return errorFactory_; }
 
 core::Task<void> HttpServer::tcpAcceptLoop(ListenerSocket &listener) {
-  tl_executor->registerReadFd(listener.getFd());
+  core::tl_executor->registerReadFd(listener.getFd());
   for (;;) {
     co_await ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
-    if (tl_timed_out) {
-      tl_timed_out = false;
+    if (core::tl_timed_out) {
+      core::tl_timed_out = false;
       if (shutdown_)
         co_return;
       continue;
@@ -141,17 +141,17 @@ core::Task<void> HttpServer::tcpAcceptLoop(ListenerSocket &listener) {
       if (!streamOpt)
         break;
       globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
-      tl_executor->spawn(handleConnection(std::make_unique<TcpStream>(std::move(*streamOpt))));
+      core::tl_executor->spawn(handleConnection(std::make_unique<TcpStream>(std::move(*streamOpt))));
     }
   }
 }
 
 core::Task<void> HttpServer::tlsAcceptLoop(ListenerSocket &listener) {
-  tl_executor->registerReadFd(listener.getFd());
+  core::tl_executor->registerReadFd(listener.getFd());
   for (;;) {
     co_await ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
-    if (tl_timed_out) {
-      tl_timed_out = false;
+    if (core::tl_timed_out) {
+      core::tl_timed_out = false;
       if (shutdown_)
         co_return;
       continue;
@@ -175,17 +175,17 @@ core::Task<void> HttpServer::tlsAcceptLoop(ListenerSocket &listener) {
         break;
       globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
       auto stream = std::make_unique<TlsStream>(std::move(*streamOpt));
-      tl_executor->spawn(handleConnection(std::move(stream)));
+      core::tl_executor->spawn(handleConnection(std::move(stream)));
     }
   }
 }
 
 template <typename Stream> core::Task<void> HttpServer::handleConnection(std::unique_ptr<Stream> stream) {
   int fd = stream->getFd();
-  tl_executor->registerReadFd(fd);
+  core::tl_executor->registerReadFd(fd);
 
   HttpConnection<Stream> conn(std::move(stream), *router_, errorFactory_, shutdown_, globalConnectionCount_);
   co_await conn.run();
-  tl_executor->unregister(fd);
+  core::tl_executor->unregister(fd);
 }
 } // namespace rukh

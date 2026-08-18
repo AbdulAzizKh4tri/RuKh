@@ -9,12 +9,13 @@
 
 namespace rukh::core {
 
+/// Exception wrapper for @c EpollInstance
 struct EpollException : public std::runtime_error {
   using std::runtime_error::runtime_error;
   explicit EpollException(const std::string &msg) : std::runtime_error(msg) {}
 };
 
-/// RAII wrapper for epoll
+/// RAII wrapper for @c epoll
 class EpollInstance final {
 public:
   EpollInstance(EpollInstance const &) = delete;
@@ -31,16 +32,27 @@ public:
 
   explicit operator bool() const noexcept;
 
+  /// Release fd from RAII
   int release() noexcept;
 
+  /// Add fd to epoll with events such as (EPOLLIN | EPOLLET). check man epoll_event for more.
   int add(int fd, uint32_t events, int data);
 
+  /// Two syscalls, use the add / modify methods if possible.
   int addOrModify(int fd, uint32_t events, int data);
 
+  /// Modify fd events
   int modify(int fd, uint32_t events, int data);
 
+  /// Remove fd tracking from epoll
   int remove(int fd);
 
+  /**
+   * @brief Wait for events
+   * @param events An array of @c epoll_events to be filled
+   * @param maxevents The maximum number of events to be returned
+   * @param timeout The maximum wait time in milliseconds
+   */
   int wait(epoll_event *events, int maxevents, int timeout = -1);
 
 private:

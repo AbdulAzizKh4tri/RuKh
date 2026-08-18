@@ -7,7 +7,7 @@
 #include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/utils.hpp>
 
-namespace rukh {
+namespace rukh::core {
 
 thread_local Executor *tl_executor = nullptr;
 thread_local bool tl_timed_out = false;
@@ -205,4 +205,4 @@ void Executor::run(std::atomic<bool> &shutdown) {
     ioUring_.ioSubmit();
   }
 }
-} // namespace rukh
+} // namespace rukh::core

@@ -44,7 +44,7 @@ public:
     auto task = std::make_shared<PoolTask<F, R>>(std::move(callable), state);
     task->self = task;
 
-    state->executor = tl_executor;
+    state->executor = core::tl_executor;
 
     enqueue(task.get());
     return PoolTaskAwaitable<R>{std::move(state)};

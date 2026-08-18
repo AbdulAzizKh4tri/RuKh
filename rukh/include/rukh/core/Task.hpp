@@ -30,7 +30,7 @@ namespace rukh::core {
  *     // ...
  * }
  * @endcode
- * @note coroutines (aka functions that @c co_return @c Task<>) do not run until co_awaited.
+ * @note coroutines (aka functions that @c co_return @c Task<>) generally do not run until co_awaited.
  *
  * @see Task<void>
  */
@@ -108,7 +108,10 @@ public:
       handle_.destroy(); // This is where the coroutine finally dies.
   }
 
-  // The 3 methods below allow the core::Task<> itself to be co_await-ed.
+  /**
+   * @name coroutine_traits: The methods below allow the core::Task<> itself to be co_await-ed.
+   * @{
+   */
 
   /// @brief Always false, a freshly-returned Task is always parked at initial_suspend,
   /// so the awaiter never has a synchronously-ready value to skip straight to.
@@ -129,6 +132,7 @@ public:
       std::rethrow_exception(handle_.promise().ex);
     return std::move(*handle_.promise().value);
   }
+  /** @} */
 
   /// helpers for the Executor
   bool done() const { return handle_.done(); }

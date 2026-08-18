@@ -55,12 +55,12 @@ public:
         break;
       case HandshakeResult::WANT_READ:
         co_await ReadAwaitable{io_.getFd(), inactivityDeadline_};
-        if (tl_timed_out)
+        if (core::tl_timed_out)
           co_return;
         break;
       case HandshakeResult::WANT_WRITE:
         co_await WriteAwaitable{io_.getFd(), inactivityDeadline_};
-        if (tl_timed_out)
+        if (core::tl_timed_out)
           co_return;
         break;
       case HandshakeResult::ERROR:

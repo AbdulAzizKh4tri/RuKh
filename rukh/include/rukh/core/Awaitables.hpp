@@ -12,7 +12,7 @@ struct ReadAwaitable {
 
   bool await_ready() const noexcept { return false; }
 
-  void await_suspend(std::coroutine_handle<> h) const noexcept { tl_executor->waitForRead(fd, h, deadline); }
+  void await_suspend(std::coroutine_handle<> h) const noexcept { core::tl_executor->waitForRead(fd, h, deadline); }
 
   void await_resume() const noexcept {}
 };
@@ -23,7 +23,7 @@ struct WriteAwaitable {
 
   bool await_ready() const noexcept { return false; }
 
-  void await_suspend(std::coroutine_handle<> h) const noexcept { tl_executor->waitForWrite(fd, h, deadline); }
+  void await_suspend(std::coroutine_handle<> h) const noexcept { core::tl_executor->waitForWrite(fd, h, deadline); }
 
   void await_resume() const noexcept {}
 };
@@ -38,7 +38,7 @@ struct FileReadAwaitable {
   bool await_ready() const noexcept { return false; }
 
   void await_suspend(std::coroutine_handle<> h) noexcept {
-    tl_executor->submitFileRead(fd, buf, len, h, &result, offset);
+    core::tl_executor->submitFileRead(fd, buf, len, h, &result, offset);
   }
 
   int await_resume() { return result; }
@@ -54,7 +54,7 @@ struct FileWriteAwaitable {
   bool await_ready() const noexcept { return false; }
 
   void await_suspend(std::coroutine_handle<> h) noexcept {
-    tl_executor->submitFileWrite(fd, buf, len, h, &result, offset);
+    core::tl_executor->submitFileWrite(fd, buf, len, h, &result, offset);
   }
 
   int await_resume() { return result; }
