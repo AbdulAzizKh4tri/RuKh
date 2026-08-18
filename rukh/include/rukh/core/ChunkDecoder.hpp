@@ -10,8 +10,8 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/ServerConfig.hpp>
-#include <rukh/core/ConnectionIO.hpp>
 #include <rukh/core/utils.hpp>
+#include <rukh/net/ConnectionIO.hpp>
 
 namespace rukh {
 
@@ -19,8 +19,8 @@ enum class ChunkError { MALFORMED, CHUNK_TOO_LARGE, REQUEST_SIZE_LIMIT_EXCEEDED 
 
 template <typename Stream> class ChunkDecoder {
 public:
-  core::Task<std::expected<size_t, ChunkError>> readSome(ConnectionIO<Stream> &io, std::span<unsigned char> buf,
-                                                   std::chrono::steady_clock::time_point deadline) {
+  core::Task<std::expected<size_t, ChunkError>> readSome(net::ConnectionIO<Stream> &io, std::span<unsigned char> buf,
+                                                         std::chrono::steady_clock::time_point deadline) {
     if (state_ == State::DONE)
       co_return size_t{0};
 
@@ -130,12 +130,12 @@ public:
 private:
   enum class State { CHUNK_SIZE, CHUNK_BODY, CHUNK_CRLF, TRAILER, DONE };
 
-  static void handleIO(ReadResult r) {
-    if (r == ReadResult::BUFFER_LIMIT_EXCEEDED)
+  static void handleIO(net::ReadResult r) {
+    if (r == net::ReadResult::BUFFER_LIMIT_EXCEEDED)
       throw ServerException("Buffer limit exceeded", 500);
-    if (r == ReadResult::CLOSED || r == ReadResult::ERROR)
+    if (r == net::ReadResult::CLOSED || r == net::ReadResult::ERROR)
       throw ConnectionException("Connection closed");
-    if (r == ReadResult::TIMED_OUT)
+    if (r == net::ReadResult::TIMED_OUT)
       throw ConnectionException("Read timed out");
   }
 

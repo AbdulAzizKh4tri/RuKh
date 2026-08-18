@@ -1,9 +1,16 @@
+/**
+ * @file StreamResults.hpp
+ * @brief Result types for stream operations
+ * @see TcpStream
+ * @see TlsStream
+ */
 #pragma once
 
 #include <sys/types.h>
 
-namespace rukh {
+namespace rukh::net {
 
+/// HandshakeResult
 enum class HandshakeResult { DONE, WANT_READ, WANT_WRITE, ERROR, NO_TLS };
 
 struct ReceiveResult {
@@ -15,4 +22,4 @@ struct ReceiveResult {
   static ReceiveResult wouldBlock() { return {Status::WOULD_BLOCK, 0}; }
   static ReceiveResult error() { return {Status::ERROR, 0}; }
 };
-} // namespace rukh
+} // namespace rukh::net

@@ -19,12 +19,12 @@
 #include <rukh/core/Awaitables.hpp>
 #include <rukh/core/BodyStream.hpp>
 #include <rukh/core/ChunkDecoder.hpp>
-#include <rukh/core/ConnectionIO.hpp>
 #include <rukh/core/ExecutorContext.hpp>
-#include <rukh/core/StreamResults.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/core/utils.hpp>
 #include <rukh/logUtils.hpp>
+#include <rukh/net/ConnectionIO.hpp>
+#include <rukh/net/StreamResults.hpp>
 
 namespace rukh {
 
@@ -47,23 +47,23 @@ public:
 
     //=== TLS Handshake ===
     for (bool done = false; not done;) {
-      HandshakeResult result = io_.handshake();
+      net::HandshakeResult result = io_.handshake();
       switch (result) {
-      case HandshakeResult::DONE:
-      case HandshakeResult::NO_TLS:
+      case net::HandshakeResult::DONE:
+      case net::HandshakeResult::NO_TLS:
         done = true;
         break;
-      case HandshakeResult::WANT_READ:
+      case net::HandshakeResult::WANT_READ:
         co_await ReadAwaitable{io_.getFd(), inactivityDeadline_};
         if (core::tl_timed_out)
           co_return;
         break;
-      case HandshakeResult::WANT_WRITE:
+      case net::HandshakeResult::WANT_WRITE:
         co_await WriteAwaitable{io_.getFd(), inactivityDeadline_};
         if (core::tl_timed_out)
           co_return;
         break;
-      case HandshakeResult::ERROR:
+      case net::HandshakeResult::ERROR:
         co_return;
       }
     }
@@ -96,15 +96,15 @@ public:
 
           // Marker not found yet — suspend until the socket is readable or a deadline fires
           auto readResult = co_await io_.read(activeDeadline(), ServerConfig::MAX_HEADER_BYTES);
-          if (readResult == ReadResult::DATA) {
+          if (readResult == net::ReadResult::DATA) {
             auto timeNow = now();
             resetInactivity(timeNow);
-          } else if (readResult == ReadResult::CLOSED || readResult == ReadResult::ERROR) {
+          } else if (readResult == net::ReadResult::CLOSED || readResult == net::ReadResult::ERROR) {
             co_return;
-          } else if (it == io_.readBufferEnd() && readResult == ReadResult::BUFFER_LIMIT_EXCEEDED) {
+          } else if (it == io_.readBufferEnd() && readResult == net::ReadResult::BUFFER_LIMIT_EXCEEDED) {
             co_await sendErrorResponseAndClose(431);
             co_return;
-          } else if (readResult == ReadResult::TIMED_OUT) {
+          } else if (readResult == net::ReadResult::TIMED_OUT) {
             co_await sendErrorResponseAndClose(408);
             co_return;
           }
@@ -178,7 +178,7 @@ public:
             std::string response = "HTTP/1.1 100 Continue\r\n\r\n";
             io_.enqueue(std::vector<unsigned char>(response.begin(), response.end()));
             while (io_.hasPendingWrites()) {
-              if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
+              if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
                 co_return;
             }
           }
@@ -285,14 +285,14 @@ public:
               co_return remaining;
             }
 
-            ReadResult readResult = co_await io_.read(activeDeadline());
-            if (readResult == ReadResult::DATA) {
+            net::ReadResult readResult = co_await io_.read(activeDeadline());
+            if (readResult == net::ReadResult::DATA) {
               resetInactivity();
-            } else if (readResult == ReadResult::BUFFER_LIMIT_EXCEEDED) {
+            } else if (readResult == net::ReadResult::BUFFER_LIMIT_EXCEEDED) {
               throw ServerException("Buffer limit exceeded", 500);
-            } else if (readResult == ReadResult::CLOSED || readResult == ReadResult::ERROR) {
+            } else if (readResult == net::ReadResult::CLOSED || readResult == net::ReadResult::ERROR) {
               throw ConnectionException("Connection closed");
-            } else if (readResult == ReadResult::TIMED_OUT) {
+            } else if (readResult == net::ReadResult::TIMED_OUT) {
               throw ConnectionException("Read timed out");
             }
 
@@ -305,14 +305,14 @@ public:
           BodyDrainFn drainFn = [this](size_t remaining) mutable -> core::Task<void> {
             while (io_.getReadBufferSize() < remaining) {
               size_t oldSize = io_.getReadBufferSize();
-              ReadResult readResult = co_await io_.read(activeDeadline());
-              if (readResult == ReadResult::DATA) {
+              net::ReadResult readResult = co_await io_.read(activeDeadline());
+              if (readResult == net::ReadResult::DATA) {
                 resetInactivity();
-              } else if (readResult == ReadResult::BUFFER_LIMIT_EXCEEDED) {
+              } else if (readResult == net::ReadResult::BUFFER_LIMIT_EXCEEDED) {
                 throw ServerException("Buffer limit exceeded", 500);
-              } else if (readResult == ReadResult::CLOSED || readResult == ReadResult::ERROR) {
+              } else if (readResult == net::ReadResult::CLOSED || readResult == net::ReadResult::ERROR) {
                 throw ConnectionException("Connection closed");
-              } else if (readResult == ReadResult::TIMED_OUT) {
+              } else if (readResult == net::ReadResult::TIMED_OUT) {
                 throw ConnectionException("Read timed out");
               }
             }
@@ -379,7 +379,7 @@ public:
 
         logging::logRequest(request_, *res);
         while (io_.hasPendingWrites()) {
-          if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
+          if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
             co_return;
         }
         resetForNextRequest();
@@ -392,7 +392,7 @@ public:
           co_return;
 
         while (io_.hasPendingWrites()) {
-          if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
+          if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
             co_return;
         }
 
@@ -429,7 +429,7 @@ public:
 
           if (error) {
             while (io_.hasPendingWrites()) {
-              if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
+              if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
                 co_return;
             }
             co_return;
@@ -443,7 +443,7 @@ public:
             }
             logging::logRequest(request_, *responseStream);
             while (io_.hasPendingWrites()) {
-              if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
+              if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
                 co_return;
             }
             break;
@@ -455,7 +455,7 @@ public:
           }
 
           while (io_.hasPendingWrites()) {
-            if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK) {
+            if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK) {
               io_.resetConnection();
               co_return;
             }
@@ -484,7 +484,7 @@ private:
 
   ChunkDecoder<Stream> chunkDecoder_;
 
-  ConnectionIO<Stream> io_;
+  net::ConnectionIO<Stream> io_;
 
   bool keepAlive_ = true;
   std::atomic<bool> &shutdown_;
@@ -518,7 +518,7 @@ private:
       co_return;
     logging::logRequest(request_, response);
     do {
-      if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
+      if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
         co_return;
     } while (io_.hasPendingWrites());
   }

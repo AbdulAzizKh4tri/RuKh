@@ -1,10 +1,10 @@
-#include <rukh/core/ListenerSocket.hpp>
+#include <rukh/net/ListenerSocket.hpp>
 
 #include <netinet/in.h> // sockaddr_in, INET_ADDRSTRLEN, htons
 #include <spdlog/spdlog.h>
 #include <sys/socket.h> // socket, bind, listen, accept, setsockopt, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 
-namespace rukh {
+namespace rukh::net {
 
 ListenerSocket::ListenerSocket(std::string const &host, std::string port) {
   host_ = host;
@@ -77,6 +77,7 @@ int ListenerSocket::acceptRawFd() {
 }
 
 int ListenerSocket::setSocketNonBlocking() { return socket_.setNonBlocking(); }
+
 int ListenerSocket::getFd() { return socket_.getFd(); }
 
 void ListenerSocket::bind_socket(std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> &res) {
@@ -96,4 +97,4 @@ void ListenerSocket::bind_socket(std::unique_ptr<addrinfo, decltype(&freeaddrinf
     throw std::runtime_error("Failed to bind socket");
   }
 }
-} // namespace rukh
+} // namespace rukh::net

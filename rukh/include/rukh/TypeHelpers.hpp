@@ -1,6 +1,6 @@
 /**
  * @file TypeHelpers.hpp
- * @brief Utility functions for working with types
+ * @brief Utility type traits and helpers
  */
 
 #pragma once

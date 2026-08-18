@@ -1,4 +1,4 @@
-#include <rukh/core/TcpStream.hpp>
+#include <rukh/net/TcpStream.hpp>
 
 #include <arpa/inet.h>
 #include <netinet/in.h> // sockaddr_in, INET_ADDRSTRLEN, htons
@@ -10,7 +10,7 @@
 
 #include <rukh/core/utils.hpp>
 
-namespace rukh {
+namespace rukh::net {
 
 TcpStream::TcpStream(int fd, sockaddr_storage addr, socklen_t len) : socket_(fd) {
   auto [ip, port] = resolvePeerAddress(addr, len);
@@ -57,4 +57,4 @@ std::string TcpStream::getIp() const { return ip_; }
 uint16_t TcpStream::getPort() const { return port_; }
 
 int TcpStream::getFd() const { return socket_.getFd(); }
-} // namespace rukh
+} // namespace rukh::net

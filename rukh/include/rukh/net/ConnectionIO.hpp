@@ -1,3 +1,8 @@
+/**
+ * @file ConnectionIO.hpp
+ * @brief Stream wrapper for easier co_await-able non-blocking reads and writes
+ */
+
 #pragma once
 
 #include <memory>
@@ -5,10 +10,10 @@
 
 #include <rukh/core/Executor.hpp>
 #include <rukh/core/ExecutorContext.hpp>
-#include <rukh/core/StreamResults.hpp>
 #include <rukh/core/utils.hpp>
+#include <rukh/net/StreamResults.hpp>
 
-namespace rukh {
+namespace rukh::net {
 
 enum class ReadResult {
   DATA,
@@ -25,6 +30,7 @@ enum class WriteResult {
   TIMED_OUT,
 };
 
+/// Stream wrapper for easier co_await-able non-blocking reads and writes
 template <typename Stream> class ConnectionIO {
 public:
   struct ReadDataAwaitable {
@@ -196,4 +202,4 @@ private:
   std::vector<unsigned char> readBuffer_;
   std::vector<unsigned char> writeBuffer_;
 };
-} // namespace rukh
+} // namespace rukh::net

@@ -1,16 +1,17 @@
-#include <rukh/core/TlsStream.hpp>
+#include <rukh/net/TlsStream.hpp>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#include <spdlog/spdlog.h>
 #include <sys/socket.h>
+
+#include <spdlog/spdlog.h>
 
 #include <rukh/core/utils.hpp>
 
-namespace rukh {
+namespace rukh::net {
 
 TlsStream::TlsStream(int fd, SSL_CTX *ctx, sockaddr_storage addr, socklen_t len) : socket_(fd) {
   ssl_ = SSL_new(ctx);
@@ -28,7 +29,6 @@ TlsStream::TlsStream(int fd, SSL_CTX *ctx, sockaddr_storage addr, socklen_t len)
   };
 }
 
-// move constructor — transfer ownership, null out source
 TlsStream::TlsStream(TlsStream &&other) noexcept
     : socket_(std::move(other.socket_)), ssl_(other.ssl_), ip_(std::move(other.ip_)), port_(other.port_) {
   other.ssl_ = nullptr; // prevent double-free in destructor
@@ -115,4 +115,4 @@ std::string TlsStream::getIp() const { return ip_; }
 uint16_t TlsStream::getPort() const { return port_; }
 
 int TlsStream::getFd() const { return socket_.getFd(); }
-} // namespace rukh
+} // namespace rukh::net

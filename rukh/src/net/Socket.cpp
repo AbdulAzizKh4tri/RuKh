@@ -1,9 +1,9 @@
-#include <rukh/core/Socket.hpp>
+#include <rukh/net/Socket.hpp>
 
 #include <fcntl.h>
 #include <unistd.h>
 
-namespace rukh {
+namespace rukh::net {
 
 Socket::Socket() { socket_fd_ = -1; }
 

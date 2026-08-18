@@ -84,15 +84,15 @@ void HttpServer::run(int N) {
 void HttpServer::workerMain() {
   core::Executor executor;
   core::tl_executor = &executor;
-  std::vector<std::unique_ptr<ListenerSocket>> tcpListeners, tlsListeners;
+  std::vector<std::unique_ptr<net::ListenerSocket>> tcpListeners, tlsListeners;
 
   for (auto &config : listenersConfigs_) {
     if (config.isTls) {
-      auto listener = std::make_unique<ListenerSocket>(config.host, config.port);
+      auto listener = std::make_unique<net::ListenerSocket>(config.host, config.port);
       listener->setSocketNonBlocking();
       tlsListeners.push_back(std::move(listener));
     } else {
-      auto listener = std::make_unique<ListenerSocket>(config.host, config.port);
+      auto listener = std::make_unique<net::ListenerSocket>(config.host, config.port);
       listener->setSocketNonBlocking();
       tcpListeners.push_back(std::move(listener));
     }
@@ -113,7 +113,7 @@ void HttpServer::workerMain() {
 
 ErrorFactory &HttpServer::getErrorFactory() { return errorFactory_; }
 
-core::Task<void> HttpServer::tcpAcceptLoop(ListenerSocket &listener) {
+core::Task<void> HttpServer::tcpAcceptLoop(net::ListenerSocket &listener) {
   core::tl_executor->registerReadFd(listener.getFd());
   for (;;) {
     co_await ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
@@ -141,12 +141,12 @@ core::Task<void> HttpServer::tcpAcceptLoop(ListenerSocket &listener) {
       if (!streamOpt)
         break;
       globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
-      core::tl_executor->spawn(handleConnection(std::make_unique<TcpStream>(std::move(*streamOpt))));
+      core::tl_executor->spawn(handleConnection(std::make_unique<net::TcpStream>(std::move(*streamOpt))));
     }
   }
 }
 
-core::Task<void> HttpServer::tlsAcceptLoop(ListenerSocket &listener) {
+core::Task<void> HttpServer::tlsAcceptLoop(net::ListenerSocket &listener) {
   core::tl_executor->registerReadFd(listener.getFd());
   for (;;) {
     co_await ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
@@ -174,7 +174,7 @@ core::Task<void> HttpServer::tlsAcceptLoop(ListenerSocket &listener) {
       if (!streamOpt)
         break;
       globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
-      auto stream = std::make_unique<TlsStream>(std::move(*streamOpt));
+      auto stream = std::make_unique<net::TlsStream>(std::move(*streamOpt));
       core::tl_executor->spawn(handleConnection(std::move(stream)));
     }
   }

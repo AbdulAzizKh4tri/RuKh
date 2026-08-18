@@ -1,6 +1,6 @@
 /**
  * @file Executor.hpp
- * @brief The RuKh Executor, used to run coroutines. Everything passes through this.
+ * @brief The RuKh Executor, Per-thread event loop and coroutine scheduler. Everything passes through this.
  */
 
 #pragma once

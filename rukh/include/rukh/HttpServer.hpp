@@ -8,8 +8,8 @@
 
 #include <rukh/ErrorFactory.hpp>
 #include <rukh/Router.hpp>
-#include <rukh/core/ListenerSocket.hpp>
 #include <rukh/core/Task.hpp>
+#include <rukh/net/ListenerSocket.hpp>
 
 /**
  * @namespace rukh
@@ -56,9 +56,9 @@ private:
 
   void workerMain();
 
-  core::Task<void> tcpAcceptLoop(ListenerSocket &listener);
+  core::Task<void> tcpAcceptLoop(net::ListenerSocket &listener);
 
-  core::Task<void> tlsAcceptLoop(ListenerSocket &listener);
+  core::Task<void> tlsAcceptLoop(net::ListenerSocket &listener);
 
   template <typename Stream> core::Task<void> handleConnection(std::unique_ptr<Stream> stream);
 };

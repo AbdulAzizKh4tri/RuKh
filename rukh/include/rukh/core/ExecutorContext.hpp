@@ -1,3 +1,8 @@
+/**
+ * @file ExecutorContext.hpp
+ * @brief Thread local Executor context, and helper function.
+ */
+
 #pragma once
 
 #include <coroutine>

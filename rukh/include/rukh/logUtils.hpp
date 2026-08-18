@@ -1,7 +1,8 @@
 /**
  * @file logutils.hpp
- * @brief Utility functions for logging.
+ * @brief Logging utilities and configuration
  */
+
 #pragma once
 
 #include <spdlog/async.h>
