@@ -11,7 +11,7 @@ struct SessionHandle {
 
   SessionHandle(ISessionStore *store, std::string id) : sessionStore(store), id(std::move(id)) {}
 
-  Task<Session *> get() {
+  core::Task<Session *> get() {
     if (session.has_value())
       co_return &*session;
 

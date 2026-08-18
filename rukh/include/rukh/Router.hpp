@@ -9,6 +9,7 @@
 #include <rukh/ErrorFactory.hpp>
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpTypes.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 
@@ -46,7 +47,7 @@ public:
 
   void use(Middleware middleware);
 
-  Task<Response> dispatch(HttpRequest &request);
+  core::Task<Response> dispatch(HttpRequest &request);
 
   RouterResponse validate(const HttpRequest &request);
 
@@ -60,7 +61,7 @@ private:
   ErrorFactory &errorFactory_;
   std::unordered_set<std::string> registeredMethods_;
 
-  Task<Response> runChain(HttpRequest &request, Handler &handler, size_t startIndex);
+  core::Task<Response> runChain(HttpRequest &request, Handler &handler, size_t startIndex);
 
   RouteNode *findMatchingRouteEntry(const std::vector<std::string_view> &pathParts);
 

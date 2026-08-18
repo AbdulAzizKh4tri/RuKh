@@ -23,7 +23,7 @@ Executor::Executor() {
   registerReadFd(eventFd_);
 }
 
-void Executor::spawn(Task<void> task) {
+void Executor::spawn(core::Task<void> task) {
   auto h = task.handle();
   if (not h)
     return;

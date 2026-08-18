@@ -3,13 +3,14 @@
 #include <rukh/ErrorFactory.hpp>
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpTypes.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 
 class CompressionMiddleware {
 public:
   CompressionMiddleware(ErrorFactory &errorFactory);
-  Task<Response> operator()(const HttpRequest &request, Next next);
+  core::Task<Response> operator()(const HttpRequest &request, Next next);
 
 private:
   ErrorFactory &errorFactory_;

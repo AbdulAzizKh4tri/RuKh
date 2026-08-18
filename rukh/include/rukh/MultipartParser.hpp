@@ -25,7 +25,7 @@ class MultipartParser {
       buffer_.resize(ServerConfig::MULTIPART_BUFFER_SIZE);
     }
 
-    Task<std::pair<std::span<unsigned char>, size_t>> read() {
+    core::Task<std::pair<std::span<unsigned char>, size_t>> read() {
       auto span = std::span<unsigned char>(buffer_.data() + validBytes_, buffer_.size() - validBytes_);
       auto n = co_await bodyStream_->read(span);
       validBytes_ += n;
@@ -51,7 +51,7 @@ class MultipartParser {
                size_t maxSize)
         : headers_(headers), boundary_(boundary), reader_(reader), maxSize_(maxSize) {}
 
-    Task<PartReadResult> readAndDo(std::move_only_function<Task<void>(std::span<unsigned char>)> doPart) {
+    core::Task<PartReadResult> readAndDo(std::move_only_function<core::Task<void>(std::span<unsigned char>)> doPart) {
       size_t fullBoundarySize = boundary_.size() + 2;
       size_t totalConsumed = 0;
       for (;;) {
@@ -80,7 +80,7 @@ class MultipartParser {
       }
     }
 
-    Task<PartReadResult> drainTillBoundary() {
+    core::Task<PartReadResult> drainTillBoundary() {
       size_t fullBoundarySize = boundary_.size() + 2;
       size_t totalConsumed = 0;
       for (;;) {
@@ -168,33 +168,33 @@ public:
   }
 
   void storeFieldValue(const std::string &name, std::string &value) { // wrapper method
-    onField(name, [&value](std::string v) -> Task<void> {
+    onField(name, [&value](std::string v) -> core::Task<void> {
       value = v;
       co_return;
     });
   }
 
   void storeFieldValues(const std::string &name, std::vector<std::string> &values) { // wrapper method
-    onMultiField(name, [&values](std::vector<std::string> v) -> Task<void> {
+    onMultiField(name, [&values](std::vector<std::string> v) -> core::Task<void> {
       for (auto value : v)
         values.push_back(value);
       co_return;
     });
   }
 
-  void onMultiField(const std::string &name, std::move_only_function<Task<void>(std::vector<std::string>)> handler) {
+  void onMultiField(const std::string &name, std::move_only_function<core::Task<void>(std::vector<std::string>)> handler) {
     MultiFieldHandlers_.emplace_back(name, std::move(handler));
   }
 
-  void onField(const std::string &name, std::move_only_function<Task<void>(std::string)> handler) {
+  void onField(const std::string &name, std::move_only_function<core::Task<void>(std::string)> handler) {
     fieldHandlers_.emplace_back(name, std::move(handler));
   }
 
-  void onFile(const std::string &name, std::move_only_function<Task<void>(std::span<unsigned char>)> handler) {
+  void onFile(const std::string &name, std::move_only_function<core::Task<void>(std::span<unsigned char>)> handler) {
     fileHandlers_.emplace_back(name, std::move(handler));
   }
 
-  Task<void> go() {
+  core::Task<void> go() {
     size_t fullBoundarySize = boundary_.size() + 2;
     size_t firstBoundarySize = boundary_.size();
     std::span<unsigned char> span;
@@ -330,7 +330,7 @@ public:
         }
       } else {
         std::string value;
-        auto valueReader = [&value](std::span<unsigned char> span) -> Task<void> {
+        auto valueReader = [&value](std::span<unsigned char> span) -> core::Task<void> {
           value += std::string(span.begin(), span.end());
           co_return;
         };
@@ -376,9 +376,9 @@ private:
   BufferedReader reader_;
   std::string boundary_;
 
-  std::vector<std::pair<std::string, std::move_only_function<Task<void>(std::string)>>> fieldHandlers_;
-  std::vector<std::pair<std::string, std::move_only_function<Task<void>(std::vector<std::string>)>>>
+  std::vector<std::pair<std::string, std::move_only_function<core::Task<void>(std::string)>>> fieldHandlers_;
+  std::vector<std::pair<std::string, std::move_only_function<core::Task<void>(std::vector<std::string>)>>>
       MultiFieldHandlers_;
-  std::vector<std::pair<std::string, std::move_only_function<Task<void>(std::span<unsigned char>)>>> fileHandlers_;
+  std::vector<std::pair<std::string, std::move_only_function<core::Task<void>(std::span<unsigned char>)>>> fileHandlers_;
 };
 } // namespace rukh

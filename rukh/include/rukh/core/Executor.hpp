@@ -7,10 +7,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include <rukh/Task.hpp>
 #include <rukh/core/EpollInstance.hpp>
 #include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/IoUringInstance.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 
@@ -38,7 +38,7 @@ public:
   Executor();
   ~Executor() = default;
 
-  void spawn(Task<void> task);
+  void spawn(core::Task<void> task);
 
   void unregister(int fd);
 
@@ -62,7 +62,7 @@ public:
 
 private:
   EpollInstance epoll_;
-  std::vector<Task<void>> ownedTasks_;
+  std::vector<core::Task<void>> ownedTasks_;
   std::unordered_map<void *, size_t> ownedTaskMap_;
   std::queue<ReadyTask> readyQueue_;
 

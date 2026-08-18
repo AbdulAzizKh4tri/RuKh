@@ -9,7 +9,7 @@ CorsMiddleware::CorsMiddleware(CorsConfig corsConfig) : corsConfig_(corsConfig) 
   allowedHeaders_ = getCommaSeparatedString(corsConfig_.allowedHeaders);
 }
 
-Task<Response> CorsMiddleware::operator()(const HttpRequest &request, Next next) {
+core::Task<Response> CorsMiddleware::operator()(const HttpRequest &request, Next next) {
   auto originView = request.getHeaderLower("origin");
 
   if (originView.empty())

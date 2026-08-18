@@ -10,7 +10,7 @@ namespace rukh {
 SessionMiddleware::SessionMiddleware(SessionConfig SessionConfig, std::unique_ptr<ISessionStore> sessionStore)
     : sessionConfig_(SessionConfig), sessionStore_(std::move(sessionStore)) {}
 
-Task<Response> SessionMiddleware::operator()(HttpRequest &request, Next next) {
+core::Task<Response> SessionMiddleware::operator()(HttpRequest &request, Next next) {
   auto sessionCookieOpt = request.getCookie("session_id");
   std::string sessionCookie;
 

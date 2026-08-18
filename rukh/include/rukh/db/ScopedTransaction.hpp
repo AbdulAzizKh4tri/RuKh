@@ -19,14 +19,14 @@ public:
     transaction_ = std::move(*t);
   }
 
-  Task<std::expected<QueryResult, DatabaseError>> begin(const std::string &mode = "DEFERRED") override {
+  core::Task<std::expected<QueryResult, DatabaseError>> begin(const std::string &mode = "DEFERRED") override {
     return transaction_->begin(mode);
   }
-  Task<std::expected<QueryResult, DatabaseError>> commit() override { return transaction_->commit(); };
+  core::Task<std::expected<QueryResult, DatabaseError>> commit() override { return transaction_->commit(); };
 
-  Task<std::expected<QueryResult, DatabaseError>> rollback() override { return transaction_->rollback(); };
+  core::Task<std::expected<QueryResult, DatabaseError>> rollback() override { return transaction_->rollback(); };
 
-  Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &query,
+  core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &query,
                                                                const std::vector<DbValue> params = {}) override {
     return transaction_->executeQuery(query, params);
   }

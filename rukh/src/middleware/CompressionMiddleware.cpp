@@ -16,7 +16,7 @@ using Compressor = std::unique_ptr<ICompressor>;
 
 CompressionMiddleware::CompressionMiddleware(ErrorFactory &errorFactory) : errorFactory_(errorFactory) {}
 
-Task<Response> CompressionMiddleware::operator()(const HttpRequest &request, Next next) {
+core::Task<Response> CompressionMiddleware::operator()(const HttpRequest &request, Next next) {
   const auto acceptEncodingHeaderRaw = request.getHeaderLower("accept-encoding");
 
   if (acceptEncodingHeaderRaw.empty())
@@ -82,7 +82,7 @@ Task<Response> CompressionMiddleware::operator()(const HttpRequest &request, Nex
     resStream->headers.addHeaderLower("vary", "accept-encoding");
 
     resStream->setNextChunkFn([comp = std::move(compressor), originalFn = std::move(resStream->takeNextChunkFn()),
-                               finished = false]() mutable -> Task<std::optional<std::string>> {
+                               finished = false]() mutable -> core::Task<std::optional<std::string>> {
       if (finished)
         co_return std::nullopt;
       for (;;) {

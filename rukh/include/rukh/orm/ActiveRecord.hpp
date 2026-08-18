@@ -8,8 +8,8 @@
 #include <utility>
 
 #include <rukh/Exceptions.hpp>
-#include <rukh/Task.hpp>
 #include <rukh/TypeHelpers.hpp>
+#include <rukh/core/Task.hpp>
 
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
@@ -36,8 +36,8 @@ public:
 
   operator PkType() const { return getPrimaryKeyValue(); }
 
-  static Task<std::expected<std::optional<Model>, db::DatabaseError>> find(const PkTypesTuple &pkVal,
-                                                                           db::ITransaction *transaction = nullptr) {
+  static core::Task<std::expected<std::optional<Model>, db::DatabaseError>>
+  find(const PkTypesTuple &pkVal, db::ITransaction *transaction = nullptr) {
     co_return co_await SelectQuery<Model>().where(buildPkPredicate(pkVal)).first(transaction);
   }
 
@@ -52,7 +52,7 @@ public:
     return SelectQuery<Model>(tableAlias).where(p);
   }
 
-  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  static core::Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   bulkInsert(const std::vector<Model> &objs, bool returning = false, db::ITransaction *transaction = nullptr) {
     auto result = co_await InsertQuery<Model>().execute(objs, transaction, returning);
     if (not result)
@@ -61,7 +61,7 @@ public:
   }
 
   template <typename ConflictFieldsTuple, typename UpdateFieldsTuple>
-  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  static core::Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   bulkUpsert(const std::vector<Model> &objs, const ConflictFieldsTuple &conflictFields, const bool doNothingOnConflict,
              const UpdateFieldsTuple &updateFields = std::tuple{}, bool returning = false,
              db::ITransaction *transaction = nullptr) {
@@ -80,7 +80,7 @@ public:
   }
 
   template <typename FieldTuple>
-  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  static core::Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   bulkUpdate(const Model &newObj, FieldTuple fields, const Predicate<Model> &p, bool returning = false,
              db::ITransaction *transaction = nullptr) {
     UpdateQuery<Model> query;
@@ -91,7 +91,7 @@ public:
     co_return *result;
   }
 
-  static Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  static core::Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   bulkDestroy(const Predicate<Model> &p, bool returning = false, db::ITransaction *transaction = nullptr) {
     DeleteQuery<Model> query;
     auto result = co_await query.where(p).execute(transaction, returning);
@@ -105,16 +105,16 @@ public:
    * If called with a transaction that is later rolled back, this object's id and persisted_ will not reflect the
    * rollback.
    */
-  Task<std::expected<size_t, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<size_t, db::DatabaseError>> save(db::ITransaction *transaction = nullptr) {
     if (persisted_)
       return update(transaction);
     return insert(transaction);
   }
 
   template <typename ConflictFieldsTuple>
-  Task<std::expected<size_t, db::DatabaseError>> upsert(ConflictFieldsTuple conflictFields,
-                                                        bool doNothingOnConflict = false,
-                                                        db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<size_t, db::DatabaseError>> upsert(ConflictFieldsTuple conflictFields,
+                                                              bool doNothingOnConflict = false,
+                                                              db::ITransaction *transaction = nullptr) {
     Model *self = static_cast<Model *>(this);
     UpsertQuery<Model> query;
     std::apply([&](auto &&...col) { (query.conflictFields(col), ...); }, conflictFields);
@@ -137,7 +137,7 @@ public:
     co_return affectedRowCount;
   }
 
-  Task<std::expected<size_t, db::DatabaseError>> insert(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<size_t, db::DatabaseError>> insert(db::ITransaction *transaction = nullptr) {
     Model *self = static_cast<Model *>(this);
     InsertQuery<Model> query;
     std::vector<Model> inputObjs{*self};
@@ -156,7 +156,7 @@ public:
     co_return affectedRowCount;
   }
 
-  Task<std::expected<size_t, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<size_t, db::DatabaseError>> update(db::ITransaction *transaction = nullptr) {
     Predicate<Model> p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await UpdateQuery<Model>().where(p).execute(*self, transaction, true);
@@ -171,7 +171,7 @@ public:
     co_return affectedRowCount;
   }
 
-  Task<std::expected<size_t, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<size_t, db::DatabaseError>> destroy(db::ITransaction *transaction = nullptr) {
     Predicate<Model> p = buildPkPredicate(this->getPrimaryKeyValues());
     Model *self = static_cast<Model *>(this);
     auto result = co_await DeleteQuery<Model>().where(p).execute(transaction, true);
@@ -187,7 +187,7 @@ public:
     co_return affectedRowCount;
   }
 
-  Task<std::expected<bool, db::DatabaseError>> reload(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<bool, db::DatabaseError>> reload(db::ITransaction *transaction = nullptr) {
     Model *self = static_cast<Model *>(this);
     auto result = co_await find(getPrimaryKeyValues(), transaction);
     if (not result)
@@ -199,8 +199,8 @@ public:
   }
 
   template <FixedString RelationName = "", typename RelatedModel, typename ThroughModel>
-  static Task<std::expected<size_t, db::DatabaseError>> upsertRelationThrough(ThroughModel throughObj,
-                                                                              db::ITransaction *transaction = nullptr) {
+  static core::Task<std::expected<size_t, db::DatabaseError>>
+  upsertRelationThrough(ThroughModel throughObj, db::ITransaction *transaction = nullptr) {
     constexpr RelationLookup relLookup = getManyToManyRelation<RelationName, RelatedModel>();
     constexpr auto relation = relLookup.relation;
     using Relation = decltype(relation);
@@ -291,8 +291,8 @@ public:
   }
 
   template <FixedString RelationName = "", typename RelatedModel>
-  Task<std::expected<size_t, db::DatabaseError>> addRelation(const RelatedModel &other,
-                                                             db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<size_t, db::DatabaseError>> addRelation(const RelatedModel &other,
+                                                                   db::ITransaction *transaction = nullptr) {
     constexpr RelationLookup relLookup = getManyToManyRelation<RelationName, RelatedModel>();
     constexpr auto relation = relLookup.relation;
     using Relation = decltype(relation);
@@ -391,8 +391,8 @@ public:
   }
 
   template <FixedString RelationName = "", typename RelatedModel>
-  Task<std::expected<size_t, db::DatabaseError>> removeRelation(const RelatedModel &other,
-                                                                db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<size_t, db::DatabaseError>> removeRelation(const RelatedModel &other,
+                                                                      db::ITransaction *transaction = nullptr) {
 
     static constexpr RelationLookup relLookup = getManyToManyRelation<RelationName, RelatedModel>();
     static constexpr auto relation = relLookup.relation;

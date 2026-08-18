@@ -7,11 +7,11 @@
 
 #include <rukh/CookieStore.hpp>
 #include <rukh/HeaderStore.hpp>
-#include <rukh/Task.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 
-using NextChunkFn = std::move_only_function<Task<std::optional<std::string>>()>;
+using NextChunkFn = std::move_only_function<core::Task<std::optional<std::string>>()>;
 
 class HttpStreamResponse {
 public:
@@ -25,7 +25,7 @@ public:
 
   HttpStreamResponse(int statusCode, const std::string &contentType, NextChunkFn nextChunkFn);
 
-  Task<std::optional<std::string>> getNextChunk();
+  core::Task<std::optional<std::string>> getNextChunk();
 
   bool serializeHeaderInto(std::vector<unsigned char> &buf) const;
 

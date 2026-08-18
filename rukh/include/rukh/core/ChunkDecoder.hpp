@@ -19,7 +19,7 @@ enum class ChunkError { MALFORMED, CHUNK_TOO_LARGE, REQUEST_SIZE_LIMIT_EXCEEDED 
 
 template <typename Stream> class ChunkDecoder {
 public:
-  Task<std::expected<size_t, ChunkError>> readSome(ConnectionIO<Stream> &io, std::span<unsigned char> buf,
+  core::Task<std::expected<size_t, ChunkError>> readSome(ConnectionIO<Stream> &io, std::span<unsigned char> buf,
                                                    std::chrono::steady_clock::time_point deadline) {
     if (state_ == State::DONE)
       co_return size_t{0};

@@ -7,8 +7,8 @@
 #include <string>
 
 #include <rukh/Exceptions.hpp>
-#include <rukh/Task.hpp>
 #include <rukh/TypeHelpers.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/DeleteQuery.hpp>
@@ -241,7 +241,7 @@ public:
   }
 
   // Count the number of rows
-  Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<int64_t, db::DatabaseError>> count(db::ITransaction *transaction = nullptr) {
     auto [sql, params] = buildSelectSqlAndSetParams();
     auto countSql = "SELECT COUNT(*) FROM (" + sql + ")";
     auto queryResult = co_await this->dispatch(transaction, countSql, params);
@@ -255,7 +255,7 @@ public:
    * Returns a single object, throws if 0 or multiple rows are returned.
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<Model, db::DatabaseError>> getOne(db::ITransaction *transaction = nullptr) {
     auto [sql, params] = buildSelectSqlAndSetParams(0, 2);
 
     auto queryResult = co_await this->dispatch(transaction, sql, params);
@@ -276,7 +276,7 @@ public:
    * Returns a single object, throws if multiple rows are returned.
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<std::optional<Model>, db::DatabaseError>> getOneOptional(db::ITransaction *transaction) {
+  core::Task<std::expected<std::optional<Model>, db::DatabaseError>> getOneOptional(db::ITransaction *transaction) {
     auto [sql, params] = buildSelectSqlAndSetParams(0, 2);
     auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
@@ -293,7 +293,7 @@ public:
   /*
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<std::vector<Model>, db::DatabaseError>> select(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<std::vector<Model>, db::DatabaseError>> select(db::ITransaction *transaction = nullptr) {
     auto [sql, params] = buildSelectSqlAndSetParams();
     auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)
@@ -305,7 +305,7 @@ public:
   /*
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<std::optional<Model>, db::DatabaseError>> first(db::ITransaction *transaction = nullptr) {
     auto [sql, params] = buildSelectSqlAndSetParams(0, 1);
 
     auto queryResult = co_await this->dispatch(transaction, sql, params);
@@ -321,7 +321,7 @@ public:
   /*
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<bool, db::DatabaseError>> exists(db::ITransaction *transaction = nullptr) {
     auto [sql, params] = buildSelectSqlAndSetParams(0, 1);
 
     auto queryResult = co_await this->dispatch(transaction, sql, params);
@@ -339,7 +339,7 @@ public:
    *
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
-  Task<std::expected<std::pair<Model, bool>, db::DatabaseError>>
+  core::Task<std::expected<std::pair<Model, bool>, db::DatabaseError>>
   getOneOrCreate(const Model &objToCreate, db::ITransaction *transaction = nullptr) {
     if (not this->wherePredicate)
       throw rukh::OrmException("getOneOrCreate(): no where predicate set");
@@ -368,7 +368,7 @@ public:
   }
 
   // Returns unhydrated QueryResult Object
-  Task<std::expected<db::QueryResult, db::DatabaseError>> execute(db::ITransaction *transaction = nullptr) {
+  core::Task<std::expected<db::QueryResult, db::DatabaseError>> execute(db::ITransaction *transaction = nullptr) {
     auto [sql, params] = buildSelectSqlAndSetParams();
     auto queryResult = co_await this->dispatch(transaction, sql, params);
     if (not queryResult)

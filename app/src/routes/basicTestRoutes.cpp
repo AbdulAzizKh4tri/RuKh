@@ -2,6 +2,7 @@
 
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
+#include <rukh/core/Task.hpp>
 
 #include "routes/testRoutes.hpp"
 
@@ -12,7 +13,7 @@ void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &err
 
   // GET /tests/ping
   // Simplest possible liveness check.
-  router.get("/tests/ping", [](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/ping", [](const HttpRequest &) -> core::Task<Response> {
     co_return HttpResponse(200, "text/html; charset=utf-8", "pong");
   });
 
@@ -34,7 +35,7 @@ void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &err
   //   "cookies": { "session_id": "abc123" },
   //   "body":    ""
   // }
-  auto debugRequestHandler = [](HttpRequest &request) -> Task<Response> {
+  auto debugRequestHandler = [](HttpRequest &request) -> core::Task<Response> {
     json cookies = json::object();
     for (const auto &[name, value] : request.getCookies())
       cookies[name] = value;
@@ -62,7 +63,7 @@ void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &err
   // Echoes the raw request body back verbatim and mirrors the Content-Type.
   // Kept because body-echo tests (empty body, near-limit, chunked) need a
   // route that returns the body directly, not wrapped in JSON.
-  router.post("/tests/echo", [](HttpRequest &request) -> Task<Response> {
+  router.post("/tests/echo", [](HttpRequest &request) -> core::Task<Response> {
     auto res = HttpResponse(200, co_await request.consumeBody());
     auto ct = request.getHeader("Content-Type");
     if (not ct.empty())
@@ -72,7 +73,7 @@ void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &err
 
   // PUT /tests/echo
   // Same as POST echo -- useful for testing PUT-specific behaviour (405 etc.).
-  router.put("/tests/echo", [](HttpRequest &request) -> Task<Response> {
+  router.put("/tests/echo", [](HttpRequest &request) -> core::Task<Response> {
     auto res = HttpResponse(200, co_await request.consumeBody());
     auto ct = request.getHeader("Content-Type");
     if (not ct.empty())
@@ -85,5 +86,5 @@ void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &err
   // in HttpConnection::generateResponse() -- should produce a 500 JSON
   // response with Connection: keep-alive (handler exceptions are non-fatal).
   router.get("/tests/error/throw",
-             [](const HttpRequest &) -> Task<Response> { throw std::runtime_error("Deliberate test error"); });
+             [](const HttpRequest &) -> core::Task<Response> { throw std::runtime_error("Deliberate test error"); });
 }

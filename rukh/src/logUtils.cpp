@@ -6,8 +6,9 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-namespace rukh {
+namespace rukh::logging {
 
+/// ANSI escape sequences for logging colors
 struct LogColors {
   static constexpr std::string_view trace = "\033[38;2;120;120;140m";
   static constexpr std::string_view debug = "\033[38;2;88;166;255m";
@@ -36,15 +37,15 @@ std::shared_ptr<spdlog::async_logger> configureLog(bool on, const std::string &f
     auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     consoleSink->set_pattern(std::string(consolePattern));
 
-    // TRACE grey
+    // trace grey
     consoleSink->set_color(spdlog::level::trace, LogColors::trace);
-    // DEBUG blue
+    // debug blue
     consoleSink->set_color(spdlog::level::debug, LogColors::debug);
-    // INFO green
+    // info green
     consoleSink->set_color(spdlog::level::info, LogColors::info);
-    // WARN yellow
+    // warn yellow
     consoleSink->set_color(spdlog::level::warn, LogColors::warn);
-    // ERROR red
+    // error red
     consoleSink->set_color(spdlog::level::err, LogColors::error);
     // CRITICAL stronger red
     consoleSink->set_color(spdlog::level::critical, LogColors::critical);
@@ -94,4 +95,4 @@ void logRequest(const HttpRequest &req, const HttpStreamResponse &res) {
   }
 }
 
-} // namespace rukh
+} // namespace rukh::logging

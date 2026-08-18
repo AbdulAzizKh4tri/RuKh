@@ -35,7 +35,7 @@ int main() {
   std::cout << "How many threads?" << std::endl;
   std::cin >> N;
 
-  configureLog(logging.contains('y'), "server.log", true);
+  logging::configureLog(logging.contains('y'), "server.log", true);
   SPDLOG_DEBUG("C++ standard: {}", __cplusplus);
 
   Router router(getErrorFactory());

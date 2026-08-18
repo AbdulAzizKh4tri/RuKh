@@ -3,6 +3,7 @@
 #include <functional>
 #include <rukh/Exceptions.hpp>
 #include <rukh/ThreadPool.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
@@ -16,8 +17,8 @@ public:
   Sqlite3Transaction(Connection *conn, ThreadPool *threadPool, std::move_only_function<void() noexcept> abandonFn)
       : conn_(conn), threadPool_(threadPool), abandonFn_(std::move(abandonFn)) {}
 
-  Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
-                                                               const std::vector<DbValue> params = {}) override {
+  core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
+                                                                     const std::vector<DbValue> params = {}) override {
     TransactionLockGuard guard{this};
     if (isTransactionEnded())
       throw DatabaseException("Transaction already ended");
@@ -27,7 +28,7 @@ public:
     });
   }
 
-  Task<std::expected<QueryResult, DatabaseError>> begin(const std::string &mode) override {
+  core::Task<std::expected<QueryResult, DatabaseError>> begin(const std::string &mode) override {
     TransactionLockGuard guard{this};
     if (isTransactionEnded())
       throw DatabaseException("Transaction already ended");
@@ -39,7 +40,7 @@ public:
     });
   }
 
-  Task<std::expected<QueryResult, DatabaseError>> commit() override {
+  core::Task<std::expected<QueryResult, DatabaseError>> commit() override {
     TransactionLockGuard guard{this};
     if (isTransactionEnded()) {
       SPDLOG_WARN("Attempted to commit ended Transaction");
@@ -55,7 +56,7 @@ public:
     co_return result;
   }
 
-  Task<std::expected<QueryResult, DatabaseError>> rollback() override {
+  core::Task<std::expected<QueryResult, DatabaseError>> rollback() override {
     TransactionLockGuard guard{this};
     if (isTransactionEnded()) {
       SPDLOG_WARN("Attempted to rollback ended Transaction");

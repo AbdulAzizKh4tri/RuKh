@@ -4,20 +4,20 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/ServerConfig.hpp>
-#include <rukh/Task.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 
-using BodyReadFn = std::move_only_function<Task<size_t>(std::span<unsigned char>, size_t)>;
-using BodyDrainFn = std::move_only_function<Task<void>(size_t)>;
-using StreamFn = std::move_only_function<Task<void>(std::span<unsigned char>)>;
+using BodyReadFn = std::move_only_function<core::Task<size_t>(std::span<unsigned char>, size_t)>;
+using BodyDrainFn = std::move_only_function<core::Task<void>(size_t)>;
+using StreamFn = std::move_only_function<core::Task<void>(std::span<unsigned char>)>;
 
 class BodyStream {
 public:
   BodyStream(size_t contentLength, BodyReadFn readFn, BodyDrainFn drainFn)
       : remaining_(contentLength), readFn_(std::move(readFn)), drainFn_(std::move(drainFn)) {}
 
-  Task<size_t> read(std::span<unsigned char> buf) {
+  core::Task<size_t> read(std::span<unsigned char> buf) {
     if (exhausted_)
       co_return 0;
     size_t n = co_await readFn_(buf, remaining_);
@@ -27,7 +27,7 @@ public:
     co_return n;
   }
 
-  Task<std::string> readAll(std::string &data, size_t limit = ServerConfig::MAX_CONTENT_LENGTH) {
+  core::Task<std::string> readAll(std::string &data, size_t limit = ServerConfig::MAX_CONTENT_LENGTH) {
     if (exhausted_)
       co_return "";
 
@@ -53,7 +53,7 @@ public:
     co_return data;
   }
 
-  Task<void> streamUsing(StreamFn fn) {
+  core::Task<void> streamUsing(StreamFn fn) {
     unsigned char buf[4096];
     auto span = std::span<unsigned char>(buf, sizeof(buf));
     for (;;) {
@@ -64,7 +64,7 @@ public:
     }
   }
 
-  Task<void> drain() {
+  core::Task<void> drain() {
     if (exhausted_)
       co_return;
     co_await drainFn_(remaining_);

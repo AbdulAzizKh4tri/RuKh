@@ -5,6 +5,7 @@
 
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpTypes.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 struct CacheControlConfig {
@@ -18,7 +19,7 @@ public:
   CacheControlMiddleware();
   CacheControlMiddleware(CacheControlConfig config);
 
-  Task<Response> operator()(const HttpRequest &request, Next next);
+  core::Task<Response> operator()(const HttpRequest &request, Next next);
 
   void setMimeCacheControl(const std::string &mimeType, const std::string &cacheControlHeader);
   void setRouteCacheControl(const std::string &routePattern, const std::string &cacheControlHeader);

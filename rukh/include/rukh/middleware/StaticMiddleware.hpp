@@ -7,6 +7,7 @@
 #include <rukh/ErrorFactory.hpp>
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpTypes.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 
@@ -22,7 +23,7 @@ public:
   StaticMiddleware(ErrorFactory &errorFactory, StaticConfig);
   StaticMiddleware(ErrorFactory &errorFactory, const std::string &root, const std::string &prefix);
 
-  Task<Response> operator()(const HttpRequest &request, Next next);
+  core::Task<Response> operator()(const HttpRequest &request, Next next);
 
   HttpResponse buildErrorResponse(const HttpRequest &request, const int statusCode,
                                   const std::string &message = "") const;

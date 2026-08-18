@@ -36,12 +36,12 @@ public:
     return AsyncFileWriter(fd);
   }
 
-  Task<bool> writeAll(std::string_view data) {
+  core::Task<bool> writeAll(std::string_view data) {
     int n = co_await FileWriteAwaitable{.fd = fd_, .buf = data.data(), .len = data.size()};
     co_return n == static_cast<int>(data.size());
   }
 
-  Task<bool> writeChunk(std::string_view data) {
+  core::Task<bool> writeChunk(std::string_view data) {
     int n = co_await FileWriteAwaitable{.fd = fd_, .buf = data.data(), .len = data.size(), .offset = offset_};
     if (n < 0)
       co_return false;

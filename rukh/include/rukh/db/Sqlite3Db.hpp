@@ -8,6 +8,7 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/ThreadPool.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
@@ -52,7 +53,7 @@ public:
     releaseConnection(conn);
   }
 
-  Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
+  core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
                                                                const std::vector<DbValue> &params = {}) override {
     Connection *conn = acquireConnection();
     ConnectionReleaseGuard connectionGuard{conn, &connectionQueue_};

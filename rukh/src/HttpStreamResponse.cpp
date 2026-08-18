@@ -4,7 +4,7 @@
 
 #include <rukh/HttpResponse.hpp>
 #include <rukh/ServerConfig.hpp>
-#include <rukh/Task.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/core/utils.hpp>
 
 namespace rukh {
@@ -26,7 +26,7 @@ HttpStreamResponse::HttpStreamResponse(int statusCode, const std::string &conten
   headers.setHeaderLower("content-type", contentType);
 }
 
-Task<std::optional<std::string>> HttpStreamResponse::getNextChunk() { co_return co_await nextChunkFn_(); }
+core::Task<std::optional<std::string>> HttpStreamResponse::getNextChunk() { co_return co_await nextChunkFn_(); }
 
 bool HttpStreamResponse::serializeHeaderInto(std::vector<unsigned char> &buf) const {
   const std::string_view statusLine = HttpResponse::getStatusLine(statusCode_);

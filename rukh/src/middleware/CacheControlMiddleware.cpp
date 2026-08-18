@@ -5,7 +5,7 @@ namespace rukh {
 CacheControlMiddleware::CacheControlMiddleware() {}
 CacheControlMiddleware::CacheControlMiddleware(CacheControlConfig config) : config_(config) {}
 
-Task<Response> CacheControlMiddleware::operator()(const HttpRequest &request, Next next) {
+core::Task<Response> CacheControlMiddleware::operator()(const HttpRequest &request, Next next) {
   Response response = co_await next();
 
   std::visit(

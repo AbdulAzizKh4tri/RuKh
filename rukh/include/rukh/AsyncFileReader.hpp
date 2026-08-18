@@ -48,7 +48,7 @@ public:
     return AsyncFileReader(fd, fileSize);
   }
 
-  Task<std::string> readAll() {
+  core::Task<std::string> readAll() {
     std::string buf(fileSize_, '\0');
     int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = fileSize_, .offset = offset_};
     if (n < 0)
@@ -57,7 +57,7 @@ public:
     co_return buf;
   }
 
-  Task<std::optional<std::string>> readChunk(size_t size) {
+  core::Task<std::optional<std::string>> readChunk(size_t size) {
     std::string buf(size, '\0');
     int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = size, .offset = offset_};
     if (n < 0)

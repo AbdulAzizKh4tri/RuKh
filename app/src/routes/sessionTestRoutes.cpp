@@ -2,6 +2,7 @@
 
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
+#include <rukh/core/Task.hpp>
 
 #include "routes/testRoutes.hpp"
 
@@ -13,7 +14,7 @@ void registerSessionTestRoutes(rukh::Router &router, const rukh::ErrorFactory &e
   // -- Session routes ----------------------------------------------------------
 
   // GET /tests/session/set?key=foo&value=bar
-  router.get("/tests/session/set", [](HttpRequest &request) -> Task<Response> {
+  router.get("/tests/session/set", [](HttpRequest &request) -> core::Task<Response> {
     std::string key = request.getQueryParam("key");
     if (key.empty())
       key = "test";
@@ -29,7 +30,7 @@ void registerSessionTestRoutes(rukh::Router &router, const rukh::ErrorFactory &e
   });
 
   // GET /tests/session/get?key=foo
-  router.get("/tests/session/get", [](HttpRequest &request) -> Task<Response> {
+  router.get("/tests/session/get", [](HttpRequest &request) -> core::Task<Response> {
     std::string key = request.getQueryParam("key");
     if (key.empty())
       key = "test";
@@ -52,7 +53,7 @@ void registerSessionTestRoutes(rukh::Router &router, const rukh::ErrorFactory &e
   });
 
   // GET /tests/session/all
-  router.get("/tests/session/all", [](HttpRequest &request) -> Task<Response> {
+  router.get("/tests/session/all", [](HttpRequest &request) -> core::Task<Response> {
     auto session = co_await request.getSession();
     json body = json::object();
     for (const auto &[k, v] : session->getAll()) {
@@ -63,7 +64,7 @@ void registerSessionTestRoutes(rukh::Router &router, const rukh::ErrorFactory &e
   });
 
   // GET /tests/session/delete?key=foo
-  router.get("/tests/session/delete", [](HttpRequest &request) -> Task<Response> {
+  router.get("/tests/session/delete", [](HttpRequest &request) -> core::Task<Response> {
     std::string key = request.getQueryParam("key");
     if (key.empty())
       key = "test";
@@ -77,7 +78,7 @@ void registerSessionTestRoutes(rukh::Router &router, const rukh::ErrorFactory &e
   });
 
   // GET /tests/session/invalidate
-  router.get("/tests/session/invalidate", [](HttpRequest &request) -> Task<Response> {
+  router.get("/tests/session/invalidate", [](HttpRequest &request) -> core::Task<Response> {
     auto session = co_await request.getSession();
     session->invalidate();
 

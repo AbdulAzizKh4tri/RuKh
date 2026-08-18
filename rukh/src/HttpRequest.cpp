@@ -34,13 +34,13 @@ bool HttpRequest::parseRequestHeader(std::string_view headerView) {
   return true;
 }
 
-Task<nlohmann::json> HttpRequest::jsonBody() {
+core::Task<nlohmann::json> HttpRequest::jsonBody() {
   if (not toLowerCase(getContentType()).starts_with("application/json"))
     co_return {};
   co_return nlohmann::json::parse(co_await consumeBody());
 }
 
-Task<std::unordered_map<std::string, std::vector<std::string>>> HttpRequest::getFormData() {
+core::Task<std::unordered_map<std::string, std::vector<std::string>>> HttpRequest::getFormData() {
   if (not toLowerCase(getContentType()).starts_with("application/x-www-form-urlencoded"))
     co_return {};
   std::unordered_map<std::string, std::vector<std::string>> formData;
@@ -151,7 +151,7 @@ std::optional<std::string> HttpRequest::getCookie(const std::string &name) const
   return std::nullopt;
 }
 
-Task<Session *> HttpRequest::getSession() {
+core::Task<Session *> HttpRequest::getSession() {
   if (not sessionHandle_)
     co_return nullptr;
   co_return co_await sessionHandle_->get();
@@ -281,7 +281,7 @@ void HttpRequest::setPathParams(const std::vector<std::pair<std::string, std::st
 
 std::vector<std::pair<std::string, std::string>> HttpRequest::getAllPathParams() const { return pathParams_; }
 
-Task<std::string> HttpRequest::consumeBody() {
+core::Task<std::string> HttpRequest::consumeBody() {
   if (bodyStream_->isExhausted())
     throw HandlerException("Body stream is exhausted (Do not call fullBody() twice)", 500, true);
   std::string body;

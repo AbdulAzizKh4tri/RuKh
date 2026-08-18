@@ -1,3 +1,8 @@
+/**
+ * @file Task.hpp
+ * @brief A coroutine task that can be co_awaited.
+ */
+
 #pragma once
 
 #include <coroutine>
@@ -7,32 +12,52 @@
 
 #include <rukh/core/ExecutorContext.hpp>
 
-namespace rukh {
+namespace rukh::core {
 
+/**
+ * @brief A coroutine task that can be co_awaited.
+ * @tparam T  The type produced by the coroutine.
+ * @details
+ * @c Task is the primary coroutine type used throughout the rukh runtime.
+ * Typical usage:
+ * @code
+ * Task<int> compute() {
+ *     co_return 42;
+ * }
+ *
+ * Task<void> caller() {
+ *     int result = co_await compute();
+ *     // ...
+ * }
+ * @endcode
+ * @note coroutines (aka functions that @c co_return @c Task<>) do not run until co_awaited.
+ *
+ * @see Task<void>
+ */
 template <typename T> class Task {
 public:
   struct FinalAwaiter;
 
-  // promise_type is required by std::coroutine_traits<> for all Types that are returned by a coroutine.
-  // Basically, "I'm a coroutine, and here's what to do at each step when running me."
+  /// promise_type is required by std::coroutine_traits<> for all Types that are returned by a coroutine.
+  /// Basically, "I'm a coroutine, and here's what to do at each step when running me."
   struct promise_type {
     std::optional<T> value;
     std::coroutine_handle<> continuation;
     std::exception_ptr ex;
 
-    // returning Task with the coroutine handle built with *this promise_type object.
+    /// returning Task with the coroutine handle built with *this promise_type object.
     Task get_return_object() { return Task{Handle::from_promise(*this)}; }
 
-    // Always pause the coroutine before running the first line, i.e, run only when co_awaited.
+    /// Always pause the coroutine before running the first line, i.e, run only when co_awaited.
     std::suspend_always initial_suspend() { return {}; }
 
-    // What to do after the final line of the coroutine (or at a co_return).
+    /// What to do after the final line of the coroutine (or at a co_return).
     FinalAwaiter final_suspend() noexcept { return {}; }
 
-    // What to do with co_return val. (store it in the promise_type, we handle this later).
+    /// What to do with co_return val. (store it in the promise_type, we handle this later).
     void return_value(T val) { value = std::move(val); }
 
-    // same but for exceptions
+    /// same but for exceptions
     void unhandled_exception() { ex = std::current_exception(); }
   };
 
@@ -40,11 +65,11 @@ public:
 
   struct FinalAwaiter {
 
-    // always false aka run await_suspend(). It handles what to do after this coroutine is finished.
+    /// @breif always false aka run await_suspend(). It handles what to do after this coroutine is finished.
     bool await_ready() noexcept { return false; }
 
-    // If there's a continuation, resume it. Otherwise notify the Executor that we're done, and it's safe to destroy
-    // this coroutine.
+    /// @brief If there's a continuation, resume it. Otherwise notify the Executor that we're done, and it's safe to
+    /// destroy this coroutine.
     std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
       if (handle.promise().continuation)
         return handle.promise().continuation;
@@ -52,9 +77,9 @@ public:
       return std::noop_coroutine();
     }
 
-    // Has to exist to satisfy the Awaitable interface. Never actually reached.
-    // await_suspend always transfers away (to continuation or noop_coroutine),
-    // so control never returns here.
+    /// @brief Has to exist to satisfy the Awaitable interface. Never actually reached.
+    /// await_suspend always transfers away (to continuation or noop_coroutine),
+    /// so control never returns here.
     void await_resume() noexcept { std::unreachable(); }
   };
 
@@ -77,34 +102,35 @@ public:
   Task(const Task &) = delete;
   Task &operator=(const Task &) = delete;
 
-  // Scope/Lifetime of coroutine types should not be thought of like normal objects.
+  /// Scope/Lifetime of coroutine types should not be thought of like normal objects.
   ~Task() {
     if (handle_)
       handle_.destroy(); // This is where the coroutine finally dies.
   }
 
-  // The 3 methods below allow the Task<> itself to be co_await-ed.
+  // The 3 methods below allow the core::Task<> itself to be co_await-ed.
 
-  // Always false, a freshly-returned Task is always parked at initial_suspend,
-  // so the awaiter never has a synchronously-ready value to skip straight to.
+  /// @brief Always false, a freshly-returned Task is always parked at initial_suspend,
+  /// so the awaiter never has a synchronously-ready value to skip straight to.
   bool await_ready() { return false; }
 
-  // Store the caller so FinalAwaiter can resume it later, then symmetric-transfer into this coroutine's
-  // handle.(Returning a coroutine_handle from await_suspend = tail-resume it directly, instead of unwinding back to
+  // (Returning a coroutine_handle from await_suspend = tail-resume it directly, instead of unwinding back to
   // whoever called .resume() on the caller, which in our case is the Executor::spawn().)
+  /// @brief Store the caller so FinalAwaiter can resume it later, then symmetric-transfer into this coroutine's
+  /// handle.
   std::coroutine_handle<> await_suspend(std::coroutine_handle<> caller) {
     handle_.promise().continuation = caller;
     return handle_;
   }
 
-  // return the value stored in the promise_type (or throw the exception to the caller).
+  /// return the value stored in the promise_type (or throw the exception to the caller).
   T await_resume() {
     if (handle_.promise().ex)
       std::rethrow_exception(handle_.promise().ex);
     return std::move(*handle_.promise().value);
   }
 
-  // helpers for the Executor
+  /// helpers for the Executor
   bool done() const { return handle_.done(); }
 
   bool resume() {
@@ -120,7 +146,10 @@ private:
   Handle handle_;
 };
 
-// Same stuff as above but specialised for void with no return value in the promise_type
+/**
+ * @brief Specialisation of Task for coroutines that return void.
+ * @see Task
+ */
 template <> class Task<void> {
 public:
   struct FinalAwaiter;
@@ -201,4 +230,5 @@ public:
 private:
   Handle handle_;
 };
-} // namespace rukh
+
+} // namespace rukh::core

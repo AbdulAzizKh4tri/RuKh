@@ -59,7 +59,7 @@ void addCacheHeaders(Res &response, const std::string &etag,
   response.headers.setHeaderLower("last-modified", toHttpDate(lastWrite));
 }
 
-Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Next next) {
+core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Next next) {
 
   const std::string &method = request.getMethod();
 
@@ -340,7 +340,7 @@ Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Next nex
         response.headers.setHeaderLower("content-type", "multipart/byteranges; boundary=" + boundaryCore);
         auto nextBlock = [file = std::move(file), ranges = std::move(ranges), boundaryDelimiter, boundaryCore, fileSize,
                           start = static_cast<size_t>(1), end = static_cast<size_t>(0), idx = static_cast<int>(-1),
-                          mime, sentClosingBoundary = false]() mutable -> Task<std::optional<std::string>> {
+                          mime, sentClosingBoundary = false]() mutable -> core::Task<std::optional<std::string>> {
           std::string contentType = "content-type: " + mime + "\r\n";
           std::string body;
           body.reserve(ServerConfig::STATIC_STREAM_CHUNK_SIZE);
@@ -390,7 +390,7 @@ Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Next nex
         auto end = *ranges[0].second;
         response.headers.setHeaderLower("content-type", mime);
         response.headers.setContentRange(start, end, fileSize);
-        auto nextBlock = [file = std::move(file), start, end]() mutable -> Task<std::optional<std::string>> {
+        auto nextBlock = [file = std::move(file), start, end]() mutable -> core::Task<std::optional<std::string>> {
           if (start > end)
             co_return std::nullopt;
 
@@ -431,7 +431,7 @@ Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Next nex
       co_return response;
     }
 
-    HttpStreamResponse response(200, [file = std::move(file)]() mutable -> Task<std::optional<std::string>> {
+    HttpStreamResponse response(200, [file = std::move(file)]() mutable -> core::Task<std::optional<std::string>> {
       co_return co_await file.readChunk(ServerConfig::STATIC_STREAM_CHUNK_SIZE);
     });
     response.setChunked(false);

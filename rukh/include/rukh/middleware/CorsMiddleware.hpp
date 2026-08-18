@@ -5,6 +5,7 @@
 
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpTypes.hpp>
+#include <rukh/core/Task.hpp>
 
 namespace rukh {
 
@@ -20,7 +21,7 @@ public:
   CorsMiddleware();
   CorsMiddleware(CorsConfig corsConfig);
 
-  Task<Response> operator()(const HttpRequest &request, Next next);
+  core::Task<Response> operator()(const HttpRequest &request, Next next);
 
   void setCorsOrigins(const std::vector<std::string> &origins);
 

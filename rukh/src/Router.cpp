@@ -24,7 +24,7 @@ void Router::delete_(std::string path, Handler handler) { addRoute(path, "DELETE
 
 void Router::use(Middleware middleware) { middlewares_.push_back(std::move(middleware)); }
 
-Task<Response> Router::dispatch(HttpRequest &request) {
+core::Task<Response> Router::dispatch(HttpRequest &request) {
 
   auto method = request.getMethod();
 
@@ -48,7 +48,7 @@ Task<Response> Router::dispatch(HttpRequest &request) {
   if (pathNode)
     request.setAttribute("allowedMethods", pathNode->allowedMethods);
 
-  Handler terminal = [this, &pathNode](HttpRequest &req) -> Task<Response> {
+  Handler terminal = [this, &pathNode](HttpRequest &req) -> core::Task<Response> {
     if (pathNode == nullptr) {
       auto response = errorFactory_.build(req, 404);
       if (req.getMethod() == "HEAD")
@@ -123,7 +123,7 @@ std::string Router::getAllowedMethodsString(RouteNode *pathNode) {
   return pathNode->allowedMethods;
 }
 
-Task<Response> Router::runChain(HttpRequest &request, Handler &handler, size_t startIndex) {
+core::Task<Response> Router::runChain(HttpRequest &request, Handler &handler, size_t startIndex) {
   if (startIndex >= middlewares_.size()) {
     co_return co_await handler(request);
   }

@@ -8,7 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <rukh/Task.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/ITransaction.hpp>
 
@@ -16,11 +16,11 @@ namespace rukh::db {
 
 class IDatabase {
 public:
-  virtual Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &query,
+  virtual core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &query,
                                                                        const std::vector<DbValue> &params = {}) = 0;
 
   template <typename... Args>
-  Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql, Args &&...args) {
+  core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql, Args &&...args) {
     return executeQuery(sql, std::vector<DbValue>{std::forward<Args>(args)...});
   }
 

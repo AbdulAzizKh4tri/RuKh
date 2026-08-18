@@ -5,7 +5,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
-#include <rukh/Task.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <spdlog/spdlog.h>
 
@@ -23,7 +23,7 @@ class TestRunner {
 public:
   // Runs one named step. Step failures (thrown exceptions) are caught here so one
   // failing step never aborts the rest of the suite.
-  template <typename Fn> rukh::Task<void> run(std::string name, Fn &&step) {
+  template <typename Fn> rukh::core::Task<void> run(std::string name, Fn &&step) {
     SPDLOG_INFO(name);
     try {
       co_await step();

@@ -7,8 +7,8 @@
 #include <string>
 #include <unordered_map>
 
-#include <rukh/Task.hpp>
 #include <rukh/core/BodyStream.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/middleware/Session.hpp>
 
 namespace rukh {
@@ -34,9 +34,9 @@ public:
 
   bool parseRequestHeader(std::string_view headerView);
 
-  Task<nlohmann::json> jsonBody();
+  core::Task<nlohmann::json> jsonBody();
 
-  Task<std::unordered_map<std::string, std::vector<std::string>>> getFormData();
+  core::Task<std::unordered_map<std::string, std::vector<std::string>>> getFormData();
 
   std::vector<Range> getRanges() const;
 
@@ -44,7 +44,7 @@ public:
 
   std::optional<std::string> getCookie(const std::string &name) const;
 
-  Task<Session *> getSession();
+  core::Task<Session *> getSession();
 
   std::expected<size_t, ContentLengthError> getContentLength();
 
@@ -86,7 +86,7 @@ public:
 
   std::vector<std::pair<std::string, std::string>> getAllPathParams() const;
 
-  Task<std::string> consumeBody();
+  core::Task<std::string> consumeBody();
   BodyStream *bodyStream();
   void attachBodyStream(std::unique_ptr<BodyStream> bodyStream);
 

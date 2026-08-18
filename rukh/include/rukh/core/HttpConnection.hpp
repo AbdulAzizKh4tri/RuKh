@@ -22,6 +22,7 @@
 #include <rukh/core/ConnectionIO.hpp>
 #include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/StreamResults.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/core/utils.hpp>
 #include <rukh/logUtils.hpp>
 
@@ -37,7 +38,7 @@ public:
     request_.setPort(io_.getPort());
   }
 
-  Task<void> run() {
+  core::Task<void> run() {
     // This is intentionally one flat coroutine rather than a chain of sub-coroutines
     // (readHeaders(), readBody(), etc.). Keeping everything in one coroutine means
     // one frame allocation for the entire lifetime of the connection (atleast on the happy path).
@@ -209,7 +210,8 @@ public:
             co_return;
           }
 
-          BodyReadFn chunkReadFn = [this](std::span<unsigned char> buf, size_t /*unused*/) mutable -> Task<size_t> {
+          BodyReadFn chunkReadFn = [this](std::span<unsigned char> buf,
+                                          size_t /*unused*/) mutable -> core::Task<size_t> {
             auto result = co_await chunkDecoder_.readSome(io_, buf, activeDeadline());
             if (!result) {
               switch (result.error()) {
@@ -230,7 +232,7 @@ public:
             co_return *result;
           };
 
-          BodyDrainFn chunkDrainFn = [this](size_t /*unused*/) mutable -> Task<void> {
+          BodyDrainFn chunkDrainFn = [this](size_t /*unused*/) mutable -> core::Task<void> {
             std::array<unsigned char, 4096> scratch;
             std::span<unsigned char> buf{scratch};
             while (true) {
@@ -270,7 +272,7 @@ public:
             co_return;
           }
 
-          BodyReadFn readFn = [this](std::span<unsigned char> buf, size_t remaining) mutable -> Task<size_t> {
+          BodyReadFn readFn = [this](std::span<unsigned char> buf, size_t remaining) mutable -> core::Task<size_t> {
             if (io_.getReadBufferSize() >= buf.size()) {
               std::memcpy(buf.data(), io_.readBufferData(), buf.size());
               io_.eraseFromReadBuffer(buf.size());
@@ -300,7 +302,7 @@ public:
             co_return n;
           };
 
-          BodyDrainFn drainFn = [this](size_t remaining) mutable -> Task<void> {
+          BodyDrainFn drainFn = [this](size_t remaining) mutable -> core::Task<void> {
             while (io_.getReadBufferSize() < remaining) {
               size_t oldSize = io_.getReadBufferSize();
               ReadResult readResult = co_await io_.read(activeDeadline());
@@ -321,9 +323,9 @@ public:
         } else {
 
           BodyReadFn readFn = [this](std::span<unsigned char> /* unused */,
-                                     size_t /* unused */) mutable -> Task<size_t> { co_return 0; };
+                                     size_t /* unused */) mutable -> core::Task<size_t> { co_return 0; };
 
-          BodyDrainFn drainFn = [this](size_t /* unused */) mutable -> Task<void> { co_return; };
+          BodyDrainFn drainFn = [this](size_t /* unused */) mutable -> core::Task<void> { co_return; };
           request_.attachBodyStream(std::make_unique<BodyStream>(0, std::move(readFn), std::move(drainFn)));
         }
       }
@@ -375,7 +377,7 @@ public:
         if (not res->serializeInto(io_.getWriteBuffer()))
           co_return;
 
-        logRequest(request_, *res);
+        logging::logRequest(request_, *res);
         while (io_.hasPendingWrites()) {
           if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
             co_return;
@@ -439,7 +441,7 @@ public:
               io_.resetConnection();
               co_return;
             }
-            logRequest(request_, *responseStream);
+            logging::logRequest(request_, *responseStream);
             while (io_.hasPendingWrites()) {
               if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
                 co_return;
@@ -503,7 +505,7 @@ private:
 
   bool shouldKeepAlive() const { return not icontains(request_.getHeaderLower("connection"), "close"); }
 
-  Task<void> sendErrorResponseAndClose(int statusCode, const std::string &message = "") {
+  core::Task<void> sendErrorResponseAndClose(int statusCode, const std::string &message = "") {
     HttpResponse response = buildErrorResponse(statusCode, message);
     keepAlive_ = false;
     response.headers.setHeaderLower("connection", "close");
@@ -514,7 +516,7 @@ private:
 
     if (not response.serializeInto(io_.getWriteBuffer()))
       co_return;
-    logRequest(request_, response);
+    logging::logRequest(request_, response);
     do {
       if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != WriteResult::OK)
         co_return;

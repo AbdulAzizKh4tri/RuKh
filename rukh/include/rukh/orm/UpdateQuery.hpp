@@ -4,7 +4,7 @@
 #include <spdlog/spdlog.h>
 
 #include <rukh/Exceptions.hpp>
-#include <rukh/Task.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
@@ -20,7 +20,7 @@ namespace rukh::orm {
 
 template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryDispatcher {
 public:
-  Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
+  core::Task<std::expected<std::pair<size_t, std::vector<Model>>, db::DatabaseError>>
   execute(const Model &obj, db::ITransaction *transaction = nullptr, bool returning = false) {
 
     buildUpdateSqlAndSetParams(obj, returning);

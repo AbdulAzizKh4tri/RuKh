@@ -2,6 +2,7 @@
 
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
+#include <rukh/core/Task.hpp>
 
 #include "routes/testRoutes.hpp"
 
@@ -13,7 +14,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
   // All live under /tests/pool/*
 
   // WARNING: BLOCKS THE ENTIRE THREAD FOR 5 SECONDS!
-  router.get("/tests/slow", [](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/slow", [](const HttpRequest &) -> core::Task<Response> {
     // simulate slow work -- busy wait for 5 seconds
     auto end = now() + std::chrono::seconds(5);
     while (now() < end) {
@@ -21,7 +22,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
     co_return HttpResponse(200, "slow response");
   });
 
-  router.get("/tests/slowpool", [threadPool](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/slowpool", [threadPool](const HttpRequest &) -> core::Task<Response> {
     co_await threadPool->submit([]() {
       auto end = now() + std::chrono::seconds(5);
       while (now() < end) {
@@ -35,7 +36,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
   // Submits a task that returns a value, awaits it immediately.
   // Verifies: submit, return value propagation, basic await.
   // Response: { "result": 42 }
-  router.get("/tests/pool/basic", [threadPool](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/pool/basic", [threadPool](const HttpRequest &) -> core::Task<Response> {
     int result = co_await threadPool->submit([]() { return 42; });
     auto res = HttpResponse(200, json{{"result", result}}.dump());
     res.headers.setHeaderLower("content-type", "application/json");
@@ -45,7 +46,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
   // GET /tests/pool/exception
   // Submits a task that throws. Verifies exception propagates correctly
   // to the handler, gets caught by HttpConnection, returns 500.
-  router.get("/tests/pool/exception", [threadPool](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/pool/exception", [threadPool](const HttpRequest &) -> core::Task<Response> {
     int result = co_await threadPool->submit([]() -> int {
       throw std::runtime_error("pool task exploded");
       return 0;
@@ -59,7 +60,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
   // continued past submit before awaiting), then awaits the result.
   // Verifies: deferred await, return value used in response.
   // Response: { "result": 99, "note": "task was submitted before this line ran" }
-  router.get("/tests/pool/deferred", [threadPool](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/pool/deferred", [threadPool](const HttpRequest &) -> core::Task<Response> {
     auto handle = threadPool->submit([]() {
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
       SPDLOG_INFO("TASK DONE");
@@ -84,7 +85,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
   // Total wall time should be ~500ms regardless of n (up to pool size).
   // Verifies: actual parallelism.
   // Response: { "results": [0, 1, 2], "note": "should take ~500ms not ~1500ms" }
-  router.get("/tests/pool/concurrent", [threadPool](const HttpRequest &request) -> Task<Response> {
+  router.get("/tests/pool/concurrent", [threadPool](const HttpRequest &request) -> core::Task<Response> {
     int n = 3;
     auto start = now();
     auto nParam = request.getQueryParam("n");
@@ -119,7 +120,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
   // Task logs a message server-side after 200ms.
   // Verifies: fire and forget doesn't crash, response returns immediately.
   // Response: { "note": "task is running in background, check server logs" }
-  router.get("/tests/pool/forget", [threadPool](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/pool/forget", [threadPool](const HttpRequest &) -> core::Task<Response> {
     threadPool->fireAndForget([]() noexcept {
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
       SPDLOG_INFO("fireAndForget task completed");
@@ -133,7 +134,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
   // GET /tests/pool/unawaited
   // Constructs a PoolAwaitable via submit() but never co_awaits it.
   // Response: 200 immediately.
-  router.get("/tests/pool/unawaited", [threadPool](const HttpRequest &) -> Task<Response> {
+  router.get("/tests/pool/unawaited", [threadPool](const HttpRequest &) -> core::Task<Response> {
     {
       auto handle = threadPool->submit([]() {
         SPDLOG_INFO("Submitted task running, there should be a warning for not awaiting it");

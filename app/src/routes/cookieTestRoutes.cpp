@@ -2,6 +2,7 @@
 
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
+#include <rukh/core/Task.hpp>
 
 #include "routes/testRoutes.hpp"
 
@@ -27,7 +28,7 @@ void registerCookieTestRoutes(rukh::Router &router, const rukh::ErrorFactory &er
   //
   // Also responds with a JSON body describing the cookie that was set, so
   // tests can assert both the Set-Cookie response header and the attributes.
-  router.get("/tests/cookies/set", [](const HttpRequest &request) -> Task<Response> {
+  router.get("/tests/cookies/set", [](const HttpRequest &request) -> core::Task<Response> {
     std::string name = request.getQueryParam("name");
     std::string value = request.getQueryParam("value");
     if (name.empty())
@@ -78,7 +79,7 @@ void registerCookieTestRoutes(rukh::Router &router, const rukh::ErrorFactory &er
   // request, then send it back here to confirm the round-trip.
   //
   // Response: { "<name>": "<value>", ... }
-  router.get("/tests/cookies/read", [](const HttpRequest &request) -> Task<Response> {
+  router.get("/tests/cookies/read", [](const HttpRequest &request) -> core::Task<Response> {
     json j = json::object();
     for (const auto &[name, value] : request.getCookies()) {
       j[name] = value;
@@ -94,7 +95,7 @@ void registerCookieTestRoutes(rukh::Router &router, const rukh::ErrorFactory &er
   // Query param: name=<str> (default: "test")
   //
   // Response: { "removed": "<name>" }
-  router.get("/tests/cookies/delete", [](const HttpRequest &request) -> Task<Response> {
+  router.get("/tests/cookies/delete", [](const HttpRequest &request) -> core::Task<Response> {
     std::string name = request.getQueryParam("name");
     if (name.empty())
       name = "test";

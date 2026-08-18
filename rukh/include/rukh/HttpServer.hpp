@@ -9,7 +9,12 @@
 #include <rukh/ErrorFactory.hpp>
 #include <rukh/Router.hpp>
 #include <rukh/core/ListenerSocket.hpp>
+#include <rukh/core/Task.hpp>
 
+/**
+ * @namespace rukh
+ * @brief Main library namespace.
+ */
 namespace rukh {
 
 struct ListenerConfig {
@@ -51,10 +56,10 @@ private:
 
   void workerMain();
 
-  Task<void> tcpAcceptLoop(ListenerSocket &listener);
+  core::Task<void> tcpAcceptLoop(ListenerSocket &listener);
 
-  Task<void> tlsAcceptLoop(ListenerSocket &listener);
+  core::Task<void> tlsAcceptLoop(ListenerSocket &listener);
 
-  template <typename Stream> Task<void> handleConnection(std::unique_ptr<Stream> stream);
+  template <typename Stream> core::Task<void> handleConnection(std::unique_ptr<Stream> stream);
 };
 } // namespace rukh

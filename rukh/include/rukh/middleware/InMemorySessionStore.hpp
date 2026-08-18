@@ -1,10 +1,12 @@
 #pragma once
 
 #include <chrono>
+#include <mutex>
 #include <openssl/rand.h>
 #include <optional>
 #include <shared_mutex>
 
+#include <rukh/core/Task.hpp>
 #include <rukh/middleware/ISessionStore.hpp>
 
 namespace rukh {
@@ -18,7 +20,7 @@ class InMemorySessionStore : public ISessionStore {
 public:
   InMemorySessionStore(std::chrono::seconds ttl) : ttl_(ttl) {}
 
-  Task<std::optional<Session>> load(const std::string &id) override {
+  core::Task<std::optional<Session>> load(const std::string &id) override {
     {
       std::shared_lock readLock(mutex_);
       auto entryIt = sessions_.find(id);
@@ -42,7 +44,7 @@ public:
     co_return std::nullopt;
   };
 
-  Task<void> save(const std::string &id, const Session &session) override {
+  core::Task<void> save(const std::string &id, const Session &session) override {
     std::unique_lock writeLock(mutex_);
 
     struct timespec ts;
@@ -51,7 +53,7 @@ public:
     co_return;
   };
 
-  Task<void> destroy(const std::string &id) override {
+  core::Task<void> destroy(const std::string &id) override {
     std::unique_lock writeLock(mutex_);
     sessions_.erase(id);
     co_return;
