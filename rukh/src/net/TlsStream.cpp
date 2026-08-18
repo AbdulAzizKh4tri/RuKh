@@ -9,7 +9,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include <rukh/core/utils.hpp>
+#include <rukh/net/utils.hpp>
 
 namespace rukh::net {
 

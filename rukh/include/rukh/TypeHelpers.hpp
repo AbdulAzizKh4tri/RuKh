@@ -124,4 +124,15 @@ template <typename T, typename TupleType>
 inline constexpr std::size_t get_index_of_v = get_index_of<T, TupleType>::value;
 
 //=============
+
+/**
+ * @brief Helper for std::visit.
+ * See [cppreference documentation for std::visit](https://en.cppreference.com/w/cpp/utility/variant/visit).
+ */
+template <class... Ts> struct overloads : Ts... {
+  using Ts::operator()...;
+};
+
+//=============
+
 } // namespace rukh

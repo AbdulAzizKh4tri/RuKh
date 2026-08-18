@@ -1,7 +1,9 @@
 #include <rukh/middleware/CorsMiddleware.hpp>
 
 #include <rukh/HttpResponse.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/core/utils.hpp>
+
 namespace rukh {
 
 CorsMiddleware::CorsMiddleware() {}
@@ -36,7 +38,7 @@ core::Task<Response> CorsMiddleware::operator()(const HttpRequest &request, Next
 
   Response response = co_await next();
 
-  std::visit(overloaded{[&origin, this](auto &res) {
+  std::visit(overloads{[&origin, this](auto &res) {
                if (not origin.empty()) {
                  if (isOriginAllowed(origin))
                    res.headers.setHeaderLower("access-control-allow-origin", origin);

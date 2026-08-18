@@ -1,49 +1,52 @@
+/**
+ * @file utils.hpp
+ * @brief Miscellaneous utility	functions
+ */
+
 #pragma once
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <chrono>
 #include <ctime>
-#include <netinet/in.h>
 #include <nlohmann/json.hpp>
 #include <ranges>
-#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <sys/socket.h>
 #include <vector>
 
 namespace rukh {
 
-static constexpr std::array<unsigned char, 4> crlf2 = {'\r', '\n', '\r', '\n'};
-static constexpr std::array<unsigned char, 2> crlf = {'\r', '\n'};
-
-struct PeerAddress {
-  std::string ip;
-  uint16_t port;
-};
-
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-
-inline PeerAddress resolvePeerAddress(sockaddr_storage addr, socklen_t len) {
-  PeerAddress result;
-  if (addr.ss_family == AF_INET) {
-    char ipstr[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &((sockaddr_in *)&addr)->sin_addr, ipstr, INET_ADDRSTRLEN);
-    result.ip = ipstr;
-    result.port = ntohs(((sockaddr_in *)&addr)->sin_port);
-  } else if (addr.ss_family == AF_INET6) {
-    char ipstr[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &((sockaddr_in6 *)&addr)->sin6_addr, ipstr, INET6_ADDRSTRLEN);
-    result.ip = ipstr;
-    result.port = ntohs(((sockaddr_in6 *)&addr)->sin6_port);
-  } else {
-    throw std::runtime_error("Unknown address family");
-  }
-  return result;
+inline std::chrono::steady_clock::time_point now() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+  return std::chrono::steady_clock::time_point(std::chrono::seconds(ts.tv_sec) + std::chrono::nanoseconds(ts.tv_nsec));
 }
+
+inline int digit_count(int x) {
+  unsigned int v = (x < 0) ? -static_cast<unsigned int>(x) : static_cast<unsigned int>(x);
+
+  if (v >= 1000000000u)
+    return 10;
+  if (v >= 100000000u)
+    return 9;
+  if (v >= 10000000u)
+    return 8;
+  if (v >= 1000000u)
+    return 7;
+  if (v >= 100000u)
+    return 6;
+  if (v >= 10000u)
+    return 5;
+  if (v >= 1000u)
+    return 4;
+  if (v >= 100u)
+    return 3;
+  if (v >= 10u)
+    return 2;
+  return 1;
+}
+
+// ==================== STRING ===================
 
 inline std::string getCommaSeparatedString(const std::vector<std::string> &strings) {
 
@@ -143,6 +146,11 @@ inline auto toJsonObject(const std::vector<std::pair<std::string, std::string>> 
   return j;
 }
 
+// =================== HTTP =========================
+
+static constexpr std::array<unsigned char, 4> crlf2 = {'\r', '\n', '\r', '\n'};
+static constexpr std::array<unsigned char, 2> crlf = {'\r', '\n'};
+
 inline void normalizePath(std::string &path) {
 
   if (path.find("//") == std::string::npos) {
@@ -161,19 +169,6 @@ inline void normalizePath(std::string &path) {
 
   if (!path.empty() && path.back() == '/')
     path.pop_back();
-}
-
-inline std::string getNormalizedPath(std::string path) {
-  auto newEnd = std::unique(path.begin(), path.end(), [](char a, char b) { return a == '/' && b == '/'; });
-  path.erase(newEnd, path.end());
-
-  if (!path.empty() && path.front() == '/')
-    path.erase(0, 1);
-
-  if (!path.empty() && path.back() == '/')
-    path.pop_back();
-
-  return path;
 }
 
 inline std::string percentDecode(std::string_view s) {
@@ -237,30 +232,6 @@ inline std::string toHttpDate(std::chrono::system_clock::time_point tp) {
   return buf;
 }
 
-inline int digit_count(int x) {
-  unsigned int v = (x < 0) ? -static_cast<unsigned int>(x) : static_cast<unsigned int>(x);
-
-  if (v >= 1000000000u)
-    return 10;
-  if (v >= 100000000u)
-    return 9;
-  if (v >= 10000000u)
-    return 8;
-  if (v >= 1000000u)
-    return 7;
-  if (v >= 100000u)
-    return 6;
-  if (v >= 10000u)
-    return 5;
-  if (v >= 1000u)
-    return 4;
-  if (v >= 100u)
-    return 3;
-  if (v >= 10u)
-    return 2;
-  return 1;
-}
-
 inline bool mime_match(std::string_view p, std::string_view v) {
   if (p == "*/*")
     return true;
@@ -271,27 +242,7 @@ inline bool mime_match(std::string_view p, std::string_view v) {
          (p[ps + 1] == '*' || v[vs + 1] == '*' || p.substr(ps + 1) == v.substr(vs + 1));
 }
 
-inline std::chrono::steady_clock::time_point now() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
-  return std::chrono::steady_clock::time_point(std::chrono::seconds(ts.tv_sec) + std::chrono::nanoseconds(ts.tv_nsec));
-}
-
-inline bool etagMatches(std::string_view ifNoneMatch, const std::string &etag) {
-  while (!ifNoneMatch.empty()) {
-    auto end = ifNoneMatch.find(',');
-    std::string_view token = ifNoneMatch.substr(0, end);
-    trim(token);
-    if (token == etag)
-      return true;
-    if (end == std::string_view::npos)
-      break;
-    ifNoneMatch.remove_prefix(end + 1);
-  }
-  return false;
-}
-
-// If-Modified-Since: Wed, 01 Jan 2025 12:00:00 GMT
+// Wed, 01 Jan 2025 12:00:00 GMT
 inline std::optional<std::chrono::system_clock::time_point> parseHttpDate(const std::string &date) {
   std::tm tm{};
   std::istringstream ss(date);
@@ -328,47 +279,4 @@ inline void parseQValues(const std::string_view acceptString, std::vector<std::p
   }
 }
 
-inline bool validateAndCleanRanges(std::vector<std::pair<std::optional<size_t>, std::optional<size_t>>> &ranges,
-                                   size_t fileSize) {
-  if (ranges.empty())
-    return true;
-
-  for (auto &[start, end] : ranges) {
-    if (!start.has_value() && !end.has_value())
-      return false;
-
-    if (!start.has_value()) {
-      start = (*end >= fileSize) ? 0 : fileSize - *end;
-      end = fileSize - 1;
-    } else {
-      if (*end >= fileSize)
-        *end = fileSize - 1;
-      if (!end.has_value())
-        end = fileSize - 1;
-    }
-
-    if (*start > *end)
-      return false;
-    if (*start >= fileSize)
-      return false;
-  }
-
-  std::sort(ranges.begin(), ranges.end(), [](const auto &a, const auto &b) { return *a.first < *b.first; });
-
-  std::vector<std::pair<std::optional<size_t>, std::optional<size_t>>> merged;
-  merged.push_back(ranges[0]);
-
-  for (size_t i = 1; i < ranges.size(); ++i) {
-    auto &[ms, me] = merged.back();
-    auto &[cs, ce] = ranges[i];
-    if (*cs <= *me + 1) {
-      *me = std::max(*me, *ce);
-    } else {
-      merged.push_back(ranges[i]);
-    }
-  }
-
-  ranges = std::move(merged);
-  return true;
-}
 } // namespace rukh

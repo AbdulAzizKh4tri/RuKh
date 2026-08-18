@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <rukh/core/utils.hpp>
+#include <rukh/net/utils.hpp>
 
 namespace rukh::net {
 

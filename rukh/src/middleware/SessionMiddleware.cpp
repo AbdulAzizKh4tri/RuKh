@@ -3,6 +3,7 @@
 #include <memory>
 
 #include <rukh/Cookie.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/middleware/SessionHandle.hpp>
 
 namespace rukh {
@@ -32,7 +33,7 @@ core::Task<Response> SessionMiddleware::operator()(HttpRequest &request, Next ne
     if (not sessionHandle.id.empty())
       co_await sessionStore_->destroy(sessionHandle.id);
 
-    std::visit(overloaded{[](auto &res) { res.cookies.deleteCookie("session_id"); }}, response);
+    std::visit(overloads{[](auto &res) { res.cookies.deleteCookie("session_id"); }}, response);
     co_return response;
   }
 
@@ -43,7 +44,7 @@ core::Task<Response> SessionMiddleware::operator()(HttpRequest &request, Next ne
     sessionHandle.id = sessionStore_->generateId();
 
   co_await sessionStore_->save(sessionHandle.id, session);
-  std::visit(overloaded{[this, &sessionHandle](auto &res) {
+  std::visit(overloads{[this, &sessionHandle](auto &res) {
                Cookie sessionCookie("session_id", sessionHandle.id);
                sessionCookie.secure = sessionConfig_.cookieSecure;
                sessionCookie.httpOnly = sessionConfig_.cookieHttpOnly;

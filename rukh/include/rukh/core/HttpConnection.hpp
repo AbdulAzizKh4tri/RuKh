@@ -16,6 +16,7 @@
 #include <rukh/HttpTypes.hpp>
 #include <rukh/Router.hpp>
 #include <rukh/ServerConfig.hpp>
+#include <rukh/TypeHelpers.hpp>
 #include <rukh/core/Awaitables.hpp>
 #include <rukh/core/BodyStream.hpp>
 #include <rukh/core/ChunkDecoder.hpp>
@@ -356,7 +357,7 @@ public:
       co_await request_.bodyStream()->drain();
 
       //=== Set Connection header ===
-      std::visit(overloaded{[this](auto &res) {
+      std::visit(overloads{[this](auto &res) {
                    if (shutdown_) {
                      keepAlive_ = false;
                      res.headers.setHeaderLower("connection", "close");

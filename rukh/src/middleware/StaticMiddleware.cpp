@@ -15,6 +15,77 @@
 
 namespace rukh {
 
+bool etagMatches(std::string_view ifNoneMatch, const std::string &etag) {
+  while (!ifNoneMatch.empty()) {
+    auto end = ifNoneMatch.find(',');
+    std::string_view token = ifNoneMatch.substr(0, end);
+    trim(token);
+    if (token == etag)
+      return true;
+    if (end == std::string_view::npos)
+      break;
+    ifNoneMatch.remove_prefix(end + 1);
+  }
+  return false;
+}
+
+std::string getNormalizedPath(std::string path) {
+  auto newEnd = std::unique(path.begin(), path.end(), [](char a, char b) { return a == '/' && b == '/'; });
+  path.erase(newEnd, path.end());
+
+  if (!path.empty() && path.front() == '/')
+    path.erase(0, 1);
+
+  if (!path.empty() && path.back() == '/')
+    path.pop_back();
+
+  return path;
+}
+
+bool validateAndCleanRanges(std::vector<std::pair<std::optional<size_t>, std::optional<size_t>>> &ranges,
+                            size_t fileSize) {
+  if (ranges.empty())
+    return true;
+
+  for (auto &[start, end] : ranges) {
+    if (not start.has_value() && not end.has_value())
+      return false;
+
+    if (not start.has_value()) {
+      start = (*end >= fileSize) ? 0 : fileSize - *end;
+      end = fileSize - 1;
+    } else {
+      if (*end >= fileSize)
+        *end = fileSize - 1;
+      if (not end.has_value())
+        end = fileSize - 1;
+    }
+
+    if (*start > *end)
+      return false;
+    if (*start >= fileSize)
+      return false;
+  }
+
+  std::sort(ranges.begin(), ranges.end(), [](const auto &a, const auto &b) { return *a.first < *b.first; });
+
+  std::vector<std::pair<std::optional<size_t>, std::optional<size_t>>> merged;
+  merged.push_back(ranges[0]);
+
+  for (size_t i = 1; i < ranges.size(); ++i) {
+    auto &[ms, me] = merged.back();
+    auto &[cs, ce] = ranges[i];
+    if (*cs <= *me + 1) {
+      *me = std::max(*me, *ce);
+    } else {
+      merged.push_back(ranges[i]);
+    }
+  }
+
+  ranges = std::move(merged);
+  return true;
+}
+
 using Compressor = std::unique_ptr<ICompressor>;
 
 std::string constructContentRange(size_t start, size_t end, size_t fileSize) {
