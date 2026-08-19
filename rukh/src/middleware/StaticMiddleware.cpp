@@ -3,6 +3,7 @@
 #include <filesystem>
 
 #include <rukh/ErrorFactory.hpp>
+#include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
 #include <rukh/HttpStreamResponse.hpp>
 #include <rukh/ServerConfig.hpp>
@@ -42,8 +43,7 @@ std::string getNormalizedPath(std::string path) {
   return path;
 }
 
-bool validateAndCleanRanges(std::vector<std::pair<std::optional<size_t>, std::optional<size_t>>> &ranges,
-                            size_t fileSize) {
+bool validateAndCleanRanges(std::vector<HttpRequest::Range> &ranges, size_t fileSize) {
   if (ranges.empty())
     return true;
 

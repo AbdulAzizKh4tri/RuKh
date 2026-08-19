@@ -1,3 +1,7 @@
+/**
+ * @file ChunkDecoder.hpp
+ * @brief "Transfer encoding chunked" chunk decoder
+ */
 #pragma once
 
 #include <algorithm>
@@ -15,10 +19,16 @@
 
 namespace rukh {
 
+/// ChunkError
 enum class ChunkError { MALFORMED, CHUNK_TOO_LARGE, REQUEST_SIZE_LIMIT_EXCEEDED };
 
+/// "Transfer encoding chunked" chunk decoder
 template <typename Stream> class ChunkDecoder {
 public:
+  /**
+   * @brief Decodes the chunk encoded data and writes it to @p buf
+   * @warning This is an Internal API not meant to be called directly. use the BodyStream methods.
+   */
   core::Task<std::expected<size_t, ChunkError>> readSome(net::ConnectionIO<Stream> &io, std::span<unsigned char> buf,
                                                          std::chrono::steady_clock::time_point deadline) {
     if (state_ == State::DONE)

@@ -1,3 +1,7 @@
+/**
+ * @file HttpResponse.hpp
+ * @brief Rukh's HTTP Response object
+ */
 #pragma once
 
 #include <string>
@@ -9,37 +13,42 @@
 
 namespace rukh {
 
+/**
+ * @brief Rukh's HTTP Response object
+ *
+ * @see HttpStreamResponse
+ * @see HeaderStore
+ * @see CookieStore
+ */
 class HttpResponse {
 public:
   HeaderStore headers;
   CookieStore cookies;
 
-  static constexpr std::array noBody = {100, 101, 102, 103, 204, 304};
-
-  static std::string statusText(int statusCode) { return getOrDefault(statusStrings_, statusCode, "Unknown"); };
-
   HttpResponse();
-
   HttpResponse(int statusCode);
-
   HttpResponse(int statusCode, const std::string &body);
-
   HttpResponse(int statusCode, const std::string &contentType, const std::string &body);
 
-  bool serializeInto(std::vector<unsigned char> &buf) const;
-
-  std::string getContentType() const;
-
-  void setVersion(const std::string &version);
   void setStatusCode(int statusCode);
-
   void setBody(const std::string &body);
-  void stripBody();
+  void setContentType(const std::string &contentType);
+
+  int getStatusCode() const;
   std::string &getBody();
   size_t getBodySize() const;
+  std::string getContentType() const;
 
   std::string getVersion() const;
-  int getStatusCode() const;
+
+  /// @cond INTERNAL
+
+  void setVersion(const std::string &version);
+  void stripBody();
+  static constexpr std::array noBody = {100, 101, 102, 103, 204, 304};
+  static std::string statusText(int statusCode) { return getOrDefault(statusStrings_, statusCode, "Unknown"); };
+
+  bool serializeInto(std::vector<unsigned char> &buf) const;
 
   static std::string_view getStatusLine(int code) noexcept {
     switch (code) {
@@ -97,6 +106,8 @@ public:
     }
     }
   }
+
+  /// @endcond
 
 private:
   std::string body_, version_ = "HTTP/1.1";

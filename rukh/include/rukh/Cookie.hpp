@@ -1,9 +1,15 @@
+/**
+ * @file Cookie.hpp
+ * @brief Sweet cookies
+ */
+
 #pragma once
 #include <chrono>
 #include <string>
 
 namespace rukh {
 
+/// Sweet and delicious cookies
 struct Cookie {
   std::string name;
   std::string value;

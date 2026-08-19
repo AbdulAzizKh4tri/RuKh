@@ -24,28 +24,32 @@ concept FieldPointer = std::is_member_object_pointer_v<std::remove_cvref_t<T>>;
 template <typename T>
 concept Tuple = requires { std::tuple_size<T>::value; };
 
-//=============
+//=====================================================================================================================
+/// @cond INTERNAL
 template <typename T> struct remove_optional {
   using type = T;
 };
 template <typename T> struct remove_optional<std::optional<T>> {
   using type = T;
 };
+/// @endcond
 
 /// Strip optional<> if present and get the value type.
 template <typename T> using remove_optional_t = typename remove_optional<T>::type;
 
-//=============
+//=====================================================================================================================
 /// Useful for checking the type of a variable at compile time with a static_assert.
 template <typename... T> inline constexpr bool always_false_v = false;
 
-//=============
+//=====================================================================================================================
+/// @cond INTERNAL
 template <typename T> struct remove_member_pointer {
   using type = T;
 };
 template <typename C, typename T> struct remove_member_pointer<T C::*> {
   using type = T;
 };
+/// @endcond
 
 /// Get the type of the field from a fieldPtr (including optional<>)
 template <typename T> using get_field_t = typename remove_member_pointer<T>::type;
@@ -53,25 +57,27 @@ template <typename T> using get_field_t = typename remove_member_pointer<T>::typ
 /// Get the type of the raw field from a fieldPtr (stripping optional<>)
 template <typename T> using get_raw_field_t = remove_optional_t<typename remove_member_pointer<T>::type>;
 
-//=============
+//=====================================================================================================================
+/// @cond INTERNAL
 template <typename T> struct get_class {
   using type = T;
 };
 template <typename C, typename T> struct get_class<T C::*> {
   using type = C;
 };
+/// @endcond
 
 /// Get the class from the fieldPtr
 template <typename T> using get_class_t = typename get_class<T>::type;
 
-//=============
+//=====================================================================================================================
 /// Check whether all the fieldPtrs in a given tuple point to an optional<>
 template <typename TupleType>
 concept AllOptionalFieldPtrs = []<std::size_t... I>(std::index_sequence<I...>) consteval {
   return (... && OptionalT<get_field_t<std::tuple_element_t<I, TupleType>>>);
 }(std::make_index_sequence<std::tuple_size_v<TupleType>>{});
 
-//=============
+//=====================================================================================================================
 /// Pass strings at compile time via templates
 template <std::size_t N> struct FixedString {
   char data[N]{};
@@ -79,13 +85,15 @@ template <std::size_t N> struct FixedString {
   constexpr std::string_view view() const { return {data, N - 1}; }
 };
 
-//=============
+//=====================================================================================================================
 
+/// @cond INTERNAL
 template <template <typename...> class X, typename TupleType> struct unpack;
 
 template <template <typename...> class X, typename... Ts> struct unpack<X, std::tuple<Ts...>> {
   using type = X<Ts...>;
 };
+/// @endcond
 
 /**
  * @brief unpack a tuple of types into a template
@@ -96,15 +104,19 @@ template <template <typename...> class X, typename... Ts> struct unpack<X, std::
 template <template <typename...> class X, typename TupleType>
 using unpack_tuple_t = typename unpack<X, TupleType>::type;
 
-//=============
+//=====================================================================================================================
+/// @cond INTERNAL
 template <typename T, typename TupleType> struct is_in_tuple;
 
 template <typename T, typename... Ts>
 struct is_in_tuple<T, std::tuple<Ts...>> : std::disjunction<std::is_same<T, Ts>...> {};
+/// @endcond
 
 /// Check whether a type T exists in a tuple of types
 template <typename T, typename TupleType> inline constexpr bool is_in_tuple_v = is_in_tuple<T, TupleType>::value;
-//=============
+//=====================================================================================================================
+
+/// @cond INTERNAL
 template <typename T, typename TupleType> struct get_index_of;
 
 template <typename T, typename... Rest>
@@ -117,13 +129,14 @@ struct get_index_of<T, std::tuple<First, Rest...>>
 template <typename T> struct get_index_of<T, std::tuple<>> {
   static_assert(sizeof(T) == 0, "Type not found in tuple");
 };
+/// @endcond
 
 // The difference between the found case and not found case is: <std::tuple<HERE, Rest...>>
 /// Find the index of a type in a tuple
 template <typename T, typename TupleType>
 inline constexpr std::size_t get_index_of_v = get_index_of<T, TupleType>::value;
 
-//=============
+//=====================================================================================================================
 
 /**
  * @brief Helper for std::visit.
@@ -133,6 +146,6 @@ template <class... Ts> struct overloads : Ts... {
   using Ts::operator()...;
 };
 
-//=============
+//=====================================================================================================================
 
 } // namespace rukh

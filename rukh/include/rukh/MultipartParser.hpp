@@ -1,3 +1,8 @@
+/**
+ * @file MultipartParser.hpp
+ * @brief Multipart form data parser
+ */
+
 #pragma once
 
 #include <functional>
@@ -15,6 +20,37 @@
 
 namespace rukh {
 
+/**
+ * @brief Multipart form data parser
+ *
+ * This class is used to parse multipart/form-data requests
+ * Sample usage:
+ *
+ * @code
+ *  MultipartParser mp(request);
+ *  std::string username, password;
+ *  std::vector<std::string> terms;
+ *
+ *  mp.onField("username", [&username](std::string v) -> core::Task<void> { // without convenience wrapper
+ *    username = v;
+ *    co_return;
+ *  });
+ *
+ *  mp.storeFieldValue("password", password); // with wrappers
+ *  mp.storeFieldValues("terms", terms);
+ *
+ *  std::optional<core::AsyncFileWriter> writerOpt = core::AsyncFileWriter::open("./app/public/test.bin");
+ *
+ *  if (not writerOpt)
+ *    throw std::runtime_error("File issue");
+ *  mp.onFile("file", [&writerOpt](std::span<unsigned char> data) -> core::Task<void> {
+ *    co_await writerOpt->writeChunk(std::string_view(reinterpret_cast<char *>(data.data()), data.size()));
+ *  });
+ *
+ *  co_await mp.go(); // MUST CALL THIS
+ *
+ * @endcode
+ */
 class MultipartParser {
 
   using PartReadResult = std::tuple<size_t /*totalConsumed*/, bool /*end*/>;
@@ -167,14 +203,24 @@ public:
       throw ServerException("Boundary for multipart is too long", 400);
   }
 
-  void storeFieldValue(const std::string &name, std::string &value) { // wrapper method
+  /**
+   * @brief Convenience method to store the value of a field
+   * @param name The name of the field
+   * @param value The variable to store the value in
+   */
+  void storeFieldValue(const std::string &name, std::string &value) {
     onField(name, [&value](std::string v) -> core::Task<void> {
       value = v;
       co_return;
     });
   }
 
-  void storeFieldValues(const std::string &name, std::vector<std::string> &values) { // wrapper method
+  /**
+   * @brief Convenience method to store the values of a field
+   * @param name The name of the field
+   * @param values The vector to store the values in
+   */
+  void storeFieldValues(const std::string &name, std::vector<std::string> &values) {
     onMultiField(name, [&values](std::vector<std::string> v) -> core::Task<void> {
       for (auto value : v)
         values.push_back(value);
@@ -182,18 +228,40 @@ public:
     });
   }
 
-  void onMultiField(const std::string &name, std::move_only_function<core::Task<void>(std::vector<std::string>)> handler) {
+  /**
+   * @brief Register a handler for a MultiField type
+   * @param name The name of the field
+   * @param handler The handler function
+   */
+  void onMultiField(const std::string &name,
+                    std::move_only_function<core::Task<void>(std::vector<std::string>)> handler) {
     MultiFieldHandlers_.emplace_back(name, std::move(handler));
   }
 
+  /**
+   * @brief Register a handler for a Field type
+   * @param name The name of the field
+   * @param handler The handler function
+   */
   void onField(const std::string &name, std::move_only_function<core::Task<void>(std::string)> handler) {
     fieldHandlers_.emplace_back(name, std::move(handler));
   }
 
+  /**
+   * @brief Register a handler for a File type
+   * @param name The name of the field
+   * @param handler The handler function
+   *
+   * @note The handler's parameter is a chunk of the File, not the full thing.
+   *
+   */
   void onFile(const std::string &name, std::move_only_function<core::Task<void>(std::span<unsigned char>)> handler) {
     fileHandlers_.emplace_back(name, std::move(handler));
   }
 
+  /**
+   * @brief Parse the multipart request and run the registered handlers. Must be called to get data into the fields
+   */
   core::Task<void> go() {
     size_t fullBoundarySize = boundary_.size() + 2;
     size_t firstBoundarySize = boundary_.size();
@@ -379,6 +447,7 @@ private:
   std::vector<std::pair<std::string, std::move_only_function<core::Task<void>(std::string)>>> fieldHandlers_;
   std::vector<std::pair<std::string, std::move_only_function<core::Task<void>(std::vector<std::string>)>>>
       MultiFieldHandlers_;
-  std::vector<std::pair<std::string, std::move_only_function<core::Task<void>(std::span<unsigned char>)>>> fileHandlers_;
+  std::vector<std::pair<std::string, std::move_only_function<core::Task<void>(std::span<unsigned char>)>>>
+      fileHandlers_;
 };
 } // namespace rukh

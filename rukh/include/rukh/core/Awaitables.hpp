@@ -1,3 +1,8 @@
+/**
+ * @file Awaitables.hpp
+ * @brief Awaitables for async I/O
+ */
+
 #pragma once
 
 #include <coroutine>
@@ -6,6 +11,7 @@
 
 namespace rukh::core {
 
+/// Awaitable for an fd to become readable within a deadline
 struct ReadAwaitable {
   int fd;
   std::chrono::steady_clock::time_point deadline;
@@ -17,6 +23,7 @@ struct ReadAwaitable {
   void await_resume() const noexcept {}
 };
 
+/// Awaitable for an fd to become writable within a deadline
 struct WriteAwaitable {
   int fd;
   std::chrono::steady_clock::time_point deadline;
@@ -28,6 +35,7 @@ struct WriteAwaitable {
   void await_resume() const noexcept {}
 };
 
+/// Awaitable for AsyncFileReader to read from a file using IoUringInstance
 struct FileReadAwaitable {
   int fd;
   void *buf;
@@ -44,6 +52,7 @@ struct FileReadAwaitable {
   int await_resume() { return result; }
 };
 
+/// Awaitable for AsyncFileWriter to write to a file using IoUringInstance
 struct FileWriteAwaitable {
   int fd;
   const void *buf;

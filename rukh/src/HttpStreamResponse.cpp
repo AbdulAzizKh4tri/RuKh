@@ -107,6 +107,10 @@ std::string HttpStreamResponse::getContentType() const {
     return header;
 }
 
+void HttpStreamResponse::setContentType(const std::string &contentType) {
+  headers.setHeaderLower("content-type", contentType);
+}
+
 NextChunkFn HttpStreamResponse::takeNextChunkFn() { return std::move(nextChunkFn_); }
 void HttpStreamResponse::setNextChunkFn(NextChunkFn nextChunkFn) { nextChunkFn_ = std::move(nextChunkFn); }
 

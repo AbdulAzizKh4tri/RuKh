@@ -1,3 +1,8 @@
+/**
+ * @file HttpConnection.hpp
+ * @brief HTTP Connection with the entire HTTP lifecycle
+ */
+
 #pragma once
 
 #include <chrono>
@@ -29,6 +34,7 @@
 
 namespace rukh {
 
+/// HTTP Connection with the entire HTTP lifecycle
 template <typename Stream> class HttpConnection {
 public:
   HttpConnection(std::unique_ptr<Stream> stream, Router &router, ErrorFactory &errorFactory,
@@ -39,6 +45,16 @@ public:
     request_.setPort(io_.getPort());
   }
 
+  /**
+   * @brief The entire HTTP lifecycle in one coroutine.
+   *
+   * - handshake
+   * - read request headers
+   * - create body stream
+   * - dispatch to middleware and handlers
+   * - drain body stream just in case.
+   * - send or stream response
+   */
   core::Task<void> run() {
     // This is intentionally one flat coroutine rather than a chain of sub-coroutines
     // (readHeaders(), readBody(), etc.). Keeping everything in one coroutine means
@@ -167,6 +183,7 @@ public:
             co_return;
           }
 
+          // TODO: better checks
           RouterResponse result = router_.validate(request_);
           switch (result) {
           case RouterResponse::NOT_FOUND:
@@ -349,7 +366,7 @@ public:
         response = buildErrorResponse(500, e.what());
         keepAlive_ = false;
       } catch (...) {
-        SPDLOG_CRITICAL("Unknown Exception");
+        SPDLOG_CRITICAL("HttpConnection: Unknown Exception");
         response = buildErrorResponse(500);
         keepAlive_ = false;
       }

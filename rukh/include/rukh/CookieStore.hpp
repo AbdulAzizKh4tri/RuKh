@@ -1,3 +1,8 @@
+/**
+ * @file CookieStore.hpp
+ * @brief Common cookie store for both Http Response types
+ */
+
 #pragma once
 
 #include <chrono>
@@ -8,14 +13,18 @@
 
 namespace rukh {
 
+/// Common cookie store for both Http Response types
 class CookieStore {
 public:
+  /// Adds cookie to the response
   void setCookie(const Cookie &cookie) { cookies_.push_back(cookie); }
 
+  /// Removes all cookies with the given @p name from this response
   void unsetCookie(const std::string &name) {
     std::erase_if(cookies_, [&name](const auto &p) { return p.name == name; });
   }
 
+  /// Attach an expiration cookie with the given @p name
   void deleteCookie(const std::string &name, const std::string &path = "/") {
     cookies_.emplace_back(name, "", path, 0, std::chrono::system_clock::from_time_t(0));
   }
@@ -28,6 +37,8 @@ public:
         return cookie;
     return std::nullopt;
   }
+
+  /// @cond INTERNAL
 
   template <typename WriteFn> void serializeUsing(WriteFn &&write) const {
     for (const auto &cookie : cookies_) {
@@ -90,6 +101,8 @@ public:
     }
     return total;
   }
+
+  /// @endcond
 
 private:
   std::vector<Cookie> cookies_;

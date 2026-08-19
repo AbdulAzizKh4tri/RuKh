@@ -1,3 +1,7 @@
+/**
+ * @file HttpRequest.hpp
+ * @brief Rukh's HTTP Request object
+ */
 #pragma once
 
 #include <expected>
@@ -20,8 +24,10 @@ enum class ContentLengthError {
   INVALID_CONTENT_LENGTH,
 };
 
+/// Rukh's HTTP Request object
 class HttpRequest {
 public:
+  /// used for Range
   using Range = std::pair<std::optional<size_t>, std::optional<size_t>>;
 
   static constexpr std::array singletonHeaders_ = {
@@ -32,80 +38,113 @@ public:
 
   HttpRequest();
 
+  /// Parse the request headers, @p headerView does not include the trailing \r\\n
   bool parseRequestHeader(std::string_view headerView);
 
+  /// Consume the full request body stream and interpret it as a json object.
   core::Task<nlohmann::json> jsonBody();
 
+  /// Consume the full request body stream and interpret it as url-encoded form-data.
   core::Task<std::unordered_map<std::string, std::vector<std::string>>> getFormData();
 
+  /// Parse and get the Range header as a set of ranges
   std::vector<Range> getRanges() const;
 
   std::vector<std::pair<std::string, std::string>> getCookies() const;
 
   std::optional<std::string> getCookie(const std::string &name) const;
 
+  /// Fetch the session associated with this request.
   core::Task<Session *> getSession();
 
   std::expected<size_t, ContentLengthError> getContentLength();
 
   std::string_view getContentType() const;
 
+  /**
+   * @brief get header with the given name. If multiple, returns the last one. Prefer @c HttpRequest::getHeaderLower.
+   */
   std::string_view getHeader(const std::string &name) const;
 
+  /**
+   * @brief get header with the given name. If multiple, returns the last one
+   *
+   * @warning Lower means the provided KEY is lowercase, the header will be returned as is. All headers are stored with
+   * a lowercase key
+   */
   std::string_view getHeaderLower(const std::string &lowerKey) const;
 
+  /// All headers with the given name
   std::vector<std::string> getHeaders(const std::string &name) const;
 
+  /// All request headers
   std::vector<std::pair<std::string, std::string>> getAllHeaders() const;
 
+  /**
+   * @brief Set a header value (override if exists). Prefer @c HttpRequest::setHeaderLower.
+   * The name will be lowercased before storing.
+   */
   void setHeader(const std::string &name, const std::string &value);
 
-  // Always use the Lower version of these whenever possible, avoids a string allocation.
-  // But be careful to only pass lowercased keys
+  /// Set a header value (override if exists). @p key must be lowercase
   void setHeaderLower(const std::string_view &lowercaseKey, const std::string &value);
 
+  /// Add a header value, ignores existing ones, use for multiple headers. Prefer @c HttpRequest::addHeaderLower
   void addHeader(const std::string &name, const std::string &value);
+  /// Add a header value, ignores existing ones, use for multiple headers.
   void addHeaderLower(const std::string_view &lowercaseKey, const std::string &value);
   void addHeaderLower(const std::string_view &lowercaseKey, const std::string_view &value);
 
+  /// Remove all instances of the header.
   void removeHeader(const std::string &name);
 
+  /// Arbitrary data you may want to store on the request object. @p key is case sensitive
   void setAttribute(const std::string &key, const std::string &value);
 
+  /// Retrieve stored attribute. @p key is case sensitive
   std::string getAttribute(const std::string &key, std::string defaultValue = "") const;
 
+  /// Query parameters @p key is case sensitive
   std::string getQueryParam(const std::string &key, std::string defaultValue = "") const;
 
+  /// get all values associated with a repeating query parameter.
   std::vector<std::string> getQueryParams(const std::string &key) const;
 
   std::vector<std::pair<std::string, std::string>> getAllQueryParams() const;
 
+  /// Path parameters myPath/\<myPathParam\>/. @p key is case sensitive
   std::string getPathParam(const std::string &key, std::string defaultValue = "") const;
-
-  void setPathParams(const std::vector<std::pair<std::string, std::string>> &pathParams);
 
   std::vector<std::pair<std::string, std::string>> getAllPathParams() const;
 
+  /// consume the entire body stream as a string.
   core::Task<std::string> consumeBody();
+
+  /// get the body stream object. @see BodyStream
   BodyStream *bodyStream();
-  void attachBodyStream(std::unique_ptr<BodyStream> bodyStream);
 
+  /// Normalized path
   const std::string &getPath() const;
+  /// Non-normalized path
   const std::string &getRawPath() const;
+  /// HTTP version
   const std::string &getVersion() const;
+  /// Path seperated by /
   const std::vector<std::string_view> &getPathParts() const;
-
-  const std::string &getMethod() const;
-  void setMethod(const std::string &method);
 
   const std::string &getIp() const;
   uint16_t getPort() const;
+  const std::string &getMethod() const;
 
+  /** @cond INTERNAL */
+  void setPathParams(const std::vector<std::pair<std::string, std::string>> &pathParams);
+  void attachBodyStream(std::unique_ptr<BodyStream> bodyStream);
   void setIp(const std::string &ip);
   void setPort(uint16_t port);
+  void setMethod(const std::string &method);
   void setSessionHandle(SessionHandle *sessionHandle);
-
   void reset(const std::string &ip, uint16_t port);
+  /** @endcond */
 
 private:
   std::vector<std::pair<std::string, std::string>> headers_;

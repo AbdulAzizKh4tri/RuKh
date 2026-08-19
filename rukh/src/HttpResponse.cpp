@@ -95,6 +95,10 @@ std::string HttpResponse::getContentType() const {
     return header;
 }
 
+void HttpResponse::setContentType(const std::string &contentType) {
+  headers.setHeaderLower("content-type", contentType);
+}
+
 void HttpResponse::setBody(const std::string &body) {
   body_ = body;
   headers.setHeaderLower("content-length", std::to_string(body_.size()));

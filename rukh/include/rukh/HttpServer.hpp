@@ -1,3 +1,8 @@
+/**
+ * @file HttpServer.hpp
+ * @brief Bridges the TCP/TLS layer and the HTTP layer
+ */
+
 #pragma once
 
 #include <atomic>
@@ -11,33 +16,52 @@
 #include <rukh/core/Task.hpp>
 #include <rukh/net/ListenerSocket.hpp>
 
-/**
- * @namespace rukh
- * @brief Main library namespace.
- */
 namespace rukh {
 
 struct ListenerConfig {
+  // TODO: Maybe add Router here so we can have per listener routes.
   std::string host;
   std::string port;
   bool isTls;
 };
 
+/// Bridges the TCP/TLS layer and the HTTP layer
 class HttpServer {
 public:
-  static std::atomic<bool> shutdown_;
+  /// The shutdown flag, used by the server and it's components to signal shutdown.
+  static std::atomic<bool> shutdown;
 
   HttpServer(ErrorFactory &errorFactory);
 
+  /**
+   * @brief Configures the TLS context for the HTTP server.
+   *
+   * @param certPath Path to the certificate file.
+   * @param keyPath  Path to the private key file.
+   *
+   * @throws std::runtime_error If the TLS context cannot be created, or the certificate / the private key
+   * cannot be loaded. Happens before the the server is started.
+   */
   void setTlsContext(std::string certPath, std::string keyPath);
 
-  // Add listeners, either TCP or TLS
+  /// Add TCP listener
   void addListener(const std::string &host, const std::string &port);
 
+  /// Add TLS listener
   void addTlsListener(const std::string &host, const std::string &port);
 
+  /// The Router to be used by the server for dispatching requests.
   void setRouter(Router &router);
 
+  /**
+   * @brief Runs the HTTP server.
+   *
+   * @param N The number of executor threads to use.
+   *
+   * starts @p N instances of workerMain.
+   * Each instance of workerMain listens on the configured ports and accepts new connections.
+   * RSTs connection if the connection count goes over the configured threshold.
+   */
   void run(int N);
 
   ErrorFactory &getErrorFactory();
@@ -47,7 +71,7 @@ public:
 private:
   int listenBacklog_ = 10000;
   std::shared_ptr<SSL_CTX> tlsContext_ = nullptr;
-  std::vector<ListenerConfig> listenersConfigs_;
+  std::vector<ListenerConfig> listenerConfigs_;
 
   Router *router_ = nullptr;
   ErrorFactory &errorFactory_;

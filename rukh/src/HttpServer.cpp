@@ -28,45 +28,44 @@ void HttpServer::setTlsContext(std::string certPath, std::string keyPath) {
     throw std::runtime_error("Failed to load private key");
 }
 
-// Add listeners, either TCP or TLS
 void HttpServer::addListener(const std::string &host, const std::string &port) {
   ListenerConfig config = {host, port, false};
-  listenersConfigs_.push_back(config);
+  listenerConfigs_.push_back(config);
 }
 
 void HttpServer::addTlsListener(const std::string &host, const std::string &port) {
   ListenerConfig config = {host, port, true};
-  listenersConfigs_.push_back(config);
+  listenerConfigs_.push_back(config);
 };
 
 void HttpServer::setRouter(Router &router) { router_ = &router; };
 
-std::atomic<bool> HttpServer::shutdown_ = false;
+std::atomic<bool> HttpServer::shutdown = false;
 
 void HttpServer::run(int N) {
   signal(SIGPIPE, SIG_IGN);
 
   signal(SIGINT, [](int) {
-    if (shutdown_) {
+    if (shutdown) {
       SPDLOG_WARN("Terminated");
       exit(0);
     }
     SPDLOG_INFO("Shutting down...");
-    HttpServer::shutdown_ = true;
+    HttpServer::shutdown = true;
   });
   signal(SIGTERM, [](int) {
-    if (shutdown_) {
+    if (shutdown) {
       SPDLOG_WARN("Terminated");
       exit(0);
     }
     SPDLOG_INFO("Shutting down...");
-    HttpServer::shutdown_ = true;
+    HttpServer::shutdown = true;
   });
 
   if (!router_)
     throw std::runtime_error("Call setRouter() before run()");
 
-  if (N <= 0)
+  if (N <= 0 or N > std::thread::hardware_concurrency())
     N = std::thread::hardware_concurrency();
 
   std::vector<std::thread> executorThreads;
@@ -86,7 +85,7 @@ void HttpServer::workerMain() {
   core::tl_executor = &executor;
   std::vector<std::unique_ptr<net::ListenerSocket>> tcpListeners, tlsListeners;
 
-  for (auto &config : listenersConfigs_) {
+  for (auto &config : listenerConfigs_) {
     if (config.isTls) {
       auto listener = std::make_unique<net::ListenerSocket>(config.host, config.port);
       listener->setSocketNonBlocking();
@@ -108,7 +107,7 @@ void HttpServer::workerMain() {
     core::tl_executor->spawn(tlsAcceptLoop(*listener));
   }
 
-  core::tl_executor->run(shutdown_);
+  core::tl_executor->run(shutdown);
 }
 
 ErrorFactory &HttpServer::getErrorFactory() { return errorFactory_; }
@@ -119,7 +118,7 @@ core::Task<void> HttpServer::tcpAcceptLoop(net::ListenerSocket &listener) {
     co_await core::ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
     if (core::tl_timed_out) {
       core::tl_timed_out = false;
-      if (shutdown_)
+      if (shutdown)
         co_return;
       continue;
     }
@@ -152,7 +151,7 @@ core::Task<void> HttpServer::tlsAcceptLoop(net::ListenerSocket &listener) {
     co_await core::ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
     if (core::tl_timed_out) {
       core::tl_timed_out = false;
-      if (shutdown_)
+      if (shutdown)
         co_return;
       continue;
     }
@@ -184,7 +183,7 @@ template <typename Stream> core::Task<void> HttpServer::handleConnection(std::un
   int fd = stream->getFd();
   core::tl_executor->registerReadFd(fd);
 
-  HttpConnection<Stream> conn(std::move(stream), *router_, errorFactory_, shutdown_, globalConnectionCount_);
+  HttpConnection<Stream> conn(std::move(stream), *router_, errorFactory_, shutdown, globalConnectionCount_);
   co_await conn.run();
   core::tl_executor->unregister(fd);
 }

@@ -1,3 +1,8 @@
+/**
+ * @file Router.hpp
+ * @brief HTTP Router
+ */
+
 #pragma once
 
 #include <map>
@@ -10,27 +15,71 @@
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpTypes.hpp>
 #include <rukh/core/Task.hpp>
+#include <rukh/core/utils.hpp>
 
 namespace rukh {
 
 enum class RouterResponse { OK, NOT_FOUND, METHOD_NOT_ALLOWED };
 
-struct StringHash {
-  using is_transparent = void;
-  size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
-  size_t operator()(const std::string &s) const { return std::hash<std::string_view>{}(s); }
-};
-
+/**
+ * @brief Node of the Route Radix Tree
+ * @see Router
+ */
 struct RouteNode {
   std::unordered_map<std::string, RouteNode, StringHash, std::equal_to<>> children;
+
+  /// parameter @c /\<param\>/
   std::unique_ptr<RouteNode> paramChild;
+
+  /// wildcard /*
   std::unique_ptr<RouteNode> wildcardChild;
+
+  /// deep wildcard /**
   std::unique_ptr<RouteNode> deepWildcardChild;
+
+  /**
+   * @brief Handlers for this route node
+   * @tparam string Http Method
+   */
   std::map<std::string, Handler> requestHandlers;
+
+  /// Route pattern split by /
   std::vector<std::string> patternParts;
+
   std::string allowedMethods;
 };
 
+/**
+ * @brief HTTP Router
+ *
+ * To define routes, use the @c get, @c post, @c put, @c patch and @c delete_ methods.
+ *
+ * Example code:
+ * @code
+ * router.get("/", [](const HttpRequest &request) -> core::Task<Response> {
+ *   co_return HttpResponse(200);
+ * });
+ * @endcode
+ *
+ * To use Middlewares, use the @c Router::use method.
+ *
+ * Example code:
+ * @code
+ * CorsMiddleware corsMiddleware;
+ * corsMiddleware.setCorsOrigins({"http://localhost:8080", "https://localhost:8443"});
+ * corsMiddleware.setCorsMaxAge(10);
+ * router.use(corsMiddleware);
+ * @endcode
+ *
+ * I recommend creating seperate functions for routes grouping, and passing the Router object to those functions.
+ *
+ * @see RouteNode
+ * @see HttpTypes.hpp
+ * @see HttpRequest
+ * @see HttpResponse
+ * @see HttpStreamResponse
+ * @see Middleware
+ */
 class Router {
 public:
   Router(ErrorFactory &errorFactory);

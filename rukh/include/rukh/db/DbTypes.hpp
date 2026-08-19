@@ -5,17 +5,10 @@
 #include <string>
 
 #include <rukh/TypeHelpers.hpp>
+#include <rukh/core/utils.hpp>
 #include <rukh/db/DbValue.hpp>
 
 namespace rukh::db {
-
-struct StringHash {
-  // NOTE: Don't know what this does, but it works
-
-  // TODO: understand it
-  using is_transparent = void; // opts into heterogeneous lookup
-  std::size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
-};
 
 class Row {
 public:

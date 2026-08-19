@@ -1,3 +1,7 @@
+/**
+ * @file HttpStreamResponse.hpp
+ * @brief Rukh's HTTP Stream Response
+ */
 #pragma once
 
 #include <optional>
@@ -11,39 +15,55 @@
 
 namespace rukh {
 
+/// The function signature to return the next chunk of data for the stream response. Return nullopt to end the stream.
 using NextChunkFn = std::move_only_function<core::Task<std::optional<std::string>>()>;
 
+/**
+ * @brief Rukh's HTTP Stream Response
+ *
+ * @note Defaults to Transfer encoding: chunked. See @ref setChunked.
+ *
+ * @see HttpResponse
+ * @see HeaderStore
+ * @see CookieStore
+ */
 class HttpStreamResponse {
 public:
   HeaderStore headers;
   CookieStore cookies;
 
   HttpStreamResponse();
-
   HttpStreamResponse(int statusCode);
   HttpStreamResponse(int statusCode, NextChunkFn nextChunkFn);
-
   HttpStreamResponse(int statusCode, const std::string &contentType, NextChunkFn nextChunkFn);
 
+  /// set transfer-encoding: chunked true/false
+  void setChunked(bool chunked) {
+    isChunked_ = chunked;
+    if (not chunked)
+      headers.removeHeader("transfer-encoding");
+  }
+
+  std::string getContentType() const;
+  void setContentType(const std::string &contentType);
+
+  /// set next chunk function. See @ref NextChunkFn
+  void setNextChunkFn(NextChunkFn nextChunkFn);
+
+  /// Moves the next chunk function out of the response
+  NextChunkFn takeNextChunkFn();
+
+  std::string getVersion() const;
+  int getStatusCode() const;
+  void setStatusCode(int statusCode);
+
+  /// @cond INTERNAL
   core::Task<std::optional<std::string>> getNextChunk();
 
   bool serializeHeaderInto(std::vector<unsigned char> &buf) const;
 
   bool serializeBlockInto(std::string_view chunk, std::vector<unsigned char> &buf, const std::string &mime = "");
-
-  std::string getContentType() const;
-
-  NextChunkFn takeNextChunkFn();
-  void setNextChunkFn(NextChunkFn nextChunkFn);
-
-  void setChunked(bool chunked) {
-    isChunked_ = chunked;
-    headers.removeHeader("transfer-encoding");
-  }
-
-  std::string getVersion() const;
-  int getStatusCode() const;
-  void setStatusCode(int statusCode);
+  /// @endcond
 
 private:
   int statusCode_;
