@@ -9,12 +9,6 @@
 
 namespace rukh::core {
 
-/// Exception wrapper for @c EpollInstance
-struct EpollException : public std::runtime_error {
-  using std::runtime_error::runtime_error;
-  explicit EpollException(const std::string &msg) : std::runtime_error(msg) {}
-};
-
 /// RAII wrapper for @c epoll
 class EpollInstance final {
 public:

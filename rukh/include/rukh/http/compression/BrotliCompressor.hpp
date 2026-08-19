@@ -1,10 +1,10 @@
 #pragma once
 
 #include <brotli/encode.h>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 
+#include <rukh/Exceptions.hpp>
 #include <rukh/http/compression/ICompressor.hpp>
 
 namespace rukh::http::compression {
@@ -14,7 +14,7 @@ public:
   BrotliCompressor(int quality = BROTLI_DEFAULT_QUALITY) {
     state_ = BrotliEncoderCreateInstance(nullptr, nullptr, nullptr);
     if (!state_)
-      throw std::runtime_error("BrotliEncoderCreateInstance failed");
+      throw CompressorException("BrotliEncoderCreateInstance failed");
     BrotliEncoderSetParameter(state_, BROTLI_PARAM_QUALITY, quality);
   }
 
@@ -46,7 +46,7 @@ public:
     if (!BrotliEncoderCompress(BROTLI_DEFAULT_QUALITY, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE, input.size(),
                                reinterpret_cast<const uint8_t *>(input.data()), &encodedSize,
                                reinterpret_cast<uint8_t *>(output.data())))
-      throw std::runtime_error("BrotliEncoderCompress failed");
+      throw CompressorException("BrotliEncoderCompress failed");
 
     output.resize(encodedSize);
     return output;
@@ -71,11 +71,11 @@ private:
       uint8_t *nextOut = buf;
       size_t availOut = sizeof(buf);
       if (!BrotliEncoderCompressStream(state_, op, &availIn, &nextIn, &availOut, &nextOut, nullptr))
-        throw std::runtime_error("BrotliEncoderCompressStream failed");
+        throw CompressorException("BrotliEncoderCompressStream failed");
       output.append(reinterpret_cast<char *>(buf), sizeof(buf) - availOut);
     } while (availIn > 0 || BrotliEncoderHasMoreOutput(state_));
 
     return output;
   }
 };
-} // namespace rukh::http
+} // namespace rukh::http::compression

@@ -4,6 +4,16 @@
 
 namespace rukh {
 
+struct SocketException : public std::runtime_error {
+  using std::runtime_error::runtime_error;
+  explicit SocketException(const std::string &msg) : std::runtime_error(msg) {}
+};
+
+struct EpollException : public std::runtime_error {
+  using std::runtime_error::runtime_error;
+  explicit EpollException(const std::string &msg) : std::runtime_error(msg) {}
+};
+
 struct ServerException : public std::runtime_error {
   using std::runtime_error::runtime_error;
   int status_code;
@@ -20,6 +30,11 @@ struct HandlerException : public std::runtime_error {
 
   explicit HandlerException(const std::string &msg, int code = 500, bool fatal = false)
       : std::runtime_error(msg), status_code(code), fatal(fatal) {}
+};
+
+struct CompressorException : public std::runtime_error {
+  using std::runtime_error::runtime_error;
+  explicit CompressorException(const std::string &msg) : std::runtime_error(msg) {}
 };
 
 struct ConnectionException : public std::runtime_error {

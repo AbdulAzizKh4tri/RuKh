@@ -4,6 +4,7 @@
 #include <csignal>
 #include <thread>
 
+#include <rukh/Exceptions.hpp>
 #include <rukh/ServerConfig.hpp>
 #include <rukh/core/Awaitables.hpp>
 #include <rukh/core/Executor.hpp>
@@ -19,13 +20,13 @@ void HttpServer::setTlsContext(std::string certPath, std::string keyPath) {
   // for TLS
   tlsContext_ = std::shared_ptr<SSL_CTX>(SSL_CTX_new(TLS_server_method()), SSL_CTX_free);
   if (!tlsContext_)
-    throw std::runtime_error("Failed to create SSL_CTX");
+    throw ServerException("Failed to create SSL_CTX");
 
   if (SSL_CTX_use_certificate_file(tlsContext_.get(), certPath.c_str(), SSL_FILETYPE_PEM) <= 0)
-    throw std::runtime_error("Failed to load certificate");
+    throw ServerException("Failed to load certificate");
 
   if (SSL_CTX_use_PrivateKey_file(tlsContext_.get(), keyPath.c_str(), SSL_FILETYPE_PEM) <= 0)
-    throw std::runtime_error("Failed to load private key");
+    throw ServerException("Failed to load private key");
 }
 
 void HttpServer::addListener(const std::string &host, const std::string &port) {
@@ -63,7 +64,7 @@ void HttpServer::run(int N) {
   });
 
   if (!router_)
-    throw std::runtime_error("Call setRouter() before run()");
+    throw ServerException("Call setRouter() before run()");
 
   if (N <= 0)
     N = std::thread::hardware_concurrency();
@@ -187,4 +188,4 @@ template <typename Stream> core::Task<void> HttpServer::handleConnection(std::un
   co_await conn.run();
   core::tl_executor->unregister(fd);
 }
-} // namespace rukh
+} // namespace rukh::http

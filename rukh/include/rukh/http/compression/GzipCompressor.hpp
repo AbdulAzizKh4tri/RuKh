@@ -1,13 +1,13 @@
 #pragma once
 
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <zlib.h>
 
+#include <rukh/Exceptions.hpp>
 #include <rukh/http/compression/ICompressor.hpp>
 
-namespace rukh::http::compression  {
+namespace rukh::http::compression {
 
 class GzipCompressor : public ICompressor {
 public:
@@ -16,7 +16,7 @@ public:
     stream_.zfree = Z_NULL;
     stream_.opaque = Z_NULL;
     if (deflateInit2(&stream_, level_, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK)
-      throw std::runtime_error("deflateInit2 failed");
+      throw CompressorException("deflateInit2 failed");
     initialized_ = true;
   }
 
@@ -57,7 +57,7 @@ public:
       stream_.avail_out = sizeof(buf);
       ret = deflate(&stream_, Z_FINISH);
       if (ret == Z_STREAM_ERROR)
-        throw std::runtime_error("gzip compress failed: stream error");
+        throw CompressorException("gzip compress failed: stream error");
       output.append(buf, sizeof(buf) - stream_.avail_out);
     } while (ret != Z_STREAM_END);
 
@@ -75,7 +75,7 @@ public:
       stream_.avail_out = sizeof(buf);
       int ret = deflate(&stream_, Z_SYNC_FLUSH);
       if (ret != Z_OK && ret != Z_BUF_ERROR)
-        throw std::runtime_error("gzip feedChunk failed: deflate returned " + std::to_string(ret));
+        throw CompressorException("gzip feedChunk failed: deflate returned " + std::to_string(ret));
       output.append(buf, sizeof(buf) - stream_.avail_out);
     } while (stream_.avail_out == 0);
 
@@ -94,7 +94,7 @@ public:
       stream_.avail_out = sizeof(buf);
       ret = deflate(&stream_, Z_FINISH);
       if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR)
-        throw std::runtime_error("gzip finish failed: deflate returned " + std::to_string(ret));
+        throw CompressorException("gzip finish failed: deflate returned " + std::to_string(ret));
       output.append(buf, sizeof(buf) - stream_.avail_out);
     } while (ret == Z_OK);
 
@@ -108,4 +108,4 @@ private:
   int level_;
   bool initialized_ = false;
 };
-} // namespace rukh
+} // namespace rukh::http::compression
