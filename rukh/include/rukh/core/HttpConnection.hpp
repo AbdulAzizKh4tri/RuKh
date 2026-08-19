@@ -55,12 +55,12 @@ public:
         done = true;
         break;
       case net::HandshakeResult::WANT_READ:
-        co_await ReadAwaitable{io_.getFd(), inactivityDeadline_};
+        co_await core::ReadAwaitable{io_.getFd(), inactivityDeadline_};
         if (core::tl_timed_out)
           co_return;
         break;
       case net::HandshakeResult::WANT_WRITE:
-        co_await WriteAwaitable{io_.getFd(), inactivityDeadline_};
+        co_await core::WriteAwaitable{io_.getFd(), inactivityDeadline_};
         if (core::tl_timed_out)
           co_return;
         break;

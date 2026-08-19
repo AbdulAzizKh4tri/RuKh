@@ -2,12 +2,12 @@
 
 #include <filesystem>
 
-#include <rukh/AsyncFileReader.hpp>
-#include <rukh/AsyncFileWriter.hpp>
 #include <rukh/ErrorFactory.hpp>
 #include <rukh/HttpResponse.hpp>
 #include <rukh/HttpStreamResponse.hpp>
 #include <rukh/ServerConfig.hpp>
+#include <rukh/core/AsyncFileReader.hpp>
+#include <rukh/core/AsyncFileWriter.hpp>
 #include <rukh/core/CompressibleMimeTypes.hpp>
 #include <rukh/core/CompressorFactory.hpp>
 #include <rukh/core/MimeTypes.hpp>
@@ -222,7 +222,7 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
         }
       }
       if (not compressedEntry.exists() || originalFileModified) {
-        std::optional<AsyncFileReader> srcOpt = AsyncFileReader::open(resolved, fileSize);
+        std::optional<core::AsyncFileReader> srcOpt = core::AsyncFileReader::open(resolved, fileSize);
         if (not srcOpt)
           co_return buildErrorResponse(request, 500);
 
@@ -237,7 +237,7 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
         std::filesystem::path tmpPath =
             compressedPath.string() + ".tmp." + std::to_string(myThreadId) + "." + std::to_string(tmpCounter++);
 
-        std::optional<AsyncFileWriter> writerOpt = AsyncFileWriter::open(tmpPath);
+        std::optional<core::AsyncFileWriter> writerOpt = core::AsyncFileWriter::open(tmpPath);
         if (not writerOpt)
           co_return buildErrorResponse(request, 500);
 
@@ -261,10 +261,10 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     }
   }
 
-  std::optional<AsyncFileReader> fileOpt = AsyncFileReader::open(resolved, fileSize);
+  std::optional<core::AsyncFileReader> fileOpt = core::AsyncFileReader::open(resolved, fileSize);
   if (not fileOpt.has_value())
     co_return buildErrorResponse(request, 403);
-  AsyncFileReader &file = fileOpt.value();
+  core::AsyncFileReader &file = fileOpt.value();
 
   // Design decision: checking for 304 AFTER the open in case permissions change.
   auto cacheControl = getOrDefault(config_.mimeCacheControl, mime, config_.defaultCacheControl);

@@ -1,13 +1,14 @@
 #include <nlohmann/json.hpp>
 
-#include <rukh/AsyncFileWriter.hpp>
 #include <rukh/HttpRequest.hpp>
 #include <rukh/HttpResponse.hpp>
 #include <rukh/MultipartParser.hpp>
+#include <rukh/core/AsyncFileWriter.hpp>
 #include <rukh/core/Task.hpp>
 
 #include "routes/testRoutes.hpp"
 
+// TODO: Add tests for these
 void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
                             rukh::ThreadPool *threadPool) {
   using namespace rukh;
@@ -61,7 +62,7 @@ void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &erro
     mp.storeFieldValue("password", password);
     mp.storeFieldValues("terms", terms);
 
-    std::optional<AsyncFileWriter> writerOpt = AsyncFileWriter::open("./public/test.bin");
+    std::optional<core::AsyncFileWriter> writerOpt = core::AsyncFileWriter::open("./app/public/test.bin");
     if (not writerOpt)
       throw std::runtime_error("File issue");
     mp.onFile("file", [&writerOpt](std::span<unsigned char> data) -> core::Task<void> {

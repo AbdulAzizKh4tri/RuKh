@@ -83,7 +83,7 @@ public:
    * @param offset The offset at which to read the file from, -1 to let the system keep track of that.
    *
    * @see FileReadAwaitable
-   *
+   * @see IoUringInstace::prepRead
    */
   void submitFileRead(int fd, void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr, uint64_t offset);
 
@@ -98,23 +98,22 @@ public:
    * @param offset The offset at which to start writing buf to the file, -1 to let the system keep track of that.
    *
    * @see FileWriteAwaitable
+   * @see IoUringInstace::prepWrite
    */
   void submitFileWrite(int fd, const void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr, uint64_t offset);
 
   /**
    * @brief The executor loop that runs everything.
    *
-   * @verbatim
-    simplified loop:
-    {
-     check shutdown flag. If set, try to shut down gracefully, then terminate after timeout or interrupt from user.
-     check ioUring for completions and push the awaiters to the ready queue.
-     resume ready tasks.
-     wait for epoll events. Handle resuming of Tasks waiting for PoolTasks or I/O.
-     sweep the suspendedTasks for deadlines.
-     submit any new file I/O using @c IoUringInstance  's @c ioSubmit
-    }
-    @endverbatim
+   *simplified loop: \n
+   *{\n
+   * check shutdown flag. If set, try to shut down gracefully, then terminate after timeout or interrupt from user.\n
+   * check ioUring for completions and push the awaiters to the ready queue. @c IoUringInstance::drainCompletions \n
+   * resume ready tasks.\n
+   * wait for epoll events. Handle resuming of @c Task waiting for @c PoolTask or I/O.\n
+   * sweep the suspendedTasks for deadlines.\n
+   * submit any new file I/O using @c IoUringInstance  's @c ioSubmit. \n
+   * }
    *
    */
   void run(std::atomic<bool> &shutdown);

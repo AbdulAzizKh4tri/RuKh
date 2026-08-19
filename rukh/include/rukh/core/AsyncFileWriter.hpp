@@ -1,11 +1,17 @@
+/**
+ * @file AsyncFileWriter.hpp
+ * @brief Asynchronous file writing via io_uring
+ */
+
 #pragma once
 
 #include <filesystem>
 
 #include <rukh/core/Awaitables.hpp>
 
-namespace rukh {
+namespace rukh::core {
 
+/// Asynchronous file writing via io_uring
 class AsyncFileWriter {
 public:
   AsyncFileWriter() : fd_(-1) {}
@@ -29,6 +35,11 @@ public:
   AsyncFileWriter(AsyncFileWriter const &) = delete;
   AsyncFileWriter &operator=(AsyncFileWriter const &) = delete;
 
+  /**
+   * @brief Open a file for writing
+   * @param path The path to the write to.
+   * @returns An AsyncFileWriter on success, nullopt on failure.
+   */
   static std::optional<AsyncFileWriter> open(const std::filesystem::path &path) {
     int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1)
@@ -36,12 +47,15 @@ public:
     return AsyncFileWriter(fd);
   }
 
-  core::Task<bool> writeAll(std::string_view data) {
+  /// Write the entire contents of @p data into the file.
+  Task<bool> writeAll(std::string_view data) {
     int n = co_await FileWriteAwaitable{.fd = fd_, .buf = data.data(), .len = data.size()};
     co_return n == static_cast<int>(data.size());
   }
 
-  core::Task<bool> writeChunk(std::string_view data) {
+  /// @brief Write a chunk of data into the file. May return without writing full data to the file. Next call carries on
+  /// from where it left.
+  Task<bool> writeChunk(std::string_view data) {
     int n = co_await FileWriteAwaitable{.fd = fd_, .buf = data.data(), .len = data.size(), .offset = offset_};
     if (n < 0)
       co_return false;
@@ -54,4 +68,4 @@ private:
   uint64_t offset_ = 0;
   AsyncFileWriter(int fd) : fd_(fd) {}
 };
-} // namespace rukh
+} // namespace rukh::core

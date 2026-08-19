@@ -24,7 +24,7 @@ namespace rukh::logging {
  * @param file Log file path. Empty to disable file logging.
  * @param console Enable console logging.
  *
- * @return The configured async logger, or nullptr if logging is disabled.
+ * @returns The configured async logger, or nullptr if logging is disabled.
  *
  * The returned logger can be customized further by the caller.
  * Its sinks() contain the active sinks:

@@ -4,7 +4,7 @@
 
 #include <rukh/core/Executor.hpp>
 
-namespace rukh {
+namespace rukh::core {
 
 struct ReadAwaitable {
   int fd;
@@ -59,4 +59,4 @@ struct FileWriteAwaitable {
 
   int await_resume() { return result; }
 };
-} // namespace rukh
+} // namespace rukh::core

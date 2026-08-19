@@ -116,7 +116,7 @@ ErrorFactory &HttpServer::getErrorFactory() { return errorFactory_; }
 core::Task<void> HttpServer::tcpAcceptLoop(net::ListenerSocket &listener) {
   core::tl_executor->registerReadFd(listener.getFd());
   for (;;) {
-    co_await ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
+    co_await core::ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
     if (core::tl_timed_out) {
       core::tl_timed_out = false;
       if (shutdown_)
@@ -149,7 +149,7 @@ core::Task<void> HttpServer::tcpAcceptLoop(net::ListenerSocket &listener) {
 core::Task<void> HttpServer::tlsAcceptLoop(net::ListenerSocket &listener) {
   core::tl_executor->registerReadFd(listener.getFd());
   for (;;) {
-    co_await ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
+    co_await core::ReadAwaitable{listener.getFd(), now() + std::chrono::seconds(3)};
     if (core::tl_timed_out) {
       core::tl_timed_out = false;
       if (shutdown_)
