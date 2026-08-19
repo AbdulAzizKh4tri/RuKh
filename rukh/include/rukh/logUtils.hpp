@@ -8,10 +8,6 @@
 #include <spdlog/async.h>
 #include <string>
 
-#include <rukh/HttpRequest.hpp>
-#include <rukh/HttpResponse.hpp>
-#include <rukh/HttpStreamResponse.hpp>
-
 /**
  * @brief Logging namespace
  */
@@ -32,9 +28,5 @@ namespace rukh::logging {
  * - basic_file_sink_mt (if file is non-empty)
  */
 std::shared_ptr<spdlog::async_logger> configureLog(bool on = true, const std::string &file = "", bool console = true);
-
-void logRequest(const HttpRequest &req, const HttpResponse &res);
-
-void logRequest(const HttpRequest &req, const HttpStreamResponse &res);
 
 } // namespace rukh::logging

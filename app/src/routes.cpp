@@ -2,12 +2,13 @@
 
 #include <nlohmann/json.hpp>
 
-#include <rukh/ErrorFactory.hpp>
-#include <rukh/HttpResponse.hpp>
 #include <rukh/core/Task.hpp>
+#include <rukh/http/ErrorFactory.hpp>
+#include <rukh/http/HttpResponse.hpp>
 
 using json = nlohmann::json;
 using namespace rukh;
+using namespace rukh::http;
 
 void registerRoutes(Router &router, const ErrorFactory &errorFactory, pool::ThreadPool *threadPool) {
 

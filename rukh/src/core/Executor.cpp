@@ -5,7 +5,7 @@
 
 #include <rukh/ServerConfig.hpp>
 #include <rukh/core/ExecutorContext.hpp>
-#include <rukh/core/utils.hpp>
+#include <rukh/utils.hpp>
 
 namespace rukh::core {
 

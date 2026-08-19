@@ -1,0 +1,20 @@
+#pragma once
+
+#include <rukh/http/compression/BrotliCompressor.hpp>
+#include <rukh/http/compression/GzipCompressor.hpp>
+#include <rukh/http/compression/ICompressor.hpp>
+
+namespace rukh::http::compression  {
+
+inline std::unique_ptr<ICompressor> getCompressor(std::string_view encoding) {
+  if (encoding == "identity")
+    return nullptr;
+  if (encoding == "br")
+    return std::make_unique<BrotliCompressor>();
+  if (encoding == "gzip")
+    return std::make_unique<GzipCompressor>();
+  if (encoding == "*")
+    return std::make_unique<BrotliCompressor>(); // default
+  return nullptr;
+}
+} // namespace rukh

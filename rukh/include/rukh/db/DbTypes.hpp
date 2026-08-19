@@ -5,8 +5,8 @@
 #include <string>
 
 #include <rukh/TypeHelpers.hpp>
-#include <rukh/core/utils.hpp>
 #include <rukh/db/DbValue.hpp>
+#include <rukh/utils.hpp>
 
 namespace rukh::db {
 

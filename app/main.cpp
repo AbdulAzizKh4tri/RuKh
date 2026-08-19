@@ -5,10 +5,10 @@
 #include <spdlog/sinks/ansicolor_sink.h>
 #include <spdlog/spdlog.h>
 
-#include <rukh/HttpResponse.hpp>
-#include <rukh/HttpServer.hpp>
-#include <rukh/Router.hpp>
 #include <rukh/db/Sqlite3Db.hpp>
+#include <rukh/http/HttpResponse.hpp>
+#include <rukh/http/HttpServer.hpp>
+#include <rukh/http/Router.hpp>
 #include <rukh/logUtils.hpp>
 #include <rukh/orm/OrmConfig.hpp>
 #include <rukh/pool/ThreadPool.hpp>
@@ -22,6 +22,7 @@
 
 using json = nlohmann::json;
 using namespace rukh;
+using namespace rukh::http;
 int main() {
 
   int N;

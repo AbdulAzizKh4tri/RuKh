@@ -4,7 +4,6 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/TypeHelpers.hpp>
-#include <rukh/core/utils.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/DbValue.hpp>
 #include <rukh/db/IDatabase.hpp>

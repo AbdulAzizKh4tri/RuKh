@@ -3,8 +3,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include <rukh/HttpRequest.hpp>
-#include <rukh/HttpResponse.hpp>
+#include <rukh/http/HttpRequest.hpp>
+#include <rukh/http/HttpResponse.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/ScopedTransaction.hpp>
 #include <rukh/orm/OrmConfig.hpp>
@@ -14,10 +14,11 @@
 #include "models/Post.hpp"
 #include "models/User.hpp"
 
-void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::pool::ThreadPool *threadPool) {
+void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFactory &errorFactory, rukh::pool::ThreadPool *threadPool) {
   auto db = rukh::orm::OrmConfig::db;
 
   using namespace rukh;
+  using namespace rukh::http;
   using namespace nlohmann;
 
   // -- ORM test routes -------------------------------

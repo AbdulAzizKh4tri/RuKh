@@ -2,18 +2,20 @@
 
 #include <memory>
 
-#include <rukh/Router.hpp>
-#include <rukh/middleware/CacheControlMiddleware.hpp>
-#include <rukh/middleware/CompressionMiddleware.hpp>
-#include <rukh/middleware/CorsMiddleware.hpp>
-#include <rukh/middleware/InMemorySessionStore.hpp>
-#include <rukh/middleware/SessionMiddleware.hpp>
-#include <rukh/middleware/StaticMiddleware.hpp>
+#include <rukh/http/Router.hpp>
+#include <rukh/http/middleware/CacheControlMiddleware.hpp>
+#include <rukh/http/middleware/CompressionMiddleware.hpp>
+#include <rukh/http/middleware/CorsMiddleware.hpp>
+#include <rukh/http/middleware/SessionMiddleware.hpp>
+#include <rukh/http/middleware/StaticMiddleware.hpp>
+#include <rukh/http/session/InMemorySessionStore.hpp>
 
 #include "errors.hpp"
 
-inline void registerMiddlewares(rukh::Router &router, const std::string &host) {
+inline void registerMiddlewares(rukh::http::Router &router, const std::string &host) {
   using namespace rukh;
+  using namespace rukh::http;
+  using namespace rukh::http::middleware;
   CorsMiddleware corsMiddleware;
   corsMiddleware.setCorsOrigins({"http://localhost:8080", "https://localhost:8443", "http://127.0.0.1:8080",
                                  "http://" + host + ":8080", "https://" + host + ":8443"});

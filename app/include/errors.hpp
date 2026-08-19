@@ -1,10 +1,11 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <rukh/ErrorFactory.hpp>
+#include <rukh/http/ErrorFactory.hpp>
 
-inline rukh::ErrorFactory &getErrorFactory() {
+inline rukh::http::ErrorFactory &getErrorFactory() {
   using namespace rukh;
+  using namespace rukh::http;
   using json = nlohmann::json;
   static ErrorFactory errorFactory;
   static bool called = false;

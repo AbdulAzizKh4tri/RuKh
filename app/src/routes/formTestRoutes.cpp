@@ -1,17 +1,18 @@
 #include <nlohmann/json.hpp>
 
-#include <rukh/HttpRequest.hpp>
-#include <rukh/HttpResponse.hpp>
-#include <rukh/MultipartParser.hpp>
+#include <rukh/http/HttpRequest.hpp>
+#include <rukh/http/HttpResponse.hpp>
+#include <rukh/http/MultipartParser.hpp>
 #include <rukh/core/AsyncFileWriter.hpp>
 #include <rukh/core/Task.hpp>
 
 #include "routes/testRoutes.hpp"
 
 // TODO: Add tests for these
-void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
+void registerFormTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFactory &errorFactory,
                             rukh::pool::ThreadPool *threadPool) {
   using namespace rukh;
+  using namespace rukh::http;
   using namespace nlohmann;
 
   // POST /tests/forms/urlencoded

@@ -10,7 +10,7 @@
 
 #include <rukh/core/Executor.hpp>
 #include <rukh/core/ExecutorContext.hpp>
-#include <rukh/core/utils.hpp>
+#include <rukh/utils.hpp>
 #include <rukh/net/StreamResults.hpp>
 
 namespace rukh::net {

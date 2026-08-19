@@ -1,14 +1,15 @@
 #include <nlohmann/json.hpp>
 
-#include <rukh/HttpRequest.hpp>
-#include <rukh/HttpResponse.hpp>
+#include <rukh/http/HttpRequest.hpp>
+#include <rukh/http/HttpResponse.hpp>
 #include <rukh/core/Task.hpp>
 
 #include "routes/testRoutes.hpp"
 
-void registerStreamTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
+void registerStreamTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFactory &errorFactory,
                               rukh::pool::ThreadPool *threadPool) {
   using namespace rukh;
+  using namespace rukh::http;
   using namespace nlohmann;
   // -- Chunked / streaming response test routes -------------------------------
   // All live under /tests/stream/*
