@@ -110,7 +110,7 @@ public:
    * check shutdown flag. If set, try to shut down gracefully, then terminate after timeout or interrupt from user.\n
    * check ioUring for completions and push the awaiters to the ready queue. @c IoUringInstance::drainCompletions \n
    * resume ready tasks.\n
-   * wait for epoll events. Handle resuming of @c Task waiting for @c PoolTask or I/O.\n
+   * wait for epoll events. Handle resuming of @c Task waiting for @c PoolJob or I/O.\n
    * sweep the suspendedTasks for deadlines.\n
    * submit any new file I/O using @c IoUringInstance  's @c ioSubmit. \n
    * }
@@ -118,7 +118,7 @@ public:
    */
   void run(std::atomic<bool> &shutdown);
 
-  /// Used by @c ThreadPool to post tasks to the @c Executor
+  /// Used by @c ThreadPool to post a coroutine_handle to resume after a PoolJob completes running.
   void post(std::coroutine_handle<> h);
 
   /// Mark a Task started using @c spawn as finished.

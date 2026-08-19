@@ -14,7 +14,7 @@
 #include "models/Post.hpp"
 #include "models/User.hpp"
 
-void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::ThreadPool *threadPool) {
+void registerOrmTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory, rukh::pool::ThreadPool *threadPool) {
   auto db = rukh::orm::OrmConfig::db;
 
   using namespace rukh;

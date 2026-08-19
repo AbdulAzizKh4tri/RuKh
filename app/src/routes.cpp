@@ -9,7 +9,7 @@
 using json = nlohmann::json;
 using namespace rukh;
 
-void registerRoutes(Router &router, const ErrorFactory &errorFactory, ThreadPool *threadPool) {
+void registerRoutes(Router &router, const ErrorFactory &errorFactory, pool::ThreadPool *threadPool) {
 
   router.get("/random", [](const HttpRequest &request) -> core::Task<Response> {
     HttpResponse response(200);

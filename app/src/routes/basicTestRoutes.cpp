@@ -7,7 +7,7 @@
 #include "routes/testRoutes.hpp"
 
 void registerBasicTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                             rukh::ThreadPool *threadPool) {
+                             rukh::pool::ThreadPool *threadPool) {
   using namespace rukh;
   using namespace nlohmann;
 

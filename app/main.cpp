@@ -8,10 +8,10 @@
 #include <rukh/HttpResponse.hpp>
 #include <rukh/HttpServer.hpp>
 #include <rukh/Router.hpp>
-#include <rukh/ThreadPool.hpp>
 #include <rukh/db/Sqlite3Db.hpp>
 #include <rukh/logUtils.hpp>
 #include <rukh/orm/OrmConfig.hpp>
+#include <rukh/pool/ThreadPool.hpp>
 
 #include "include/errors.hpp"
 #include "include/middlewares.hpp"
@@ -44,7 +44,7 @@ int main() {
 
   HttpServer server(getErrorFactory());
   size_t threadPoolSize = N * 2;
-  ThreadPool threadPool(threadPoolSize);
+  pool::ThreadPool threadPool(threadPoolSize);
 
   size_t connectionPoolSize = threadPoolSize;
 

@@ -10,7 +10,7 @@
 
 // TODO: Add tests for these
 void registerFormTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                            rukh::ThreadPool *threadPool) {
+                            rukh::pool::ThreadPool *threadPool) {
   using namespace rukh;
   using namespace nlohmann;
 

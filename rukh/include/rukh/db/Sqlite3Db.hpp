@@ -7,7 +7,7 @@
 #include <string>
 
 #include <rukh/Exceptions.hpp>
-#include <rukh/ThreadPool.hpp>
+#include <rukh/pool/ThreadPool.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
@@ -21,7 +21,7 @@ const int SQLITE3_BUSY_TIMEOUT = 5000; // ms to wait on SQLITE_BUSY instead of f
 
 class Sqlite3Db : public IDatabase {
 public:
-  Sqlite3Db(const std::string &filename, ThreadPool *threadPool, size_t ConnectionPoolSize = 4)
+  Sqlite3Db(const std::string &filename, pool::ThreadPool *threadPool, size_t ConnectionPoolSize = 4)
       : threadPool_(threadPool) {
     for (int i = 0; i < ConnectionPoolSize; i++) {
       sqlite3 *dbConnection;
@@ -102,7 +102,7 @@ public:
 
 private:
   ConnectionQueue connectionQueue_;
-  ThreadPool *threadPool_;
+  pool::ThreadPool *threadPool_;
 };
 
 } // namespace rukh::db

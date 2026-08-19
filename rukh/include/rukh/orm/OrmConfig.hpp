@@ -1,7 +1,7 @@
 #pragma once
 
-#include <rukh/ThreadPool.hpp>
 #include <rukh/db/IDatabase.hpp>
+#include <rukh/pool/ThreadPool.hpp>
 
 namespace rukh::orm {
 

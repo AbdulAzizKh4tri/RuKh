@@ -2,19 +2,19 @@
 
 #include <functional>
 #include <rukh/Exceptions.hpp>
-#include <rukh/ThreadPool.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/Sqlite3QueryExecutor.hpp>
 #include <rukh/db/Sqlite3Types.hpp>
+#include <rukh/pool/ThreadPool.hpp>
 #include <spdlog/spdlog.h>
 
 namespace rukh::db {
 class Sqlite3Transaction : public ITransaction {
 public:
-  Sqlite3Transaction(Connection *conn, ThreadPool *threadPool, std::move_only_function<void() noexcept> abandonFn)
+  Sqlite3Transaction(Connection *conn, pool::ThreadPool *threadPool, std::move_only_function<void() noexcept> abandonFn)
       : conn_(conn), threadPool_(threadPool), abandonFn_(std::move(abandonFn)) {}
 
   core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
@@ -89,7 +89,7 @@ public:
 private:
   Connection *conn_;
   std::move_only_function<void() noexcept> abandonFn_;
-  ThreadPool *threadPool_;
+  pool::ThreadPool *threadPool_;
   std::atomic<bool> busy_;
   std::mutex mutex_;
   std::condition_variable cv_;

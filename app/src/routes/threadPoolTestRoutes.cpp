@@ -7,7 +7,7 @@
 #include "routes/testRoutes.hpp"
 
 void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory &errorFactory,
-                                  rukh::ThreadPool *threadPool) {
+                                  rukh::pool::ThreadPool *threadPool) {
   using namespace rukh;
   using namespace nlohmann;
   // -- Thread pool test routes -------------------------------
@@ -92,7 +92,7 @@ void registerThreadPoolTestRoutes(rukh::Router &router, const rukh::ErrorFactory
     if (!nParam.empty())
       n = std::clamp(std::stoi(nParam), 1, 16);
 
-    std::vector<PoolTaskAwaitable<int>> handles;
+    std::vector<pool::PoolJobAwaitable<int>> handles;
     handles.reserve(n);
 
     for (int i = 0; i < n; i++) {
