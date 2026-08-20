@@ -7,14 +7,14 @@
 #include <string>
 
 #include <rukh/Exceptions.hpp>
-#include <rukh/pool/ThreadPool.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
-#include <rukh/db/Sqlite3QueryExecutor.hpp>
-#include <rukh/db/Sqlite3Transaction.hpp>
-#include <rukh/db/Sqlite3Types.hpp>
+#include <rukh/db/sqlite3/Sqlite3QueryExecutor.hpp>
+#include <rukh/db/sqlite3/Sqlite3Transaction.hpp>
+#include <rukh/db/sqlite3/Sqlite3Types.hpp>
+#include <rukh/pool/ThreadPool.hpp>
 
 namespace rukh::db {
 const int SQLITE3_BUSY_TIMEOUT = 5000; // ms to wait on SQLITE_BUSY instead of failing immediately
@@ -54,7 +54,7 @@ public:
   }
 
   core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
-                                                               const std::vector<DbValue> &params = {}) override {
+                                                                     const std::vector<DbValue> &params = {}) override {
     Connection *conn = acquireConnection();
     ConnectionReleaseGuard connectionGuard{conn, &connectionQueue_};
 

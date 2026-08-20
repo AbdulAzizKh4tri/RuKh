@@ -1,10 +1,19 @@
+/**
+ * @file CompressibleMimeTypes.hpp
+ * @brief List of compressible mime types
+ */
+
 #pragma once
 
 #include <string>
 #include <unordered_set>
 
-namespace rukh::http::compression  {
+namespace rukh::http::compression {
 
+/**
+ * @brief List of compressible mime types.
+ * @attention This list is not exhaustive and may need to be extended in the future.
+ */
 static std::unordered_set<std::string> compressibleMimeTypes = {
     // Text
     "text/html",
@@ -35,4 +44,4 @@ static std::unordered_set<std::string> compressibleMimeTypes = {
     "font/otf",
     "application/vnd.ms-fontobject",
 };
-}
+} // namespace rukh::http::compression

@@ -1,3 +1,7 @@
+/**
+ * @file StaticMiddleware.hpp
+ * @brief Middleware for serving static files.
+ */
 #pragma once
 
 #include <filesystem>
@@ -11,13 +15,32 @@
 
 namespace rukh::http::middleware {
 
+/// Config for StaticMiddleware
 struct StaticConfig {
+  /// The directory in the file system to serve static files from
   std::string root;
+  /// The path prefix to serve static files from
   std::string prefix;
+  /// cache control for different mime types
   std::unordered_map<std::string, std::string> mimeCacheControl;
+  /// the default cache control header
   std::string defaultCacheControl = "max-age=5, public";
 };
 
+/**
+ * @brief Middleware for serving static files. Short circuits the request if the file is found.
+ *
+ * Only GET and HEAD requests that match the prefix path are served, the rest pass through.
+ * If file is found, decides whether to compress the file. Creates a compressed version of the file depending on the
+ * request's compression preference.
+ *
+ * Checks cache headers, and acts accordingly.
+ * Handles Range queries and sends partial content if requested.
+ * Depending on the size of the file, the file is either sent or streamed.
+ *
+ * @note Handles it's own caching and compression, so must come before those middlewares. Also short circuits, so best
+ * to add as early in the chain as possible.
+ */
 class StaticMiddleware {
 public:
   StaticMiddleware(ErrorFactory &errorFactory, StaticConfig);
@@ -40,4 +63,4 @@ private:
   std::filesystem::path canonicalRoot_;
   std::filesystem::path compressedRoot_;
 };
-} // namespace rukh::http
+} // namespace rukh::http::middleware

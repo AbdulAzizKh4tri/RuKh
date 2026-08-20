@@ -1,6 +1,6 @@
 /**
  * @file HttpConnection.hpp
- * @brief HTTP Connection with the entire HTTP lifecycle
+ * @brief HTTP connection with the entire HTTP lifecycle
  */
 
 #pragma once
@@ -33,7 +33,7 @@
 
 namespace rukh::http {
 
-/// HTTP Connection with the entire HTTP lifecycle
+/// HTTP connection with the entire HTTP lifecycle
 template <typename Stream> class HttpConnection {
 public:
   HttpConnection(std::unique_ptr<Stream> stream, Router &router, ErrorFactory &errorFactory,

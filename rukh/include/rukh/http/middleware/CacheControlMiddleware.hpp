@@ -1,19 +1,27 @@
+/**
+ * @file CacheControlMiddleware.hpp
+ * @brief Middleware for cache control
+ */
 #pragma once
 
 #include <string>
 #include <unordered_map>
 
+#include <rukh/core/Task.hpp>
 #include <rukh/http/HttpRequest.hpp>
 #include <rukh/http/HttpTypes.hpp>
-#include <rukh/core/Task.hpp>
 
-namespace rukh::http::middleware  {
+namespace rukh::http::middleware {
+/// config for CacheControlMiddleware
 struct CacheControlConfig {
   std::vector<std::pair<std::string, std::string>> routeCacheControl;
   std::unordered_map<std::string, std::string> mimeCacheControl;
   std::string defaultCacheControl = "no-store";
 };
 
+/**
+ * @brief Middleware for cache control
+ */
 class CacheControlMiddleware {
 public:
   CacheControlMiddleware();
@@ -28,4 +36,4 @@ public:
 private:
   CacheControlConfig config_;
 };
-} // namespace rukh
+} // namespace rukh::http::middleware

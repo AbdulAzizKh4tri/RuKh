@@ -1,9 +1,15 @@
+/**
+ * @file SessionHandle.hpp
+ * @brief Session Handle. Load a session from an ISessionStore and cache it.
+ */
+
 #pragma once
 
 #include <rukh/http/session/ISessionStore.hpp>
 
-namespace rukh::http  {
+namespace rukh::http {
 
+// Session Handle. Load a session from an ISessionStore and cache it.
 struct SessionHandle {
   ISessionStore *sessionStore;
   std::string id;
@@ -30,4 +36,4 @@ struct SessionHandle {
 
   bool wasLoaded() const { return session.has_value(); }
 };
-} // namespace rukh
+} // namespace rukh::http

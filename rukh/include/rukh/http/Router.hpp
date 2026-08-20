@@ -60,6 +60,9 @@ struct RouteNode {
  * });
  * @endcode
  *
+ * You can specify path parameters via @c /\<param\>/ in the route pattern.
+ * Wildcards can also be used, @c * for single segments and @c ** for multiple segments.
+ *
  * To use Middlewares, use the @c Router::use method.
  *
  * Example code:

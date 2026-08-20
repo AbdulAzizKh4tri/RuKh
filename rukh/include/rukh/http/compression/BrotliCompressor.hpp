@@ -1,3 +1,19 @@
+/**
+ * @file BrotliCompressor.hpp
+ * @brief Brotli compression implementation for HTTP response bodies.
+ *
+ * Provides a Brotli-based implementation of @ref rukh::http::compression::ICompressor.
+ *
+ * Brotli is a lossless compression algorithm developed by Google and is
+ * commonly used for HTTP content encoding. The compressed representation
+ * produced by this class uses the `br` content-coding defined for HTTP.
+ *
+ * @see https://github.com/google/brotli
+ * @see https://www.rfc-editor.org/rfc/rfc7932
+ * @see https://www.rfc-editor.org/rfc/rfc9110
+ * @see https://brotli.org/
+ */
+
 #pragma once
 
 #include <brotli/encode.h>
@@ -9,6 +25,17 @@
 
 namespace rukh::http::compression {
 
+/**
+ * @brief Compresses data using the Brotli compression algorithm.
+ *
+ * Implements @ref rukh::http::compression::ICompressor using the Brotli
+ * encoder API.
+ *
+ * @see rukh::http::compression::ICompressor
+ * @see https://github.com/google/brotli
+ * @see https://github.com/google/brotli/blob/master/c/include/brotli/encode.h
+ * @see https://www.rfc-editor.org/rfc/rfc7932
+ */
 class BrotliCompressor : public ICompressor {
 public:
   BrotliCompressor(int quality = BROTLI_DEFAULT_QUALITY) {

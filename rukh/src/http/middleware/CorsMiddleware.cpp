@@ -1,7 +1,7 @@
 #include <rukh/http/middleware/CorsMiddleware.hpp>
 
-#include <rukh/http/HttpResponse.hpp>
 #include <rukh/TypeHelpers.hpp>
+#include <rukh/http/HttpResponse.hpp>
 
 namespace rukh::http::middleware {
 
@@ -14,7 +14,7 @@ core::Task<Response> CorsMiddleware::operator()(const HttpRequest &request, Next
   auto originView = request.getHeaderLower("origin");
 
   if (originView.empty())
-    co_return co_await next();
+    co_return co_await next(); // not a CORS request
 
   auto origin = originView;
 
@@ -70,4 +70,4 @@ bool CorsMiddleware::isOriginAllowed(const std::string_view origin) {
   }
   return false;
 }
-} // namespace rukh
+} // namespace rukh::http::middleware

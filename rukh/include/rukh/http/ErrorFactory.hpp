@@ -15,6 +15,7 @@ namespace rukh::http {
 /// Returns a Formatted error Response
 using Formatter = std::function<HttpResponse(int statusCode, const std::string_view &message)>;
 
+/// Error Factory for easier error handling
 class ErrorFactory {
 public:
   ErrorFactory();
@@ -40,4 +41,4 @@ private:
   std::vector<std::pair<std::string, Formatter>> registeredFormatters_;
   std::pair<std::string, Formatter> fallbackFormatterPair_;
 };
-} // namespace rukh
+} // namespace rukh::http

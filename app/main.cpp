@@ -5,7 +5,7 @@
 #include <spdlog/sinks/ansicolor_sink.h>
 #include <spdlog/spdlog.h>
 
-#include <rukh/db/Sqlite3Db.hpp>
+#include <rukh/db/sqlite3/Sqlite3Db.hpp>
 #include <rukh/http/HttpResponse.hpp>
 #include <rukh/http/HttpServer.hpp>
 #include <rukh/http/Router.hpp>

@@ -1,3 +1,7 @@
+/**
+ * @file SessionMiddleware.hpp
+ * @brief Session middleware
+ */
 #pragma once
 
 #include <memory>
@@ -7,8 +11,9 @@
 #include <rukh/http/HttpTypes.hpp>
 #include <rukh/http/session/ISessionStore.hpp>
 
-namespace rukh::http::middleware  {
+namespace rukh::http::middleware {
 
+/// config for session, used by SessionMiddleware
 struct SessionConfig {
   size_t minIdSize = 8;
   size_t maxIdSize = 64;
@@ -16,6 +21,13 @@ struct SessionConfig {
   bool cookieSecure = false;
 };
 
+/**
+ * @brief Session middleware. Checks for session_id and attaches a SessionHandle to the request.
+ *
+ * After the request is processed:\n
+ * If the session was invalidated, deletes the session from store and deletes the session cookie.\n
+ * If the session was modified/created, stores the session in the session store and sets the session cookie.
+ */
 class SessionMiddleware {
 public:
   SessionMiddleware(SessionConfig SessionConfig, std::unique_ptr<ISessionStore> sessionStore);
@@ -27,4 +39,4 @@ private:
 
   std::string sanitize(std::string id) const;
 };
-} // namespace rukh
+} // namespace rukh::http::middleware

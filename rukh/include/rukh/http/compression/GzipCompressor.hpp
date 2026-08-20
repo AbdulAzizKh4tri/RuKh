@@ -1,3 +1,19 @@
+/**
+ * @file GzipCompressor.hpp
+ * @brief Gzip compression implementation for HTTP response bodies.
+ *
+ * Provides a gzip-based implementation of @ref rukh::http::compression::ICompressor.
+ *
+ * Gzip is a lossless compression format based on the DEFLATE compression
+ * algorithm. The compressed representation produced by this class uses the
+ * `gzip` HTTP content-coding.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc1952
+ * @see https://www.rfc-editor.org/rfc/rfc1951
+ * @see https://zlib.net/
+ * @see https://www.rfc-editor.org/rfc/rfc9110
+ */
+
 #pragma once
 
 #include <string>
@@ -9,6 +25,25 @@
 
 namespace rukh::http::compression {
 
+/**
+ * @brief Compresses data using gzip/DEFLATE through zlib.
+ *
+ * Implements @ref rukh::http::compression::ICompressor using the zlib
+ * `deflate` streaming API.
+ *
+ * @param level The zlib compression level. Defaults to
+ *        `Z_DEFAULT_COMPRESSION`.
+ *
+ * @note The zlib stream is initialized with a 15-bit DEFLATE window and
+ *       gzip framing (`15 + 16` in the `windowBits` argument to
+ *       `deflateInit2`).
+ *
+ * @see rukh::http::compression::ICompressor
+ * @see https://zlib.net/manual.html
+ * @see https://zlib.net/manual.html#Advanced
+ * @see https://www.rfc-editor.org/rfc/rfc1952
+ * @see https://www.rfc-editor.org/rfc/rfc1951
+ */
 class GzipCompressor : public ICompressor {
 public:
   GzipCompressor(int level = Z_DEFAULT_COMPRESSION) : level_(level) {

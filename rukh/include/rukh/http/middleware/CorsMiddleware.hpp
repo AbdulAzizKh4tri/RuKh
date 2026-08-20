@@ -1,14 +1,20 @@
+/**
+ * @file CorsMiddleware.hpp
+ * @brief Middleware for Cross Origin Resource Sharing.
+ */
+
 #pragma once
 
 #include <string>
 #include <vector>
 
+#include <rukh/core/Task.hpp>
 #include <rukh/http/HttpRequest.hpp>
 #include <rukh/http/HttpTypes.hpp>
-#include <rukh/core/Task.hpp>
 
-namespace rukh::http::middleware  {
+namespace rukh::http::middleware {
 
+/// Cors config
 struct CorsConfig {
   std::vector<std::string> allowedOrigins;
   std::vector<std::string> allowedHeaders = {"Authorization", "Content-Type"};
@@ -16,6 +22,11 @@ struct CorsConfig {
   std::string maxAge = "86400";
 };
 
+/**
+ * @brief Middleware for Cross Origin Resource Sharing.
+ *
+ * Short-circuits the request on OPTIONS requests, and sets CORS headers on non-OPTIONS requests.
+ */
 class CorsMiddleware {
 public:
   CorsMiddleware();
@@ -37,4 +48,4 @@ private:
 
   bool isOriginAllowed(const std::string_view origin);
 };
-} // namespace rukh
+} // namespace rukh::http::middleware

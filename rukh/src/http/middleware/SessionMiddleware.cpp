@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include <rukh/http/Cookie.hpp>
 #include <rukh/TypeHelpers.hpp>
+#include <rukh/http/Cookie.hpp>
 #include <rukh/http/session/SessionHandle.hpp>
 
 namespace rukh::http::middleware {
@@ -63,4 +63,4 @@ std::string SessionMiddleware::sanitize(std::string id) const {
       return "";
   return id;
 }
-} // namespace rukh
+} // namespace rukh::http::middleware

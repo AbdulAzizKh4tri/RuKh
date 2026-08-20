@@ -1,3 +1,7 @@
+/**
+ * @file InMemorySessionStore.hpp
+ * @brief An in-memory implementation of ISessionStore
+ */
 #pragma once
 
 #include <chrono>
@@ -9,17 +13,23 @@
 #include <rukh/core/Task.hpp>
 #include <rukh/http/session/ISessionStore.hpp>
 
-namespace rukh::http  {
+namespace rukh::http {
 
-struct SessionEntry {
-  Session session;
-  std::chrono::time_point<std::chrono::system_clock> lastAccessed;
-};
-
+/// An in-memory implementation of ISessionStore
 class InMemorySessionStore : public ISessionStore {
 public:
+  /// Session entry with last accessed time for ttl invalidation
+  struct SessionEntry {
+    Session session;
+    std::chrono::time_point<std::chrono::system_clock> lastAccessed;
+  };
+
   InMemorySessionStore(std::chrono::seconds ttl) : ttl_(ttl) {}
 
+  /**
+   * @brief Load session with the given @p id.
+   * @returns Session if found, std::nullopt if not found or invalidated
+   */
   core::Task<std::optional<Session>> load(const std::string &id) override {
     {
       std::shared_lock readLock(mutex_);
@@ -44,6 +54,7 @@ public:
     co_return std::nullopt;
   };
 
+  /// Save Session with @p id
   core::Task<void> save(const std::string &id, const Session &session) override {
     std::unique_lock writeLock(mutex_);
 
@@ -53,12 +64,14 @@ public:
     co_return;
   };
 
+  /// delete session
   core::Task<void> destroy(const std::string &id) override {
     std::unique_lock writeLock(mutex_);
     sessions_.erase(id);
     co_return;
   };
 
+  /// generate random id
   std::string generateId() override {
     unsigned char buf[32];
     if (RAND_bytes(buf, sizeof(buf)) != 1)
@@ -77,4 +90,4 @@ private:
   std::unordered_map<std::string, SessionEntry> sessions_;
   std::chrono::seconds ttl_;
 };
-} // namespace rukh
+} // namespace rukh::http

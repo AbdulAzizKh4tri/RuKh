@@ -5,7 +5,6 @@
 #include <rukh/ServerConfig.hpp>
 #include <rukh/core/AsyncFileReader.hpp>
 #include <rukh/core/AsyncFileWriter.hpp>
-#include <rukh/http/httpUtils.hpp>
 #include <rukh/http/ErrorFactory.hpp>
 #include <rukh/http/HttpRequest.hpp>
 #include <rukh/http/HttpResponse.hpp>
@@ -13,6 +12,7 @@
 #include <rukh/http/MimeTypes.hpp>
 #include <rukh/http/compression/CompressibleMimeTypes.hpp>
 #include <rukh/http/compression/CompressorFactory.hpp>
+#include <rukh/http/httpUtils.hpp>
 
 namespace rukh::http::middleware {
 
@@ -171,8 +171,9 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
   bool hasRangeHeader = not request.getHeaderLower("range").empty();
 
   bool isCompressible = not hasRangeHeader;
-  isCompressible = isCompressible && std::find(compression::compressibleMimeTypes.begin(), compression::compressibleMimeTypes.end(), mime) !=
-                                         compression::compressibleMimeTypes.end();
+  isCompressible =
+      isCompressible && std::find(compression::compressibleMimeTypes.begin(), compression::compressibleMimeTypes.end(),
+                                  mime) != compression::compressibleMimeTypes.end();
   isCompressible = isCompressible && fileSize >= ServerConfig::COMPRESS_MIN_BYTES;
 
   std::string compressedExtension = "";
@@ -524,6 +525,8 @@ void StaticMiddleware::setRoot(const std::string &root) {
 
 void StaticMiddleware::setPrefix(const std::string &prefix) { config_.prefix = prefix; }
 
+void StaticMiddleware::setErrorFactory(const ErrorFactory &errorFactory) { errorFactory_ = errorFactory; }
+
 void StaticMiddleware::setMimeCacheControl(const std::string &mimeType, const std::string &cacheControlHeader) {
   config_.mimeCacheControl[mimeType] = cacheControlHeader;
 };
@@ -540,4 +543,4 @@ HttpResponse StaticMiddleware::buildErrorResponse(const HttpRequest &request, co
     response.stripBody();
   return response;
 }
-} // namespace rukh
+} // namespace rukh::http::middleware

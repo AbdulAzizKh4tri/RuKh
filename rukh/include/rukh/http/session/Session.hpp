@@ -1,10 +1,16 @@
+/**
+ * @file Session.hpp
+ * @brief Http Session
+ */
+
 #pragma once
 
 #include <string>
 #include <unordered_map>
 
-namespace rukh::http  {
+namespace rukh::http {
 
+/// Http Session
 class Session {
 public:
   std::optional<std::string> get(const std::string &key) const {
@@ -43,4 +49,4 @@ private:
   bool isDirty_ = false;
   bool isInvalidated_ = false;
 };
-} // namespace rukh
+} // namespace rukh::http
