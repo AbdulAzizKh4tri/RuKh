@@ -30,7 +30,7 @@ public:
    * @brief Accept a TLS connection
    * @param ctx The SSL_CTX to use. requires SSL_CTX to be set up.
    *
-   * Check @c HttpServer::setTlsContext for reference 
+   * Check `HttpServer::setTlsContext` for reference
    *
    * @returns A TlsStream on success, nullopt if there are no pending connection requests.
    */
@@ -50,7 +50,7 @@ public:
    */
   int acceptRawFd();
 
-  /// Check @c Socket::setNonBlocking
+  /// Check `Socket::setNonBlocking`
   int setSocketNonBlocking();
   int getFd();
 

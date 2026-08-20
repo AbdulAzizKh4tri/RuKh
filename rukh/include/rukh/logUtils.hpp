@@ -1,5 +1,5 @@
 /**
- * @file logutils.hpp
+ * @file logUtils.hpp
  * @brief Logging utilities and configuration
  */
 

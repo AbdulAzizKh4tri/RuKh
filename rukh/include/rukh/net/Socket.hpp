@@ -1,13 +1,13 @@
 /**
  * @file Socket.hpp
- * @brief RAII wrapper for @c socket
+ * @brief RAII wrapper for `socket`
  */
 
 #pragma once
 
 namespace rukh::net {
 
-/// RAII wrapper for @c socket
+/// RAII wrapper for `socket`
 class Socket final {
 public:
   Socket(Socket const &) = delete;

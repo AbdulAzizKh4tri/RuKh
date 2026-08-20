@@ -20,7 +20,7 @@ namespace rukh::net {
 /// TLS stream
 class TlsStream {
 public:
-  /// Check @c HttpServer::setTlsContext for reference
+  /// Check `HttpServer::setTlsContext` for reference
   TlsStream(int fd, SSL_CTX *ctx, sockaddr_storage addr, socklen_t len);
 
   TlsStream(TlsStream &&other) noexcept;
@@ -44,7 +44,7 @@ public:
   /// abort connection, RST
   void resetConnection();
 
-  /// Check @c Socket::setNonBlocking
+  /// Check `Socket::setNonBlocking`
   int setSocketNonBlocking();
 
   std::string getIp() const;

@@ -30,8 +30,8 @@ public:
    * @brief Read body data into @p buf
    * @param buf
    * @returns The number of bytes read
-   *
-   * Reads the minimum of @c buf.size() and @c remaining_ bytes.
+   
+  * Reads the minimum of `buf.size()` and `remaining_ bytes`.
    */
   core::Task<size_t> read(std::span<unsigned char> buf) {
     if (exhausted_)
@@ -106,4 +106,4 @@ private:
   BodyReadFn readFn_;
   BodyDrainFn drainFn_;
 };
-} // namespace rukh
+} // namespace rukh::http

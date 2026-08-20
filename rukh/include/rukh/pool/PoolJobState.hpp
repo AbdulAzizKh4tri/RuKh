@@ -12,7 +12,7 @@
 namespace rukh::pool {
 
 /**
- * @brief Stores the state of a @c PoolJob
+ * @brief Stores the state of a `PoolJob`
  * @see ThreadPool
  * @see PoolJobAwaitable
  * @see PoolJob
@@ -30,16 +30,16 @@ template <typename R> struct PoolJobState {
   /**
    * @brief Has been co_awaited and hence the caller handle has been set, or the job is complete.
    *
-   * Used by @c PoolJobAwaitable::await_suspend to check if the PoolJob has finished running: notifies the executor if
+   * Used by `PoolJobAwaitable::await_suspend` to check if the PoolJob has finished running: notifies the executor if
    * so.
    *
-   * Used by @c PoolJob::runJob() to check if the Job has been co_awaited. If not, it should not notify the
+   * Used by `PoolJob::runJob()` to check if the Job has been co_awaited. If not, it should not notify the
    * executor.
    */
   std::atomic<bool> callerSetOrJobComplete = false;
 };
 
-/// void return type specialization for @c PoolJobState
+/// void return type specialization for `PoolJobState`
 template <> struct PoolJobState<void> {
   std::exception_ptr exception;
   std::coroutine_handle<> caller;

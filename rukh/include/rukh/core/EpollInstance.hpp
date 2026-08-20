@@ -9,7 +9,7 @@
 
 namespace rukh::core {
 
-/// RAII wrapper for @c epoll
+/// RAII wrapper for `epoll`
 class EpollInstance final {
 public:
   EpollInstance(EpollInstance const &) = delete;
@@ -43,7 +43,7 @@ public:
 
   /**
    * @brief Wait for events
-   * @param events An array of @c epoll_events to be filled
+   * @param events An array of `epoll_events` to be filled
    * @param maxevents The maximum number of events to be returned
    * @param timeout The maximum wait time in milliseconds
    */

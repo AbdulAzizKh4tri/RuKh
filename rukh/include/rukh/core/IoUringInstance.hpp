@@ -33,7 +33,7 @@ public:
    * @param fd the file fd to read from.
    * @param buf the buffer to write the read data into
    * @param len the length of data to be read
-   * @param userData Used to identify which read completed. Check @c IoUringInstance::drainCompletions
+   * @param userData Used to identify which read completed. Check `IoUringInstance::drainCompletions`
    * @param offset The offset at which to read the file from, -1 to let the system keep track of that.
    *
    * @see ioSubmit
@@ -54,7 +54,7 @@ public:
    * @param fd the file fd to write to.
    * @param buf the buffer to write the data from.
    * @param len the length of data to be written.
-   * @param userData Used to identify which write completed. Check @c IoUringInstance::drainCompletions
+   * @param userData Used to identify which write completed. Check `IoUringInstance::drainCompletions`
    * @param offset The offset in the file where we want to write, -1 to let the system keep track of that.
    *
    * @see ioSubmit
@@ -85,8 +85,8 @@ public:
    * void callback(uint64_t userData, int res);
    * @endcode
    *
-   * @param userData The identifying sequence set during @c prepRead / @c prepWrite.
-   * @param res The result of the cqe.
+   * @p userData The identifying sequence set during `prepRead` / `prepWrite`.\n
+   * @p res The result of the cqe.
    */
   template <typename Callback> void drainCompletions(Callback callback) {
     io_uring_cqe *cqe;

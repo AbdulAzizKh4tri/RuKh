@@ -10,8 +10,8 @@
 
 #include <rukh/core/Executor.hpp>
 #include <rukh/core/ExecutorContext.hpp>
-#include <rukh/utils.hpp>
 #include <rukh/net/StreamResults.hpp>
+#include <rukh/utils.hpp>
 
 namespace rukh::net {
 
@@ -205,9 +205,9 @@ public:
   uint16_t getPort() const { return stream_->getPort(); }
   int getFd() const { return stream_->getFd(); }
 
-  /// Handshake through stream @c TlsStream::handshake
+  /// Handshake through stream `TlsStream::handshake`
   HandshakeResult handshake() { return stream_->handshake(); }
-  /// reset connection through stream (RST) @c TcpStream::resetConnection @c TlsStream::resetConnection
+  /// reset connection through stream (RST) `TcpStream::resetConnection` `TlsStream::resetConnection`
   void resetConnection() { stream_->resetConnection(); }
 
 private:

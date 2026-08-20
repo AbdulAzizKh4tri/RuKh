@@ -27,7 +27,7 @@ enum class RouterResponse { OK, NOT_FOUND, METHOD_NOT_ALLOWED };
 struct RouteNode {
   std::unordered_map<std::string, RouteNode, StringHash, std::equal_to<>> children;
 
-  /// parameter @c /\<param\>/
+  /// parameter `/\<param\>/`
   std::unique_ptr<RouteNode> paramChild;
 
   /// wildcard /*
@@ -51,7 +51,7 @@ struct RouteNode {
 /**
  * @brief HTTP Router
  *
- * To define routes, use the @c get, @c post, @c put, @c patch and @c delete_ methods.
+ * To define routes, use the `get`, `post`, `put`,  `patch` and  `delete_` methods.
  *
  * Example code:
  * @code
@@ -60,10 +60,10 @@ struct RouteNode {
  * });
  * @endcode
  *
- * You can specify path parameters via @c /\<param\>/ in the route pattern.
- * Wildcards can also be used, @c * for single segments and @c ** for multiple segments.
+ * You can specify path parameters via `/\<param\>/` in the route pattern.
+ * Wildcards can also be used, `*` for single segments and `**` for multiple segments.
  *
- * To use Middlewares, use the @c Router::use method.
+ * To use Middlewares, use the `Router::use method`.
  *
  * Example code:
  * @code

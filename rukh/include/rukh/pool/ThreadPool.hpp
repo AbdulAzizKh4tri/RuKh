@@ -39,7 +39,7 @@ public:
    * @returns a PoolJobAwaitable<R> that can be co_awaited, where R is the return type of the @p callable
    *
    * The job will be enqueued and eventually run, whether it is co_awaited or not.
-   * It is recommended you use @c fireAndForget() if you do not care for the result or chronology.
+   * It is recommended you use `fireAndForget()` if you do not care for the result or chronology.
    */
   template <typename F> [[nodiscard]] auto submit(F callable) {
     using R = std::invoke_result_t<F>;

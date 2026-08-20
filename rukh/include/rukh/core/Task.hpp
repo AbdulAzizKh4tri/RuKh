@@ -18,7 +18,7 @@ namespace rukh::core {
  * @brief A coroutine task that can be co_awaited.
  * @tparam T  The type produced by the coroutine.
  * @details
- * @c Task is the primary coroutine type used throughout the rukh runtime.
+ * `Task` is the primary coroutine type used throughout the rukh runtime.
  * Typical usage:
  * @code
  * Task<int> compute() {
@@ -30,7 +30,7 @@ namespace rukh::core {
  *     // ...
  * }
  * @endcode
- * @note coroutines (aka functions that @c co_return @c Task<>) generally do not run until co_awaited.
+ * @note coroutines (aka functions that `co_return` `Task<>`) generally do not run until co_awaited.
  *
  * @see Task<void>
  */
@@ -65,7 +65,7 @@ public:
 
   struct FinalAwaiter {
 
-    /// @breif always false aka run await_suspend(). It handles what to do after this coroutine is finished.
+    /// @brief always false aka run await_suspend(). It handles what to do after this coroutine is finished.
     bool await_ready() noexcept { return false; }
 
     /// @brief If there's a continuation, resume it. Otherwise notify the Executor that we're done, and it's safe to

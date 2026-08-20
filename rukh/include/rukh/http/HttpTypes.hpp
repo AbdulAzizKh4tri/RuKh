@@ -17,7 +17,7 @@ namespace rukh::http  {
 /// varaint containing both HttpResponse types
 using Response = std::variant<HttpResponse, HttpStreamResponse>;
 
-/// The function to be set when defining routes in the @c Router
+/// The function to be set when defining routes in the `Router`
 using Handler = std::move_only_function<core::Task<Response>(HttpRequest &)>;
 
 /// next item in chain

@@ -29,7 +29,7 @@ public:
   /// unused for TCP, but needed to maintain a common Stream interface
   HandshakeResult handshake();
 
-  /// Check @c Socket::setNonBlocking
+  /// Check `Socket::setNonBlocking`
   int setSocketNonBlocking();
 
   /// abort connection, RST

@@ -27,7 +27,7 @@ public:
     /// The actual coroutine handle to resume when the I/O for this Task is ready
     std::coroutine_handle<> handle;
     bool waitingForWrite;
-    /// Used as an ID of sorts to compare with @c TaskDeadline
+    /// Used as an ID of sorts to compare with `TaskDeadline`
     int suspensionSeq;
   };
 
@@ -36,7 +36,7 @@ public:
     /// The deadline for this task
     std::chrono::steady_clock::time_point deadline;
     int fd;
-    /// Used as an ID of sorts to compare with @c SuspendedTask
+    /// Used as an ID of sorts to compare with `SuspendedTask`
     int suspensionSeq;
 
     bool operator>(const TaskDeadline &other) const { return deadline > other.deadline; }
@@ -53,10 +53,10 @@ public:
   ~Executor() = default;
 
   /**
-   * @brief Spawn a new @c Task
+   * @brief Spawn a new `Task`
    *
-   * Moves the @c Task into the Executor, owning it, and pushes the handle into the ready queue to be resumed.
-   * This is the only way other than co_await to run a @c Task.
+   * Moves the `Task` into the Executor, owning it, and pushes the handle into the ready queue to be resumed.
+   * This is the only way other than co_await to run a `Task`.
    */
   void spawn(core::Task<void> task);
 
@@ -79,7 +79,7 @@ public:
    * @param buf the buffer to write the read data into
    * @param len the length of data to be read
    * @param h the coroutine handle to resume once read completes
-   * @param resultPtr pointer to the int that stores the number of bytes read. @c FileReadAwaitable
+   * @param resultPtr pointer to the int that stores the number of bytes read. `FileReadAwaitable`
    * @param offset The offset at which to read the file from, -1 to let the system keep track of that.
    *
    * @see FileReadAwaitable
@@ -94,7 +94,7 @@ public:
    * @param buf the buffer to write the data from.
    * @param len the length of data to be written
    * @param h the coroutine handle to resume once the write completes
-   * @param resultPtr pointer to the int that stores the number of bytes written. @c FileWriteAwaitable
+   * @param resultPtr pointer to the int that stores the number of bytes written. `FileWriteAwaitable`
    * @param offset The offset at which to start writing buf to the file, -1 to let the system keep track of that.
    *
    * @see FileWriteAwaitable
@@ -108,20 +108,20 @@ public:
    *simplified loop: \n
    *{\n
    * check shutdown flag. If set, try to shut down gracefully, then terminate after timeout or interrupt from user.\n
-   * check ioUring for completions and push the awaiters to the ready queue. @c IoUringInstance::drainCompletions \n
+   * check ioUring for completions and push the awaiters to the ready queue. `IoUringInstance::drainCompletions` \n
    * resume ready tasks.\n
-   * wait for epoll events. Handle resuming of @c Task waiting for @c PoolJob or I/O.\n
+   * wait for epoll events. Handle resuming of `Task` waiting for `PoolJob` or I/O.\n
    * sweep the suspendedTasks for deadlines.\n
-   * submit any new file I/O using @c IoUringInstance  's @c ioSubmit. \n
+   * submit any new file I/O using `IoUringInstance` 's `ioSubmit`. \n
    * }
    *
    */
   void run(std::atomic<bool> &shutdown);
 
-  /// Used by @c ThreadPool to post a coroutine_handle to resume after a PoolJob completes running.
+  /// Used by `ThreadPool` to post a coroutine_handle to resume after a PoolJob completes running.
   void post(std::coroutine_handle<> h);
 
-  /// Mark a Task started using @c spawn as finished.
+  /// Mark a Task started using `spawn` as finished.
   void markRootFinished(void *addr);
 
 private:

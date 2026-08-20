@@ -13,7 +13,7 @@ struct PeerAddress {
   uint16_t port;
 };
 
-/// Resolve peer address from @c sockaddr_storage to @c PeerAddress
+/// Resolve peer address from `sockaddr_storage` to `PeerAddress`
 inline PeerAddress resolvePeerAddress(sockaddr_storage addr, socklen_t len) {
   PeerAddress result;
   if (addr.ss_family == AF_INET) {

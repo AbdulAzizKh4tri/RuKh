@@ -38,7 +38,7 @@ public:
 
   HttpRequest();
 
-  /// Parse the request headers, @p headerView does not include the trailing \r\\n
+  /// Parse the request headers, @p headerView does not include the trailing \\r\\n
   bool parseRequestHeader(std::string_view headerView);
 
   /// Consume the full request body stream and interpret it as a json object.
@@ -62,7 +62,7 @@ public:
   std::string_view getContentType() const;
 
   /**
-   * @brief get header with the given name. If multiple, returns the last one. Prefer @c HttpRequest::getHeaderLower.
+   * @brief get header with the given name. If multiple, returns the last one. Prefer `HttpRequest::getHeaderLower`.
    */
   std::string_view getHeader(const std::string &name) const;
 
@@ -81,7 +81,7 @@ public:
   std::vector<std::pair<std::string, std::string>> getAllHeaders() const;
 
   /**
-   * @brief Set a header value (override if exists). Prefer @c HttpRequest::setHeaderLower.
+   * @brief Set a header value (override if exists). Prefer `HttpRequest::setHeaderLower`.
    * The name will be lowercased before storing.
    */
   void setHeader(const std::string &name, const std::string &value);
@@ -89,7 +89,7 @@ public:
   /// Set a header value (override if exists). @p key must be lowercase
   void setHeaderLower(const std::string_view &lowercaseKey, const std::string &value);
 
-  /// Add a header value, ignores existing ones, use for multiple headers. Prefer @c HttpRequest::addHeaderLower
+  /// Add a header value, ignores existing ones, use for multiple headers. Prefer `HttpRequest::addHeaderLower`
   void addHeader(const std::string &name, const std::string &value);
   /// Add a header value, ignores existing ones, use for multiple headers.
   void addHeaderLower(const std::string_view &lowercaseKey, const std::string &value);
