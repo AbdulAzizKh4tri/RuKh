@@ -12,19 +12,22 @@
 
 namespace rukh {
 
-// TODO: understand this
+/// String hash used for std::unordered_map
 struct StringHash {
+  // TODO: understand this
   using is_transparent = void;
   size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
   size_t operator()(const std::string &s) const { return std::hash<std::string_view>{}(s); }
 };
 
+/// Get the current time. This is a monotonic clock.
 inline std::chrono::steady_clock::time_point now() {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
   return std::chrono::steady_clock::time_point(std::chrono::seconds(ts.tv_sec) + std::chrono::nanoseconds(ts.tv_nsec));
 }
 
+/// Get the number of digits in an integer
 inline int digit_count(int x) {
   unsigned int v = (x < 0) ? -static_cast<unsigned int>(x) : static_cast<unsigned int>(x);
 

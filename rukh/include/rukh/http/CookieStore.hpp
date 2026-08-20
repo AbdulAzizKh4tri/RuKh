@@ -39,8 +39,9 @@ public:
     return std::nullopt;
   }
 
-  /// @cond INTERNAL
+  /// @internalGroup @{
 
+  /// @internalMethod
   template <typename WriteFn> void serializeUsing(WriteFn &&write) const {
     for (const auto &cookie : cookies_) {
       write("set-cookie: ");
@@ -76,6 +77,7 @@ public:
     }
   }
 
+  /// @internalMethod
   size_t getSerializedSize() const {
     size_t total = 0;
     for (const auto &cookie : cookies_) {
@@ -103,7 +105,7 @@ public:
     return total;
   }
 
-  /// @endcond
+  /// @}
 
 private:
   std::vector<Cookie> cookies_;

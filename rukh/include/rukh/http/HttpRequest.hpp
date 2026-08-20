@@ -136,15 +136,18 @@ public:
   uint16_t getPort() const;
   const std::string &getMethod() const;
 
-  /** @cond INTERNAL */
-  void setPathParams(const std::vector<std::pair<std::string, std::string>> &pathParams);
-  void attachBodyStream(std::unique_ptr<BodyStream> bodyStream);
-  void setIp(const std::string &ip);
-  void setPort(uint16_t port);
-  void setMethod(const std::string &method);
-  void setSessionHandle(SessionHandle *sessionHandle);
-  void reset(const std::string &ip, uint16_t port);
-  /** @endcond */
+  /**
+   * @internalGroup
+   * @{
+   */
+  void setPathParams(const std::vector<std::pair<std::string, std::string>> &pathParams); ///< @internalMethod
+  void attachBodyStream(std::unique_ptr<BodyStream> bodyStream);                          ///< @internalMethod
+  void setIp(const std::string &ip);                                                      ///< @internalMethod
+  void setPort(uint16_t port);                                                            ///< @internalMethod
+  void setMethod(const std::string &method);                                              ///< @internalMethod
+  void setSessionHandle(SessionHandle *sessionHandle);                                    ///< @internalMethod
+  void reset(const std::string &ip, uint16_t port);                                       ///< @internalMethod
+  /** @} */
 
 private:
   std::vector<std::pair<std::string, std::string>> headers_;

@@ -9,12 +9,12 @@
 #include <string>
 #include <vector>
 
-#include <rukh/http/httpUtils.hpp>
+#include <rukh/core/Task.hpp>
 #include <rukh/http/CookieStore.hpp>
 #include <rukh/http/HeaderStore.hpp>
-#include <rukh/core/Task.hpp>
+#include <rukh/http/httpUtils.hpp>
 
-namespace rukh::http  {
+namespace rukh::http {
 
 /// The function signature to return the next chunk of data for the stream response. Return nullopt to end the stream.
 using NextChunkFn = std::move_only_function<core::Task<std::optional<std::string>>()>;
@@ -58,13 +58,17 @@ public:
   int getStatusCode() const;
   void setStatusCode(int statusCode);
 
-  /// @cond INTERNAL
+  /// @internalGroup @{
+
+  /// @internalMethod
   core::Task<std::optional<std::string>> getNextChunk();
 
+  /// @internalMethod
   bool serializeHeaderInto(std::vector<unsigned char> &buf) const;
 
+  /// @internalMethod
   bool serializeBlockInto(std::string_view chunk, std::vector<unsigned char> &buf, const std::string &mime = "");
-  /// @endcond
+  /// @{
 
 private:
   int statusCode_;
@@ -75,4 +79,4 @@ private:
 
   bool serializeChunkInto(std::string_view chunk, std::vector<unsigned char> &buf);
 };
-} // namespace rukh
+} // namespace rukh::http

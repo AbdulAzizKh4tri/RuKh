@@ -8,11 +8,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include <rukh/http/httpUtils.hpp>
 #include <rukh/http/CookieStore.hpp>
 #include <rukh/http/HeaderStore.hpp>
+#include <rukh/http/httpUtils.hpp>
 
-namespace rukh::http  {
+namespace rukh::http {
 
 /**
  * @brief Rukh's HTTP Response object
@@ -42,15 +42,19 @@ public:
 
   std::string getVersion() const;
 
-  /// @cond INTERNAL
+  /// @internalGroup @{
 
-  void setVersion(const std::string &version);
-  void stripBody();
-  static constexpr std::array noBody = {100, 101, 102, 103, 204, 304};
+  void setVersion(const std::string &version);                         ///< @internalMethod
+  void stripBody();                                                    ///< @internalMethod
+  static constexpr std::array noBody = {100, 101, 102, 103, 204, 304}; ///< @internalMethod
+
+  /// @internalMethod
   static std::string statusText(int statusCode) { return getOrDefault(statusStrings_, statusCode, "Unknown"); };
 
+  /// @internalMethod
   bool serializeInto(std::vector<unsigned char> &buf) const;
 
+  /// @internalMethod
   static std::string_view getStatusLine(int code) noexcept {
     switch (code) {
     case 200:
@@ -108,7 +112,7 @@ public:
     }
   }
 
-  /// @endcond
+  /// @}
 
 private:
   std::string body_, version_ = "HTTP/1.1";
@@ -187,4 +191,4 @@ private:
       {510, "Not Extended"},
       {511, "Network Authentication Required"}};
 };
-} // namespace rukh
+} // namespace rukh::http
