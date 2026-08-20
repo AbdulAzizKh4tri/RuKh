@@ -2,18 +2,16 @@
 
 #include <cstddef>
 #include <spdlog/spdlog.h>
+#include <sstream>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
-#include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
-#include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/QueryDispatcher.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
-#include <sstream>
 
 // TODO: figure out proper aliasing (VEERY LOWW priority)
 namespace rukh::orm {

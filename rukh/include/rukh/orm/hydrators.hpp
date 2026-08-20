@@ -4,56 +4,39 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/TypeHelpers.hpp>
+#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/orm/Column.hpp>
 
 namespace rukh::orm {
 
 template <typename Model, typename FieldT>
-bool hydrateModelColumn(Model &obj, const Column<Model, FieldT> &col, const db::Row &row,
+void hydrateModelColumn(Model &obj, const Column<Model, FieldT> &col, const db::Row &row,
                         const std::string &prefix = "") {
   std::string lookupName = prefix.empty() ? std::string(col.dbName) : (prefix + "_" + std::string(col.dbName));
   if constexpr (OptionalT<FieldT>) {
     if (row.isNull(lookupName)) {
       obj.*(col.fieldPtr) = std::nullopt;
-      return true;
+      return;
     }
+
     auto val = row.as<typename FieldT::value_type>(lookupName);
-    if (not val) {
-      SPDLOG_ERROR("Failed to hydrate column: {}", lookupName);
-      return false;
-    }
-    obj.*(col.fieldPtr) = std::move(*val);
-    return true;
+    obj.*(col.fieldPtr) = std::move(val);
   } else {
     auto val = row.as<FieldT>(lookupName);
-    if (not val) {
-      SPDLOG_ERROR("Failed to hydrate column: {}", lookupName);
-      return false;
-    }
-    obj.*(col.fieldPtr) = std::move(*val);
-    return true;
+    obj.*(col.fieldPtr) = std::move(val);
   }
 }
 
 template <typename Model> Model hydrateModelRow(const rukh::db::Row &row) {
   Model obj;
-  bool ok = true;
 
   std::apply(
       [&](auto &&...col) {
-        auto handle = [&](auto &&c) {
-          if (not ok)
-            return;
-          ok = hydrateModelColumn(obj, c, row);
-        };
+        auto handle = [&](auto &&c) { hydrateModelColumn(obj, c, row); };
         (handle(col), ...);
       },
       Model::columns());
-
-  if (not ok) {
-    throw rukh::OrmException("Failed to hydrate row: " + std::string(obj.tableName) + ": " + row.toString());
-  }
 
   obj.setPersisted();
   return obj;
@@ -72,21 +55,12 @@ void hydrateModelAt(const rukh::db::Row &row, ModelsTuple &objTuple, const Alias
   auto &obj = std::get<I>(objTuple);
   const auto alias = std::get<I>(aliases);
 
-  bool ok = true;
   std::apply(
       [&](auto &&...col) {
-        auto handle = [&](auto &&c) {
-          if (not ok)
-            return;
-          ok = hydrateModelColumn(obj, c, row, alias);
-        };
+        auto handle = [&](auto &&c) { hydrateModelColumn(obj, c, row, alias); };
         (handle(col), ...);
       },
       obj.columns());
-
-  if (not ok) {
-    throw rukh::OrmException("Failed to hydrate row: " + std::string(obj.tableName) + ": " + row.toString());
-  }
 }
 
 template <typename ModelsTuple, typename... Aliases>
@@ -114,7 +88,7 @@ std::vector<ModelsTuple> hydrateJoined(const rukh::db::QueryResult &queryResult,
 }
 
 template <size_t I, Tuple TypesTuple, Tuple ColumnNamesTuple>
-bool hydrateTupleValueAt(const db::Row &row, TypesTuple &valuesTuple, ColumnNamesTuple ColumnNames) {
+void hydrateTupleValueAt(const db::Row &row, TypesTuple &valuesTuple, ColumnNamesTuple ColumnNames) {
 
   using ValueType = std::tuple_element_t<I, TypesTuple>;
   ValueType &result = std::get<I>(valuesTuple);
@@ -123,25 +97,14 @@ bool hydrateTupleValueAt(const db::Row &row, TypesTuple &valuesTuple, ColumnName
   if constexpr (OptionalT<ValueType>) {
     if (row.isNull(columnName)) {
       result = std::nullopt;
-      return true;
+      return;
     }
 
     auto val = row.as<typename ValueType::value_type>(columnName);
-    if (not val) {
-      SPDLOG_ERROR("Failed to hydrate column: {}", columnName);
-      return false;
-    }
-
-    result = std::move(*val);
-    return true;
+    result = std::move(val);
   } else {
     auto val = row.as<ValueType>(columnName);
-    if (not val) {
-      SPDLOG_ERROR("Failed to hydrate column: {}", columnName);
-      return false;
-    }
-    result = std::move(*val);
-    return true;
+    result = std::move(val);
   }
 }
 

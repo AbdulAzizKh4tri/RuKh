@@ -1,14 +1,11 @@
 #pragma once
 
-#include <expected>
-#include <memory>
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
 #include <string>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/core/Task.hpp>
-#include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/db/sqlite3/Sqlite3QueryExecutor.hpp>

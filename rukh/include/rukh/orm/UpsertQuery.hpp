@@ -7,9 +7,7 @@
 #include <rukh/Exceptions.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
-#include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
-#include <rukh/orm/Column.hpp>
 #include <rukh/orm/Predicate.hpp>
 #include <rukh/orm/QueryDispatcher.hpp>
 #include <rukh/orm/hydrators.hpp>

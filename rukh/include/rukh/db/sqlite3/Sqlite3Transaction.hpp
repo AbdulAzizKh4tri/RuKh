@@ -1,15 +1,14 @@
 #pragma once
 
 #include <functional>
+#include <spdlog/spdlog.h>
+
 #include <rukh/Exceptions.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/IDatabase.hpp>
-#include <rukh/db/ITransaction.hpp>
 #include <rukh/db/sqlite3/Sqlite3QueryExecutor.hpp>
-#include <rukh/db/sqlite3/Sqlite3Types.hpp>
 #include <rukh/pool/ThreadPool.hpp>
-#include <spdlog/spdlog.h>
 
 namespace rukh::db {
 class Sqlite3Transaction : public ITransaction {

@@ -13,6 +13,7 @@ external/
 *.gif
 */test.db-*
 tetherIP.hpp
+.clangd
 
 
 # temporarily

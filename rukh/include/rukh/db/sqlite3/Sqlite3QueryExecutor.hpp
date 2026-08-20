@@ -6,7 +6,6 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/db/DbTypes.hpp>
-#include <rukh/db/DbValue.hpp>
 #include <rukh/db/sqlite3/Sqlite3Types.hpp>
 
 namespace rukh::db {

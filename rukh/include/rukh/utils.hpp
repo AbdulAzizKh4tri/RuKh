@@ -12,7 +12,7 @@
 
 namespace rukh {
 
-/// String hash used for std::unordered_map
+/// String hash used for std::unordered_map. Allows both std::string and std::string_view.
 struct StringHash {
   // TODO: understand this
   using is_transparent = void;

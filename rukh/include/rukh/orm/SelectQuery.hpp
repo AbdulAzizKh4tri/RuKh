@@ -3,13 +3,13 @@
 #include <expected>
 #include <optional>
 #include <spdlog/spdlog.h>
+#include <tuple>
 #include <sstream>
 #include <string>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/TypeHelpers.hpp>
 #include <rukh/core/Task.hpp>
-#include <rukh/db/IDatabase.hpp>
 #include <rukh/db/ITransaction.hpp>
 #include <rukh/orm/DeleteQuery.hpp>
 #include <rukh/orm/InsertQuery.hpp>
@@ -18,7 +18,6 @@
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
-#include <tuple>
 
 namespace rukh::orm {
 
@@ -248,7 +247,7 @@ public:
     if (not queryResult)
       co_return std::unexpected(queryResult.error());
 
-    co_return queryResult->rows[0].template as<int64_t>(0).value_or(0);
+    co_return queryResult->rows[0].template as<int64_t>(0);
   }
 
   /*

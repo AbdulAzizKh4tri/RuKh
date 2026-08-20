@@ -1,3 +1,9 @@
+/**
+ * @file DbValue.hpp
+ * @brief Represents a value that can be stored in the database.
+ *
+ * Every value that needs to be stored in the database must be either a DbValue or be convertible to one.
+ */
 #pragma once
 
 #include <nlohmann/json.hpp>
@@ -7,6 +13,11 @@
 
 namespace rukh::db {
 
+/**
+ * @brief Represents a value that can be stored in the database.
+ *
+ * Every value that needs to be stored in the database must be either a DbValue or be convertible to one.
+ */
 using DbValue = std::variant<int64_t, double, std::string, bool, std::vector<unsigned char>, std::nullptr_t>;
 
 template <std::integral T>
@@ -78,14 +89,14 @@ template <typename T> T fromDbValueImpl(const typename DbValueSource<T>::type &r
     return raw;
   } else if constexpr (std::integral<T> and std::integral<Source>) {
     if (not std::in_range<T>(raw))
-      throw OrmException("DB value " + std::to_string(raw) + " out of range for target type " +
-                         std::string(typeid(T).name()));
+      throw DatabaseException("DB value " + std::to_string(raw) + " out of range for target type " +
+                              std::string(typeid(T).name()));
     return static_cast<T>(raw);
   } else if constexpr (std::floating_point<T> and std::floating_point<Source>) {
     if (raw > 0 and raw > static_cast<Source>(std::numeric_limits<T>::max()))
-      throw OrmException("DB value out of range for target type " + std::string(typeid(T).name()));
+      throw DatabaseException("DB value out of range for target type " + std::string(typeid(T).name()));
     if (raw < 0 and raw < static_cast<Source>(std::numeric_limits<T>::lowest()))
-      throw OrmException("DB value out of range for target type " + std::string(typeid(T).name()));
+      throw DatabaseException("DB value out of range for target type " + std::string(typeid(T).name()));
     return static_cast<T>(raw);
   } else {
     static_assert(always_false_v<T>, "fromDbValueImpl has no generic conversion for this T/Source pair — "
@@ -99,7 +110,7 @@ T fromDbValue(const DbValue &v) {
   using Source = typename DbValueSource<T>::type;
   auto *raw = std::get_if<Source>(&v);
   if (not raw)
-    throw OrmException("DbValue does not hold expected alternative for type " + std::string(typeid(T).name()));
+    throw DatabaseException("DbValue does not hold expected alternative for type " + std::string(typeid(T).name()));
   return fromDbValueImpl<T>(*raw);
 }
 
