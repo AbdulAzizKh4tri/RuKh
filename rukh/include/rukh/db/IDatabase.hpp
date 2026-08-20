@@ -1,3 +1,7 @@
+/**
+ * @file IDatabase.hpp
+ * @brief Database interface
+ */
 #pragma once
 
 #include <expected>
@@ -14,19 +18,17 @@
 
 namespace rukh::db {
 
+/// Database interface that all database implementations must implement
 class IDatabase {
 public:
-  virtual core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &query,
-                                                                       const std::vector<DbValue> &params = {}) = 0;
+  /// Execute a query on the database with a vector of params.
+  virtual core::Task<std::expected<QueryResult, DatabaseError>>
+  executeQuery(const std::string &query, const std::vector<DbValue> &params = {}) = 0;
 
-  template <typename... Args>
-  core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql, Args &&...args) {
-    return executeQuery(sql, std::vector<DbValue>{std::forward<Args>(args)...});
-  }
+  /// Acquire a transaction, ownership transfers to caller. Must release.
+  virtual std::expected<std::unique_ptr<ITransaction>, DatabaseError> acquireTransaction() = 0;
 
-  virtual std::expected<std::unique_ptr<ITransaction>, DatabaseError>
-  acquireTransaction() = 0; // ownership transfers to caller, must call releaseTransaction if cleanup is needed
-
+  /// Release a transaction back to the pool
   virtual void releaseTransaction(ITransaction *transaction) = 0;
 };
 

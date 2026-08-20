@@ -27,7 +27,7 @@ enum class ContentLengthError {
 /// Rukh's HTTP Request object
 class HttpRequest {
 public:
-  /// used for Range
+  /// used for range queries
   using Range = std::pair<std::optional<size_t>, std::optional<size_t>>;
 
   static constexpr std::array singletonHeaders_ = {

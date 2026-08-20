@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <rukh/db/DbValue.hpp>
 #include <rukh/orm/ActiveRecord.hpp>
 #include <rukh/orm/Constraints.hpp>
 #include <rukh/orm/DefaultThroughModel.hpp>
@@ -12,13 +13,19 @@
 namespace models {
 using namespace rukh::orm;
 
+struct Email {
+  std::string email;
+};
+inline rukh::db::DbValue toDbValueImpl(models::Email e) { return e.email; }
+inline void to_json(nlohmann::json &j, const Email &email) { j = email.email; }
+
 struct User : ActiveRecord<User, int64_t> {
 
   static constexpr std::string_view tableName = "users";
 
   PkType id;
   std::optional<std::string> name;
-  std::optional<std::string> email;
+  std::optional<Email> email;
   std::optional<int64_t> age;
   std::optional<PkType> bestFriend;
   std::optional<PkType> mother;
@@ -83,3 +90,7 @@ struct User : ActiveRecord<User, int64_t> {
 };
 
 } // namespace models
+
+template <> inline models::Email rukh::db::fromDbValueImpl<models::Email>(const DbValue &raw) {
+  return models::Email{std::get<std::string>(raw)};
+}

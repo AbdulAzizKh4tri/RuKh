@@ -3,10 +3,10 @@
 
 #include <nlohmann/json.hpp>
 
-#include <rukh/http/HttpRequest.hpp>
-#include <rukh/http/HttpResponse.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/db/ScopedTransaction.hpp>
+#include <rukh/http/HttpRequest.hpp>
+#include <rukh/http/HttpResponse.hpp>
 #include <rukh/orm/OrmConfig.hpp>
 #include <rukh/orm/SelectQuery.hpp>
 
@@ -14,7 +14,8 @@
 #include "models/Post.hpp"
 #include "models/User.hpp"
 
-void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFactory &errorFactory, rukh::pool::ThreadPool *threadPool) {
+void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFactory &errorFactory,
+                           rukh::pool::ThreadPool *threadPool) {
   auto db = rukh::orm::OrmConfig::db;
 
   using namespace rukh;
@@ -50,7 +51,7 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     // --- 1. Single insert, including a nullable field left unset ---
     User greg;
     greg.name = "greg";
-    greg.email = "greg@example.com";
+    greg.email = {"greg@example.com"};
     greg.password = "secret";
 
     co_await runner.run("single insert", [&greg]() -> core::Task<void> {
@@ -88,10 +89,10 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     // --- 5. Bulk insert ---
     co_await runner.run("bulk insert", []() -> core::Task<void> {
       std::vector<User> batch;
-      batch.push_back({.name = "Alice", .email = "alice@example.com"});
-      batch.push_back({.name = "Bob", .email = "bob@example.com"});
-      batch.push_back({.name = "Joe", .email = "joe@example.com"});
-      batch.push_back({.name = "John", .email = "john@example.com"});
+      batch.push_back({.name = "Alice", .email = Email{"alice@example.com"}});
+      batch.push_back({.name = "Bob", .email = Email{"bob@example.com"}});
+      batch.push_back({.name = "Joe", .email = Email{"joe@example.com"}});
+      batch.push_back({.name = "John", .email = Email{"john@example.com"}});
 
       auto [insertedCount, insertedRows] = unwrap(co_await User::bulkInsert(batch), "bulkInsert");
       expect(insertedCount == 4, "expected 4 rows, got " + std::to_string(insertedCount));
@@ -124,7 +125,7 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     // --- 8. Transaction commit ---
     User bob;
     bob.name = "bob";
-    bob.email = "bob@example.com";
+    bob.email = {"bob@example.com"};
     bob.age = 12;
     bob.password = "secret";
 
@@ -168,7 +169,7 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     co_await runner.run("insert then rollback", [db]() -> core::Task<void> {
       User carol;
       carol.name = "carol";
-      carol.email = "carol@example.com";
+      carol.email = {"carol@example.com"};
       carol.password = "secret";
 
       int64_t carolId = 0;
@@ -230,10 +231,10 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     // =========================================================================
     User alice, bob, charlie, diana;
     co_await runner.run("seed users", [&]() -> core::Task<void> {
-      alice = {.name = "Alice", .email = "alice@example.com", .age = 30};
-      bob = {.name = "Bob", .email = "bob@example.com", .age = 28};
-      charlie = {.name = "Charlie", .email = "charlie@example.com", .age = 25};
-      diana = {.name = "Diana", .email = "diana@example.com", .age = 22};
+      alice = {.name = "Alice", .email = Email{"alice@example.com"}, .age = 30};
+      bob = {.name = "Bob", .email = Email{"bob@example.com"}, .age = 28};
+      charlie = {.name = "Charlie", .email = Email{"charlie@example.com"}, .age = 25};
+      diana = {.name = "Diana", .email = Email{"diana@example.com"}, .age = 22};
 
       unwrap(co_await alice.save(), "alice save");
       unwrap(co_await bob.save(), "bob save");
@@ -280,7 +281,7 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
       expect(p2.has_value() && not p2->user.has_value(), "post2.user should be null after SET_NULL");
 
       // Re-create Alice so later tests have her
-      alice = {.name = "Alice", .email = "alice@example.com", .age = 30};
+      alice = {.name = "Alice", .email = Email{"alice@example.com"}, .age = 30};
       unwrap(co_await alice.save(), "recreate alice");
     });
 
@@ -479,7 +480,7 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     // 11. Empty / missing relation edge cases
     // =========================================================================
     co_await runner.run("empty relation queries", [&]() -> core::Task<void> {
-      User lonely = {.name = "Lonely", .email = "lonely@example.com"};
+      User lonely = {.name = "Lonely", .email = Email{"lonely@example.com"}};
       unwrap(co_await lonely.save(), "lonely save");
 
       auto friends = unwrap(co_await lonely.manyRelated<"friendship", User>().select(), "lonely friends");
@@ -533,11 +534,11 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     // =========================================================================
     co_await runner.run("seed users", []() -> core::Task<void> {
       std::vector<User> users = {
-          {.name = "Alice", .email = "alice@example.com", .age = 20, .password = "secret"},
-          {.name = "Bob", .email = "bob@example.com", .age = 25, .password = "secret"},
-          {.name = "Charlie", .email = "charlie@example.com", .age = 30, .password = "secret"},
-          {.name = "David", .email = "david@example.com", .age = 35, .password = "secret"},
-          {.name = "Diana", .email = "diana@example.com", .age = std::nullopt, .password = std::nullopt},
+          {.name = "Alice", .email = Email{"alice@example.com"}, .age = 20, .password = "secret"},
+          {.name = "Bob", .email = Email{"bob@example.com"}, .age = 25, .password = "secret"},
+          {.name = "Charlie", .email = Email{"charlie@example.com"}, .age = 30, .password = "secret"},
+          {.name = "David", .email = Email{"david@example.com"}, .age = 35, .password = "secret"},
+          {.name = "Diana", .email = Email{"diana@example.com"}, .age = std::nullopt, .password = std::nullopt},
       };
 
       auto [insertedCount, insertedRows] = unwrap(co_await User::bulkInsert(users), "bulkInsert");
@@ -992,13 +993,13 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     // =========================================================================
     User alice, betty, bob, charlie, diana, jack, johnny;
     co_await runner.run("seed users", [&]() -> core::Task<void> {
-      alice = {.name = "Alice", .email = "alice@example.com", .age = 55};
-      betty = {.name = "Betty", .email = "betty@example.com", .age = 17};
-      bob = {.name = "Bob", .email = "bob@example.com", .age = 28};
-      charlie = {.name = "Charlie", .email = "charlie@example.com", .age = 25};
-      diana = {.name = "Diana", .email = "diana@example.com", .age = 35};
-      jack = {.name = "Jack", .email = "jack@example.com", .age = 17};
-      johnny = {.name = "Johnny", .email = "johnny@example.com", .age = 1};
+      alice = {.name = "Alice", .email = Email{"alice@example.com"}, .age = 55};
+      betty = {.name = "Betty", .email = Email{"betty@example.com"}, .age = 17};
+      bob = {.name = "Bob", .email = Email{"bob@example.com"}, .age = 28};
+      charlie = {.name = "Charlie", .email = Email{"charlie@example.com"}, .age = 25};
+      diana = {.name = "Diana", .email = Email{"diana@example.com"}, .age = 35};
+      jack = {.name = "Jack", .email = Email{"jack@example.com"}, .age = 17};
+      johnny = {.name = "Johnny", .email = Email{"johnny@example.com"}, .age = 1};
 
       unwrap(co_await alice.save(), "alice save");
       unwrap(co_await betty.save(), "betty save");

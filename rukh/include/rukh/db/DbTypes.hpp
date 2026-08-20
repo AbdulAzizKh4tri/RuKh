@@ -16,7 +16,13 @@
 
 namespace rukh::db {
 
-/// Represents a row of a query result
+/**
+ * @brief Represents a row of a query result
+ *
+ * @see `DbValue`
+ * @see `fromDbValue`
+ * @see `toDbValue`
+ */
 class Row {
 public:
   /**

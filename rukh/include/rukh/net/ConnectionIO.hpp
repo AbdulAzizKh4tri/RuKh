@@ -35,7 +35,13 @@ enum class WriteResult {
 /// Stream wrapper for easier co_await-able non-blocking reads and writes
 template <typename Stream> class ConnectionIO {
 public:
-  /// Read Data Awaitable
+  /**
+   * @brief Read Data Awaitable. Different from ReadAwaitable.
+   *
+   * ReadAwaitable always suspends and tells you when an fd is readable.
+   * This attempts to read as much data as possible from the fd both before and after suspension and returns the
+   * ReadResult.
+   */
   struct ReadDataAwaitable {
     ConnectionIO &io;
     std::chrono::steady_clock::time_point deadline;
@@ -59,7 +65,13 @@ public:
     }
   };
 
-  /// Write Data Awaitable
+  /**
+   * @brief Write Data Awaitable. Different from WriteAwaitable.
+   *
+   * WriteAwaitable always suspends and tells you when an fd is writeable.
+   * This attempts to write as much data as possible to the fd both before and after suspension and returns the
+   * WriteResult.
+   */
   struct WriteDataAwaitable {
     ConnectionIO &io;
     int inactivitySeconds;

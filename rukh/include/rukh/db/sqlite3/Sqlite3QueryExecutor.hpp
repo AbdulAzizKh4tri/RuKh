@@ -1,3 +1,7 @@
+/**
+ * @file Sqlite3QueryExecutor.hpp
+ * @brief Sqlite3 query execution helper
+ */
 #pragma once
 
 #include <expected>
@@ -10,8 +14,10 @@
 
 namespace rukh::db {
 
+/// Sqlite3 query execution helper
 class Sqlite3QueryExecutor {
 public:
+  /// Binds a DbValue parameter to a prepared statement
   static void bindQueryParam(sqlite3_stmt *stmt, int index, const std::vector<DbValue> &params) {
     if (std::holds_alternative<bool>(params[index])) {
       sqlite3_bind_int64(stmt, index + 1, (std::get<bool>(params[index])) ? 1 : 0);
@@ -29,6 +35,15 @@ public:
     }
   }
 
+  /**
+   * @brief Executes a query on a sqlite3 connection
+   *
+   * Checks if statement is cached, if not, creates it and caches it.\n
+   * Prepares the statement, binds parameters, executes it and returns the result.\n
+   *
+   * @returns QueryResult, or DatabaseError for recoverable errors.
+   * @throws DatabaseException if query fails with unknown error.
+   */
   static std::expected<QueryResult, DatabaseError> executeOnConnection(Connection *conn, const std::string &sql,
                                                                        const std::vector<DbValue> &params = {}) {
 

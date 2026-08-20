@@ -1,3 +1,7 @@
+/**
+ * @file Sqlite3Db.hpp
+ * @brief Sqlite3 implementation of IDatabase
+ */
 #pragma once
 
 #include <spdlog/spdlog.h>
@@ -14,10 +18,23 @@
 #include <rukh/pool/ThreadPool.hpp>
 
 namespace rukh::db {
-const int SQLITE3_BUSY_TIMEOUT = 5000; // ms to wait on SQLITE_BUSY instead of failing immediately
+/// ms to wait on SQLITE_BUSY instead of failing immediately
+/// \todo maybe make it configurable
+const int SQLITE3_BUSY_TIMEOUT = 5000;
 
+/// Sqlite3 implementation of IDatabase
 class Sqlite3Db : public IDatabase {
 public:
+  /**
+   * @brief Constructor
+   * @param filename Path to database file
+   * @param threadPool
+   * @param ConnectionPoolSize Number of connections to sqlite to keep in ConnectionQueue
+   *
+   * Enables foreign keys and WAL mode
+   *
+   * @throws DatabaseException if unable to open database or unable to configure connections correctly.
+   */
   Sqlite3Db(const std::string &filename, pool::ThreadPool *threadPool, size_t ConnectionPoolSize = 4)
       : threadPool_(threadPool) {
     for (int i = 0; i < ConnectionPoolSize; i++) {
@@ -50,6 +67,7 @@ public:
     releaseConnection(conn);
   }
 
+  /// Acquires a connection from ConnectionQueue and executes query on it. See @ref Sqlite3QueryExecutor
   core::Task<std::expected<QueryResult, DatabaseError>> executeQuery(const std::string &sql,
                                                                      const std::vector<DbValue> &params = {}) override {
     Connection *conn = acquireConnection();
@@ -94,10 +112,10 @@ public:
     releaseConnection(t->getConnection());
   }
 
+private:
   Connection *acquireConnection() { return connectionQueue_.acquire(); }
   void releaseConnection(Connection *conn) { connectionQueue_.release(conn); }
 
-private:
   ConnectionQueue connectionQueue_;
   pool::ThreadPool *threadPool_;
 };

@@ -14,7 +14,7 @@ namespace rukh {
 
 /// String hash used for std::unordered_map. Allows both std::string and std::string_view.
 struct StringHash {
-  // TODO: understand this
+  /// \todo understand this
   using is_transparent = void;
   size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
   size_t operator()(const std::string &s) const { return std::hash<std::string_view>{}(s); }

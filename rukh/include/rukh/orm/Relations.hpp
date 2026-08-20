@@ -4,7 +4,7 @@
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/ITransaction.hpp>
 
-// TODO: one to one self reference integrity modes (i.e user1 -> user2 should also ensure user2 -> user1).
+/// \todo one to one self reference integrity modes (i.e user1 -> user2 should also ensure user2 -> user1).
 namespace rukh::orm {
 
 enum class OnDelete { CASCADE, NO_ACTION, RESTRICT, SET_DEFAULT, SET_NULL };

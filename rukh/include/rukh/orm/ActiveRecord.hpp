@@ -24,7 +24,7 @@
 #include <rukh/orm/UpdateQuery.hpp>
 #include <rukh/orm/UpsertQuery.hpp>
 
-// TODO: solve N+1 problem.
+/// \todo solve N+1 problem.
 namespace rukh::orm {
 
 template <typename Model, typename... PkTypes> class ActiveRecord {
@@ -748,16 +748,6 @@ public:
         [&](auto &&...cols) {
           auto addToJ = [self, &j](auto &&col) {
             using FieldType = std::remove_cvref_t<decltype(self->*col.fieldPtr)>;
-
-            if (col.jsonSerializationMode == JsonSerializationMode::OFF)
-              return;
-
-            if (col.jsonSerializationMode == JsonSerializationMode::CUSTOM) {
-              if (auto result = col.jsonSerializer(self->*col.fieldPtr))
-                j[col.dbName] = *result;
-              // nullopt from the serializer -> omit the key
-              return;
-            }
 
             if constexpr (OptionalT<FieldType>) {
               // optional field

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <algorithm>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -145,6 +146,12 @@ inline constexpr std::size_t get_index_of_v = get_index_of<T, TupleType>::value;
 template <class... Ts> struct overloads : Ts... {
   using Ts::operator()...;
 };
+
+//=====================================================================================================================
+
+/// Check whether a type can be serialized to json.
+template <typename T>
+concept JsonSerializable = requires(nlohmann::json &j, const T &value) { j = value; };
 
 //=====================================================================================================================
 

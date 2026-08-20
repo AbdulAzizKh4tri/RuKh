@@ -78,17 +78,26 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
   // custom string escape hatches
   BasePredicate(const std::string &str, const std::vector<db::DbValue> &vals)
       : predicateType(PredicateType::STRING), columnA(str) {
-    values.insert(values.end(), vals.begin(), vals.end());
+    values.reserve(vals.size());
+    for (const auto &value : vals) {
+      values.push_back(db::toDbValue(value));
+    }
   }
 
   BasePredicate(const std::string &col, Operator opr, const std::vector<db::DbValue> &vals)
       : predicateType(PredicateType::LEAF), op(opr), columnA(col) {
-    values.insert(values.end(), vals.begin(), vals.end());
+    values.reserve(vals.size());
+    for (const auto &value : vals) {
+      values.push_back(db::toDbValue(value));
+    }
   }
 
   BasePredicate(const std::string &lhs, Operator opr, const std::string &rhs, const std::vector<db::DbValue> &vals = {})
       : predicateType(PredicateType::RAW), op(opr), columnA(lhs), columnB(rhs) {
-    values.insert(values.end(), vals.begin(), vals.end());
+    values.reserve(vals.size());
+    for (const auto &value : vals) {
+      values.push_back(db::toDbValue(value));
+    }
   }
 
   // bool preds
@@ -104,7 +113,10 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
   BasePredicate(FieldPtr fieldPtr, Operator opr, const std::vector<get_raw_field_t<FieldPtr>> &vals,
                 const std::string &tableAlias)
       : predicateType(PredicateType::LEAF), columnA(getColumnWithAlias(fieldPtr, tableAlias)), op(opr) {
-    values.insert(values.end(), vals.begin(), vals.end());
+    values.reserve(vals.size());
+    for (const auto &value : vals) {
+      values.push_back(db::toDbValue(value));
+    }
   }
 
   // field to values with functions
@@ -120,9 +132,12 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
   template <FieldPointer FieldPtr>
   BasePredicate(FieldPtr fieldPtr, Operator opr, SelectQuery<Models...> &subQuery, const std::string &tableAlias)
       : predicateType(PredicateType::SUBQUERY), columnA(getColumnWithAlias(fieldPtr, tableAlias)), op(opr) {
-    auto sqlAndParams = subQuery.getSqlAndParams();
-    columnB = sqlAndParams.first;
-    values.insert(values.end(), sqlAndParams.second.begin(), sqlAndParams.second.end());
+    auto [sql, params] = subQuery.getSqlAndParams();
+    columnB = sql;
+    values.reserve(params.size());
+    for (const auto &value : params) {
+      values.push_back(db::toDbValue(value));
+    }
   }
 
   // field to Subquery with functions
@@ -138,7 +153,10 @@ template <typename ColumnResolver, typename... Models> struct BasePredicate {
       : predicateType(exists ? PredicateType::EXISTS : PredicateType::NOT_EXISTS) {
     auto [sql, params] = subQuery.getSqlAndParams();
     columnA = sql;
-    values.insert(values.end(), params.begin(), params.end());
+    values.reserve(params.size());
+    for (const auto &value : params) {
+      values.push_back(db::toDbValue(value));
+    }
   }
 
   // field to field

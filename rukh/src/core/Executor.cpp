@@ -77,8 +77,8 @@ void Executor::waitForWrite(int fd, std::coroutine_handle<> caller, std::chrono:
 
 void Executor::submitFileRead(int fd, void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr,
                               uint64_t offset) {
-  // TODO: We may not need pendingFileOps_ at all, we may be able to let prepRead handle that
-  // Check io_uring_sqe_set_data
+  /// \todo We may not need pendingFileOps_ at all, we may be able to let prepRead handle that. Check
+  /// io_uring_sqe_set_data
   pendingFileOps_[nextUserData_] = {h, resultPtr};
   ioUring_.prepRead(fd, buf, len, nextUserData_, offset);
   nextUserData_++;
@@ -96,7 +96,7 @@ void Executor::markRootFinished(void *addr) { finishedRoots_.push_back(addr); }
 void Executor::run(std::atomic<bool> &shutdown) {
   tl_executor = this;
   std::chrono::steady_clock::time_point shutdownDeadline = std::chrono::steady_clock::time_point::max();
-  size_t maxEvents = 512;
+  const size_t maxEvents = 512;
   epoll_event events[maxEvents];
 
   for (;;) {

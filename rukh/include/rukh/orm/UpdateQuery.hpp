@@ -13,7 +13,7 @@
 #include <rukh/orm/WhereClause.hpp>
 #include <rukh/orm/hydrators.hpp>
 
-// TODO: figure out proper aliasing (VEERY LOWW priority)
+/// \todo figure out proper aliasing (VEERY LOWW priority)
 namespace rukh::orm {
 
 template <typename Model> class UpdateQuery : public WhereClause<UpdateQuery<Model>, Model>, public QueryDispatcher {

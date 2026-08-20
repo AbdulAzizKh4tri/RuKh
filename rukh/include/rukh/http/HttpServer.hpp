@@ -19,7 +19,7 @@
 namespace rukh::http  {
 
 struct ListenerConfig {
-  // TODO: Maybe add Router here so we can have per listener routes.
+  /// \todo Maybe add Router here so we can have per listener routes.
   std::string host;
   std::string port;
   bool isTls;

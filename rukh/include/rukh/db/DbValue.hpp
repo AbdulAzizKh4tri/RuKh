@@ -17,32 +17,110 @@ namespace rukh::db {
  * @brief Represents a value that can be stored in the database.
  *
  * Every value that needs to be stored in the database must be either a DbValue or be convertible to one.
+ * @note The variant currently maps to values needed for sqlite3, may change later if postGres support is added.
  */
 using DbValue = std::variant<int64_t, double, std::string, bool, std::vector<unsigned char>, std::nullptr_t>;
 
+/// @internalGroup @{
+
+/// @internalMethod
+template <typename T>
+  requires(std::same_as<T, int64_t> || std::same_as<T, double> || std::same_as<T, std::string> ||
+           std::same_as<T, bool> || std::same_as<T, std::vector<unsigned char>> || std::same_as<T, std::nullptr_t>)
+DbValue toDbValueImpl(T v) {
+  return v;
+}
+
+/// @internalMethod
 template <std::integral T>
-  requires(not std::same_as<T, bool>)
+  requires(not std::same_as<T, bool> && not std::same_as<T, int64_t>)
 DbValue toDbValueImpl(T v) {
   return static_cast<int64_t>(v);
 }
 
+/// @internalMethod
+template <std::floating_point T>
+  requires(not std::same_as<T, double>)
+DbValue toDbValueImpl(T v) {
+  return static_cast<double>(v);
+}
+
+/// @internalMethod
 template <typename T> DbValue toDbValueImpl(const std::optional<T> &v) {
   return v ? toDbValueImpl(*v) : DbValue{nullptr};
 }
 
-inline DbValue toDbValueImpl(DbValue v) { return v; }
-inline DbValue toDbValueImpl(bool v) { return v; }
-inline DbValue toDbValueImpl(float v) { return static_cast<double>(v); }
-inline DbValue toDbValueImpl(double v) { return v; }
-inline DbValue toDbValueImpl(const std::string &v) { return v; }
-inline DbValue toDbValueImpl(const char *v) { return std::string(v); }
-inline DbValue toDbValueImpl(const std::vector<unsigned char> &v) { return v; }
-inline DbValue toDbValueImpl(const nlohmann::json &v) { return v.dump(); }
+inline DbValue toDbValueImpl(DbValue v) { return v; }                      ///< @internalMethod
+inline DbValue toDbValueImpl(const char *v) { return std::string(v); }     ///< @internalMethod
+inline DbValue toDbValueImpl(const nlohmann::json &v) { return v.dump(); } ///< @internalMethod
+
+/// @internalMethod
 inline DbValue toDbValueImpl(std::chrono::sys_seconds tp) {
   return static_cast<int64_t>(tp.time_since_epoch().count());
 }
-inline DbValue toDbValueImpl(std::nullptr_t) { return nullptr; }
 
+/// @}
+
+//=========================================================================================
+
+/// @internalGroup @{
+
+/// @internalMethod
+template <typename T>
+  requires(std::same_as<T, int64_t> || std::same_as<T, double> || std::same_as<T, std::string> ||
+           std::same_as<T, bool> || std::same_as<T, std::vector<unsigned char>> || std::same_as<T, std::nullptr_t>)
+T fromDbValueImpl(const DbValue &v) {
+  const auto *raw = std::get_if<T>(&v);
+
+  if (not raw)
+    throw DatabaseException("DB value does not hold expected alternative for type " + std::string(typeid(T).name()));
+
+  return *raw;
+}
+
+/// @internalMethod
+template <std::integral T>
+  requires(not std::same_as<T, bool> && not std::same_as<T, int64_t>)
+T fromDbValueImpl(const DbValue &v) {
+  const auto *raw = std::get_if<int64_t>(&v);
+
+  if (not raw)
+    throw DatabaseException("DB value does not hold int64_t for type " + std::string(typeid(T).name()));
+
+  if (not std::in_range<T>(*raw))
+    throw DatabaseException("DB value " + std::to_string(*raw) + " out of range for target type " +
+                            std::string(typeid(T).name()));
+
+  return static_cast<T>(*raw);
+}
+
+/// @internalMethod
+template <std::floating_point T>
+  requires(not std::same_as<T, double>)
+T fromDbValueImpl(const DbValue &v) {
+  const auto *raw = std::get_if<double>(&v);
+
+  if (not raw)
+    throw DatabaseException("DB value does not hold double for type " + std::string(typeid(T).name()));
+
+  if (*raw > 0 && *raw > static_cast<double>(std::numeric_limits<T>::max()))
+    throw DatabaseException("DB value out of range for target type " + std::string(typeid(T).name()));
+
+  if (*raw < 0 && *raw < static_cast<double>(std::numeric_limits<T>::lowest()))
+    throw DatabaseException("DB value out of range for target type " + std::string(typeid(T).name()));
+
+  return static_cast<T>(*raw);
+}
+
+/// @}
+
+/**
+ * @brief Converts a value `v` of type `T` to a `DbValue`. Useful for custom Model field types.
+ *
+ * nullptr if T is std::nullopt_t
+ *
+ * For more info about custom types, see @ref `fromDbValueImpl`
+ */
 template <typename T> DbValue toDbValue(const T &v) {
   if constexpr (OptionalT<T>) {
     return v.has_value() ? toDbValueImpl(*v) : DbValue{nullptr};
@@ -51,69 +129,49 @@ template <typename T> DbValue toDbValue(const T &v) {
   }
 }
 
-// No definition — only declared. Accessing ::type on an unspecialized T is ill-formed,
-// which is exactly what lets HasDbValueSource correctly reject unsupported types.
-template <typename T> struct DbValueSource;
-
-// Identity: T is one of DbValue's actual alternatives.
-template <typename T>
-  requires(std::same_as<T, int64_t> or std::same_as<T, double> or std::same_as<T, std::string> or
-           std::same_as<T, bool> or std::same_as<T, std::vector<unsigned char>> or std::same_as<T, std::nullptr_t>)
-struct DbValueSource<T> {
-  using type = T;
-};
-
-// Any integral other than bool/int64_t is read out of the int64_t alternative.
-template <std::integral T>
-  requires(not std::same_as<T, bool> and not std::same_as<T, int64_t>)
-struct DbValueSource<T> {
-  using type = int64_t;
-};
-
-// Any floating type other than double is read out of the double alternative.
-template <std::floating_point T>
-  requires(not std::same_as<T, double>)
-struct DbValueSource<T> {
-  using type = double;
-};
-
-template <typename T>
-concept HasDbValueSource = requires { typename DbValueSource<T>::type; };
-
-// Generic conversion body: identity, or range-checked narrowing. Custom types (e.g. Uuid)
-// provide their own full specialization of this template next to the type itself.
-template <typename T> T fromDbValueImpl(const typename DbValueSource<T>::type &raw) {
-  using Source = typename DbValueSource<T>::type;
-
-  if constexpr (std::same_as<T, Source>) {
-    return raw;
-  } else if constexpr (std::integral<T> and std::integral<Source>) {
-    if (not std::in_range<T>(raw))
-      throw DatabaseException("DB value " + std::to_string(raw) + " out of range for target type " +
-                              std::string(typeid(T).name()));
-    return static_cast<T>(raw);
-  } else if constexpr (std::floating_point<T> and std::floating_point<Source>) {
-    if (raw > 0 and raw > static_cast<Source>(std::numeric_limits<T>::max()))
-      throw DatabaseException("DB value out of range for target type " + std::string(typeid(T).name()));
-    if (raw < 0 and raw < static_cast<Source>(std::numeric_limits<T>::lowest()))
-      throw DatabaseException("DB value out of range for target type " + std::string(typeid(T).name()));
-    return static_cast<T>(raw);
-  } else {
-    static_assert(always_false_v<T>, "fromDbValueImpl has no generic conversion for this T/Source pair — "
-                                     "provide an explicit specialization for your custom type.");
-  }
+/**
+ * @brief This is what allows us to have custom types in models.
+ *
+ *  Example of a custom type:
+ *  @code
+ *  namespace random_namespace {
+ *
+ *		 struct Email {
+ *		   std::string email;
+ *		 };
+ *
+ *		 inline rukh::db::DbValue toDbValueImpl(random_namespace::Email e) { return e.email; }
+ *
+ *		 inline void to_json(nlohmann::json &j, const Email &email) { j = email.email; }
+ *
+ *  }
+ *
+ *  template <> inline random_namespace::Email rukh::db::fromDbValueImpl<random_namespace::Email>(const DbValue &raw) {
+ *    return random_namespace::Email{std::get<std::string>(raw)};
+ *  }
+ *  @endcode
+ *
+ *  Email can now be used as a type in models.
+ *
+ * @attention `fromDbValueImpl` must be in rukh::db namespace. toDbValueImpl can be in `random_namespace`.
+ *
+ * @note The to_json function is only required if the custom type is to be json serialized.
+ *
+ * @see `toDbValue`
+ * @see `fromDbValue`
+ */
+template <typename T> T fromDbValueImpl(const DbValue &) {
+  static_assert(always_false_v<T>, "No DbValue conversion defined for this type");
 }
 
-template <typename T>
-  requires HasDbValueSource<T>
-T fromDbValue(const DbValue &v) {
-  using Source = typename DbValueSource<T>::type;
-  auto *raw = std::get_if<Source>(&v);
-  if (not raw)
-    throw DatabaseException("DbValue does not hold expected alternative for type " + std::string(typeid(T).name()));
-  return fromDbValueImpl<T>(*raw);
-}
+/**
+ * @brief Converts a `DbValue` to a value of type `T`. Useful for custom model field types.
+ *
+ * For more info about custom types, see @ref `fromDbValueImpl`
+ */
+template <typename T> T fromDbValue(const DbValue &v) { return fromDbValueImpl<T>(v); }
 
+/// Converts a `DbValue` to a string
 inline std::string dbValueToString(const DbValue &v) {
   if (std::holds_alternative<std::string>(v))
     return std::get<std::string>(v);

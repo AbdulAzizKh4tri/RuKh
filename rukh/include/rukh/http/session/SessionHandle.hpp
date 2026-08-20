@@ -9,7 +9,7 @@
 
 namespace rukh::http {
 
-// Session Handle. Load a session from an ISessionStore and cache it.
+/// Session Handle. Load a session from an ISessionStore and cache it.
 struct SessionHandle {
   ISessionStore *sessionStore;
   std::string id;

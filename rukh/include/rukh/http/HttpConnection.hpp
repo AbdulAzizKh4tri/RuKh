@@ -182,7 +182,7 @@ public:
             co_return;
           }
 
-          // TODO: better checks
+          /// \todo better checks
           RouterResponse result = router_.validate(request_);
           switch (result) {
           case RouterResponse::NOT_FOUND:

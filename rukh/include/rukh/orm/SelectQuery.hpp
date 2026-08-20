@@ -3,9 +3,9 @@
 #include <expected>
 #include <optional>
 #include <spdlog/spdlog.h>
-#include <tuple>
 #include <sstream>
 #include <string>
+#include <tuple>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/TypeHelpers.hpp>
@@ -446,8 +446,6 @@ private:
     }
     return (not func.empty() ? func + "(" + col + ")" : col) + asColumnAlias;
   }
-
-  // TODO: make bulidSelectSQLAndSetParams const
 
   std::pair<std::string, std::vector<db::DbValue>>
   buildSelectSqlAndSetParams(const size_t depth = 0, std::optional<size_t> limit = std::nullopt) const {

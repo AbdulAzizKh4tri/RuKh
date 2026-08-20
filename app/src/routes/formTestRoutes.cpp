@@ -8,7 +8,7 @@
 
 #include "routes/testRoutes.hpp"
 
-// TODO: Add tests for these
+/// \todo Add tests for these
 void registerFormTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFactory &errorFactory,
                             rukh::pool::ThreadPool *threadPool) {
   using namespace rukh;

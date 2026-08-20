@@ -1,3 +1,7 @@
+/**
+ * @file Sqlite3Transaction.hpp
+ * @brief Sqlite3 implementation of ITransaction
+ */
 #pragma once
 
 #include <functional>
@@ -11,6 +15,8 @@
 #include <rukh/pool/ThreadPool.hpp>
 
 namespace rukh::db {
+
+/// Sqlite3 implementation of ITransaction
 class Sqlite3Transaction : public ITransaction {
 public:
   Sqlite3Transaction(Connection *conn, pool::ThreadPool *threadPool, std::move_only_function<void() noexcept> abandonFn)
@@ -83,6 +89,7 @@ public:
 
   bool isTransactionEnded() const override { return ended_; }
 
+  /// @internalMethod
   Connection *getConnection() { return conn_; }
 
 private:
