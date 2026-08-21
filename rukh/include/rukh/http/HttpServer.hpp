@@ -11,12 +11,12 @@
 #include <string>
 #include <vector>
 
+#include <rukh/core/Task.hpp>
 #include <rukh/http/ErrorFactory.hpp>
 #include <rukh/http/Router.hpp>
-#include <rukh/core/Task.hpp>
 #include <rukh/net/ListenerSocket.hpp>
 
-namespace rukh::http  {
+namespace rukh::http {
 
 struct ListenerConfig {
   /// \todo Maybe add Router here so we can have per listener routes.
@@ -56,13 +56,13 @@ public:
   /**
    * @brief Runs the HTTP server.
    *
-   * @param N The number of executor threads to use.
+   * @param N The number of executor threads to use. Defaults to 1. 0 will use thread::hardware_concurrency.
    *
    * starts @p N instances of workerMain.
    * Each instance of workerMain listens on the configured ports and accepts new connections.
    * RSTs connection if the connection count goes over the configured threshold.
    */
-  void run(int N);
+  void run(size_t N = 1);
 
   ErrorFactory &getErrorFactory();
 
@@ -86,4 +86,4 @@ private:
 
   template <typename Stream> core::Task<void> handleConnection(std::unique_ptr<Stream> stream);
 };
-} // namespace rukh
+} // namespace rukh::http

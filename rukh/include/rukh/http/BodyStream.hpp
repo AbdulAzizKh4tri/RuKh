@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <functional>
 #include <span>
 
 #include <rukh/Exceptions.hpp>
@@ -30,7 +31,7 @@ public:
    * @brief Read body data into @p buf
    * @param buf
    * @returns The number of bytes read
-   
+
   * Reads the minimum of `buf.size()` and `remaining_ bytes`.
    */
   core::Task<size_t> read(std::span<unsigned char> buf) {

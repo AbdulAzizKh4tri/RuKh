@@ -145,6 +145,7 @@ std::vector<std::pair<std::string, std::string>> HttpRequest::getCookies() const
 }
 
 std::optional<std::string> HttpRequest::getCookie(const std::string &name) const {
+  // could be more efficient, but I'd rather keep the parsing data in one place.
   for (const auto &cookie : getCookies()) {
     if (cookie.first == name)
       return cookie.second;

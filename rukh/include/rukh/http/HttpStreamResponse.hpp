@@ -16,7 +16,12 @@
 
 namespace rukh::http {
 
-/// The function signature to return the next chunk of data for the stream response. Return nullopt to end the stream.
+/**
+ * @brief The function signature to return the next chunk of data for the stream response.
+ *
+ * @returns nullopt to end the stream.
+ *
+ */
 using NextChunkFn = std::move_only_function<core::Task<std::optional<std::string>>()>;
 
 /**

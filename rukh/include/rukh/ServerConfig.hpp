@@ -25,7 +25,7 @@ public:
   inline static int EPOLL_WAIT_TIMEOUT = 1;
 
   // ── Request/Response limits ───────────────────────────────
-  inline static size_t SINGLE_READ_BYTES = 4 * 1024;
+  inline static size_t SINGLE_READ_BYTES = 1024;
   inline static size_t MAX_HEADER_BYTES = 8 * 1024;
   inline static size_t MAX_CONTENT_LENGTH = 1 * 1024 * 1024;
   inline static size_t MAX_WRITE_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -42,7 +42,7 @@ public:
   inline static size_t MAX_MULTIPART_BOUNDARY_LENGTH = 64;
 
   // ── Static File Serving ───────────────────────────────────
-  inline static size_t STATIC_STREAM_THRESHOLD_BYTES = 1 * 1024;
+  inline static size_t STATIC_STREAM_THRESHOLD_BYTES = 5 * 1024 * 1024;
   inline static size_t STATIC_STREAM_CHUNK_SIZE = 4096;
   inline static std::filesystem::path STATIC_CACHE_DIR = "./.server_cache";
 

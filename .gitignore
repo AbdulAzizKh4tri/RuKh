@@ -14,7 +14,5 @@ external/
 */test.db-*
 tetherIP.hpp
 .clangd
-
-
-# temporarily
-docs/*
+docs/html/*
+docs/latex/*

@@ -84,12 +84,11 @@ public:
    */
   std::shared_ptr<std::unordered_map<std::string, size_t, StringHash, std::equal_to<>>> columns;
 
-  /// Returns a string representation of the row `values`.
-  std::string toString() const {
-    constexpr int COL_WIDTH = 16;
+  /// Returns a string representation of the row `values`. (Column names aren't mentioned)
+  std::string toString(int colWidth = 16) const {
     std::ostringstream ss;
     for (size_t i = 0; i < values.size(); i++) {
-      ss << std::left << std::setw(COL_WIDTH) << dbValueToString(values[i]);
+      ss << std::left << std::setw(colWidth) << dbValueToString(values[i]);
     }
     return ss.str();
   }
@@ -109,19 +108,19 @@ struct QueryResult {
 
   size_t size() const { return rows.size(); }
 
+  /// Get the index'th row.
   Row operator[](const size_t index) const { return rows[index]; }
 
   /// Returns a string representation of the query result with column names at the top.
-  std::string toString() const {
+  std::string toString(int colWidth = 16) const {
     std::ostringstream ss;
-    constexpr int COL_WIDTH = 16;
 
     std::vector<std::pair<std::string, int>> cols(columns->begin(), columns->end());
     std::sort(cols.begin(), cols.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
 
     ss << "\n";
     for (auto &[key, _] : cols) {
-      ss << std::left << std::setw(COL_WIDTH) << key;
+      ss << std::left << std::setw(colWidth) << key;
     }
     ss << "\n";
     for (size_t i = 0; i < rows.size(); i++) {

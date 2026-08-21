@@ -41,10 +41,20 @@ public:
   /// Parse the request headers, @p headerView does not include the trailing \\r\\n
   bool parseRequestHeader(std::string_view headerView);
 
-  /// Consume the full request body stream and interpret it as a json object.
+  /**
+   * @brief Consume the full request body stream and interpret it as a json object.
+   *
+   * @see consumeBody();
+   * @see bodyStream;
+   */
   core::Task<nlohmann::json> jsonBody();
 
-  /// Consume the full request body stream and interpret it as url-encoded form-data.
+  /**
+   * @brief Consume the full request body stream and interpret it as url-encoded form-data.
+   *
+   * @see consumeBody();
+   * @see bodyStream;
+   */
   core::Task<std::unordered_map<std::string, std::vector<std::string>>> getFormData();
 
   /// Parse and get the Range header as a set of ranges
@@ -117,7 +127,16 @@ public:
 
   std::vector<std::pair<std::string, std::string>> getAllPathParams() const;
 
-  /// consume the entire body stream as a string.
+  /**
+   * @brief Consume the entire body stream as a string.
+   *
+   * @attention The body can only be consumed once. Subsequent calls will throw. If you wish to use the body data again
+   * you must pass around the compy you get from this. Or if you must reattach it to the request, use @ref
+   * setAttribute()
+   *
+   * @see bodyStream()
+   * @see BodyStream
+   */
   core::Task<std::string> consumeBody();
 
   /// get the body stream object. @see BodyStream

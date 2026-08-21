@@ -1,0 +1,75 @@
+/**
+ * @namespace rukh
+ * @brief Top-level namespace for the RuKh project.
+ *
+ * \todo Benchmarking setup
+ * \todo ServerConfig needs to be refactored and updated
+ * \todo Unit tests? *megamind meme*
+ *
+ */
+
+/**
+ * @namespace rukh::core
+ * @brief Core infrastructure of RuKh.
+ * 
+ * \todo add co_yield-ing type alongside Task<>
+ */
+
+/**
+ * @namespace rukh::net
+ * @brief Network I/O for RuKh.
+ */
+
+/**
+ * @namespace rukh::pool
+ * @brief Thread-pool infrastructure for offloading work from the main executor threads. 
+ * 
+ * \todo dynamic resizing for ThreadPool
+ */
+
+/**
+ * @namespace rukh::http
+ * @brief HTTP infrastructure for RuKh.
+ * 
+ * \todo websockets
+ * \todo Router mounting, adding something like `router.mount(/tests, testsRouter)`
+ * \todo typed params?
+ * \todo Template html generation
+ * \todo re-read MultipartParser, and the ICompressor implementations code cause I've forgotten how it works.
+ * \todo SSE (Server Sent Events)
+ */
+
+/**
+ * @namespace rukh::http::middleware
+ * @brief Http middleware
+ *
+ * \todo auth middleware
+ */
+
+/**
+ * @namespace rukh::http::compression
+ * @brief Compression utilities and data compressors 
+ */
+
+/**
+ * @namespace rukh::orm
+ * @brief The RuKh ORM
+ *
+ * \todo Window functions / `OVER (...)` in the query builder
+ * \todo DDL Generation
+ * \todo Streaming/cursor iteration over ORM result sets
+ * \todo soft-delete
+ * \todo `select_related` / `prefetch_related` eager loading
+ * \todo self-referential one-to-one integrity mode
+ * \todo column validators
+ *
+ */
+
+/**
+ * @namespace rukh::db
+ * @brief Database Connectivity
+ *
+ * \todo Dynamic resizing of connection pool
+ * \todo PostgreSQL backend
+ */
+

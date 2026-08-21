@@ -43,7 +43,7 @@ void HttpServer::setRouter(Router &router) { router_ = &router; };
 
 std::atomic<bool> HttpServer::shutdown = false;
 
-void HttpServer::run(int N) {
+void HttpServer::run(size_t N) {
   signal(SIGPIPE, SIG_IGN);
 
   signal(SIGINT, [](int) {
@@ -66,13 +66,14 @@ void HttpServer::run(int N) {
   if (!router_)
     throw ServerException("Call setRouter() before run()");
 
-  if (N <= 0)
+  if (N == 0)
     N = std::thread::hardware_concurrency();
 
   std::vector<std::thread> executorThreads;
 
-  if (N > 1)
+  if (N > 1) /// Pure tomfoolery
     SPDLOG_INFO("KAGE BUNSHIN NO JUTSU");
+
   for (int i = 0; i < N; i++)
     executorThreads.emplace_back([this] { workerMain(); });
   for (auto &t : executorThreads)
