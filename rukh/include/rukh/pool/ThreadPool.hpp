@@ -94,7 +94,7 @@ private:
       IPoolJob *job = nullptr;
       {
         std::unique_lock lock(mutex_);
-        cv_.wait(lock, [this] { return !jobQueue_.empty() || shutdown_; });
+        cv_.wait(lock, [this] { return not jobQueue_.empty() || shutdown_; });
         if (shutdown_ && jobQueue_.empty())
           return;
         job = jobQueue_.front();

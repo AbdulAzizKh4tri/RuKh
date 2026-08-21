@@ -5,6 +5,9 @@
 #pragma once
 
 #include <algorithm>
+#include <ranges>
+#include <string>
+#include <vector>
 
 namespace rukh {
 

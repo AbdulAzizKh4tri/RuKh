@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
-#include <stdexcept>
 #include <filesystem>
+#include <stdexcept>
+#include <string>
 
 namespace rukh {
 
@@ -25,6 +25,7 @@ public:
   inline static int EPOLL_WAIT_TIMEOUT = 1;
 
   // ── Request/Response limits ───────────────────────────────
+  inline static size_t SINGLE_READ_BYTES = 4 * 1024;
   inline static size_t MAX_HEADER_BYTES = 8 * 1024;
   inline static size_t MAX_CONTENT_LENGTH = 1 * 1024 * 1024;
   inline static size_t MAX_WRITE_BUFFER_BYTES = 10 * 1024 * 1024;

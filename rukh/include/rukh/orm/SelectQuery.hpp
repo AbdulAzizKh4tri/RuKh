@@ -330,12 +330,13 @@ public:
     co_return queryResult->rows.size() > 0;
   }
 
-  /*
-   * FOOTGUN ALERT!!
+  /**
+   * @warning
    * It is the callers responsibility to ensure that the row described by the where clause matches the values of the
    * objToCreate. Otherwise a situation may arise where the where clause returns nothing for a query, and creates a
    * completely different object based on objToCreate, which may already exist.
    *
+   * @note
    * Cannot be used with JOIN Queries that return columns from more than one table;.
    */
   core::Task<std::expected<std::pair<Model, bool>, db::DatabaseError>>

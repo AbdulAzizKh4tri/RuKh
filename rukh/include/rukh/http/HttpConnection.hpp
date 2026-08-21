@@ -9,7 +9,6 @@
 #include <exception>
 #include <memory>
 #include <spdlog/spdlog.h>
-#include <sys/timerfd.h>
 #include <sys/types.h>
 #include <variant>
 
@@ -111,7 +110,8 @@ public:
           }
 
           // Marker not found yet — suspend until the socket is readable or a deadline fires
-          auto readResult = co_await io_.read(ServerConfig::MAX_HEADER_BYTES, activeDeadline());
+          auto readResult =
+              co_await io_.read(ServerConfig::SINGLE_READ_BYTES, ServerConfig::MAX_HEADER_BYTES, activeDeadline());
           if (readResult == net::ReadResult::DATA) {
             auto timeNow = now();
             resetInactivity(timeNow);
@@ -302,7 +302,8 @@ public:
               co_return remaining;
             }
 
-            net::ReadResult readResult = co_await io_.read(ServerConfig::MAX_CONTENT_LENGTH, activeDeadline());
+            net::ReadResult readResult =
+                co_await io_.read(ServerConfig::SINGLE_READ_BYTES, ServerConfig::MAX_CONTENT_LENGTH, activeDeadline());
             if (readResult == net::ReadResult::DATA) {
               resetInactivity();
             } else if (readResult == net::ReadResult::BUFFER_LIMIT_EXCEEDED) {
@@ -322,7 +323,8 @@ public:
           BodyDrainFn drainFn = [this](size_t remaining) mutable -> core::Task<void> {
             while (io_.getReadBufferSize() < remaining) {
               size_t oldSize = io_.getReadBufferSize();
-              net::ReadResult readResult = co_await io_.read(ServerConfig::MAX_CONTENT_LENGTH, activeDeadline());
+              net::ReadResult readResult = co_await io_.read(ServerConfig::SINGLE_READ_BYTES,
+                                                             ServerConfig::MAX_CONTENT_LENGTH, activeDeadline());
               if (readResult == net::ReadResult::DATA) {
                 resetInactivity();
               } else if (readResult == net::ReadResult::BUFFER_LIMIT_EXCEEDED) {

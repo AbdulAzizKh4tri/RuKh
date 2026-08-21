@@ -21,7 +21,7 @@ namespace rukh::http {
 enum class RouterResponse { OK, NOT_FOUND, METHOD_NOT_ALLOWED };
 
 /**
- * @brief Node of the Route Radix Tree
+ * @brief Node of the Route 'Trie'
  * @see Router
  */
 struct RouteNode {

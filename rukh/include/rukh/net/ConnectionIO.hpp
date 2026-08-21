@@ -45,12 +45,13 @@ public:
   struct ReadDataAwaitable {
     ConnectionIO &io;
     std::chrono::steady_clock::time_point deadline;
+    size_t targetBytes;
     size_t maxBufferSize;
     ReadResult result = ReadResult::WOULD_BLOCK;
 
     /// suspends if blocked on read
     bool await_ready() noexcept {
-      result = io.drainIntoReadBuffer(maxBufferSize);
+      result = io.drainIntoReadBuffer(targetBytes, maxBufferSize);
       return result != ReadResult::WOULD_BLOCK;
     }
 
@@ -61,7 +62,7 @@ public:
         return result;
       if (core::tl_timed_out)
         return ReadResult::TIMED_OUT;
-      return io.drainIntoReadBuffer(maxBufferSize);
+      return io.drainIntoReadBuffer(targetBytes, maxBufferSize);
     }
   };
 
@@ -109,24 +110,35 @@ public:
 
   ConnectionIO(std::shared_ptr<Stream> stream) : stream_(std::move(stream)) {}
 
+  /**
+   * @brief Read Data
+   * @param targetSize The ~number of bytes to read
+   * @param maxBufferSize The maximum size that the read buffer is allowed to reach after multiple calls to read.
+   *
+   * targetSize is useful because we don't want to flush the entire kernel buffer, so the kernel window has the unused
+   * data and it can advertise window capacity based on our processing speed, letting the client know to slow down if
+   * data backs up.
+   */
   [[nodiscard]] ReadDataAwaitable
-  read(size_t maxBufferSize,
+  read(size_t targetSize, size_t maxBufferSize,
        std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max()) noexcept {
-    return {*this, deadline, maxBufferSize};
+    return {*this, deadline, getReadBufferSize() + targetSize, maxBufferSize};
   }
 
   [[nodiscard]] WriteDataAwaitable write(int inactivitySeconds = 0) noexcept { return {*this, inactivitySeconds}; }
 
   /// Tries to drain whatever data is available in the kernel buffer into the read buffer up to maxBufferSize.
-  ReadResult drainIntoReadBuffer(size_t maxBufferSize) {
+  ReadResult drainIntoReadBuffer(size_t targetSize, size_t maxBufferSize) {
     bool gotData = false;
 
     for (;;) {
       size_t currentSize = getReadBufferSize();
       if (currentSize >= maxBufferSize)
         return ReadResult::BUFFER_LIMIT_EXCEEDED;
+      if (currentSize >= targetSize)
+        return ReadResult::DATA;
 
-      size_t spaceToAllow = std::min(maxBufferSize - currentSize, size_t{4096});
+      size_t spaceToAllow = std::min(maxBufferSize - currentSize, targetSize - currentSize);
       size_t oldSize = readBuffer_.size();
       readBuffer_.resize(oldSize + spaceToAllow);
 
