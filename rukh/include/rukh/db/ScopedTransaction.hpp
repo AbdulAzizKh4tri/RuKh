@@ -1,6 +1,6 @@
 /**
  * @file ScopedTransaction.hpp
- * @brief Semi RAII wrapper for @ref ITransaction
+ * @brief Semi RAII wrapper for @ref rukh::db::ITransaction
  */
 #pragma once
 
@@ -15,9 +15,9 @@
 namespace rukh::db {
 
 /**
- * @brief Semi RAII wrapper for @ref ITransaction
+ * @brief Semi RAII wrapper for @ref rukh::db::ITransaction
  *
- * @ref ITransaction::abandon "abandon"s transaction and warns user if ScopedTransaction goes out of scope
+ * @ref rukh::db::ITransaction::abandon "abandon"s transaction and warns user if ScopedTransaction goes out of scope
  * without commit/rollback.
  *
  * @note can't rollback "cleanly" because destructors don't allow co_await. Open to suggestions if clean rollback is
@@ -49,7 +49,7 @@ public:
   /// @}
 
   /**
-   * @brief Release transaction if ended. Warn user and try the DB provided @ref ITransaction::abandon "abandon"
+   * @brief Release transaction if ended. Warn user and try the DB provided @ref rukh::db::ITransaction::abandon "abandon"
    * function if not.
    */
   ~ScopedTransaction() {

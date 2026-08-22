@@ -1,4 +1,5 @@
 @page api API
+@tableofcontents
 
 # The Server Object
 

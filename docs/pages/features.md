@@ -1,4 +1,5 @@
 @page features Feature List
+@tableofcontents
 
 A feature-level overview of **RuKh**.
 
@@ -56,8 +57,8 @@ A feature-level overview of **RuKh**.
 - @rhttp{HttpStreamResponse} for generator-style streaming responses; handlers yield chunks through a lambda returning `Task<std::optional<std::string>>`, with `std::nullopt` terminating the stream.
 - Automatic switching from chunked encoding to `Content-Length` for static file streaming when the size is known in advance.
 - Range responses: `206 Partial Content` for single and multipart ranges, `416 Range Not Satisfiable`, and `If-Range` support backed by seekable asynchronous file reads.
-- Response compression using gzip and Brotli, selected through content negotiation against `Accept-Encoding` q-values (@rcomp{CompressorFactory}, @rcomp{ICompressor}).
-- MIME type resolution through @rhttp{MimeTypes} and a defined set of compressible MIME types.
+- Response compression using gzip and Brotli, selected through content negotiation against `Accept-Encoding` q-values (@rcomp{getCompressor}, @rcomp{ICompressor}).
+- MIME type resolution through @rhttp{MIME_TYPES} and a defined set of compressible MIME types.
 - Content negotiation for error responses so the error representation matches a format accepted by the client.
 
 ## Routing
@@ -107,6 +108,10 @@ A feature-level overview of **RuKh**.
 - Structured `DatabaseError` / `DbErrorType` categories rather than exposing only raw SQLite error codes or strings.
 - SQLite is compiled as amalgamation source directly into the `rukh` static library, so no external SQLite installation is required.
 
+## Transactions
+- @rdb{ScopedTransaction} with semi-RAII rollback semantics.
+- @rdb{Sqlite3Transaction}.
+
 ---
 
 # ORM
@@ -129,7 +134,7 @@ A feature-level overview of **RuKh**.
 
 ## Query Builder
 - @rorm{SelectQuery}, @rorm{InsertQuery}, @rorm{UpdateQuery}, @rorm{DeleteQuery}, and @rorm{UpsertQuery}, sharing a common @rorm{WhereClause} / @rorm{QueryDispatcher} base.
-- Typed @rorm{Predicate}<Model> conditions for `WHERE`, including comparison operators and helpers, avoiding hand-built condition SQL.
+- Typed @rorm{Predicate}\<Model\> conditions for `WHERE`, including comparison operators and helpers, avoiding hand-built condition SQL.
 - `join()` with inner, left, right, full, and cross joins, with optional table aliasing.
 - `groupBy()` / `having()`.
 - `orderBy()` by column name or typed field pointer, ascending or descending.
@@ -148,13 +153,9 @@ A feature-level overview of **RuKh**.
 - Named relations using `FixedString` NTTPs through `.withRelationName<"friendship">()` and reciprocal names through `.withReciprocalName<"followers">()`.
 - Relation traversal through `ref()`, `related()`, and `manyRelated()`, with compile-time validation of relation definitions.
 
-## Hydration
+## Hydration/Deserialization
 - Tuple-based row hydration through `std::apply`.
 - Column hydration by name rather than position, so reordering `SELECT` columns does not break mapping.
 - Joined and multi-model row hydration for `join()` queries.
 - Optional-type unwrapping during hydration so SQL `NULL` maps cleanly to `std::nullopt`.
 - Hydration failures identify the specific column that failed.
-
-## Transactions
-- @rdb{ScopedTransaction} with semi-RAII rollback semantics.
-- @rdb{Sqlite3Transaction}.

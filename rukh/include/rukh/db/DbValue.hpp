@@ -119,7 +119,7 @@ T fromDbValueImpl(const DbValue &v) {
  *
  * nullptr if T is std::nullopt_t
  *
- * For more info about custom types, see @ref `fromDbValueImpl`
+ * For more info about custom types, see @ref fromDbValueImpl
  */
 template <typename T> DbValue toDbValue(const T &v) {
   if constexpr (OptionalT<T>) {
@@ -167,7 +167,7 @@ template <typename T> T fromDbValueImpl(const DbValue &) {
 /**
  * @brief Converts a `DbValue` to a value of type `T`. Useful for custom model field types.
  *
- * For more info about custom types, see @ref `fromDbValueImpl`
+ * For more info about custom types, see @ref fromDbValueImpl
  */
 template <typename T> T fromDbValue(const DbValue &v) { return fromDbValueImpl<T>(v); }
 

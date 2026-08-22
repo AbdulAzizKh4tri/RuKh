@@ -114,6 +114,7 @@ public:
    * @brief Read Data
    * @param targetSize The ~number of bytes to read
    * @param maxBufferSize The maximum size that the read buffer is allowed to reach after multiple calls to read.
+   * @param deadline When to timeout.
    *
    * targetSize is useful because we don't want to flush the entire kernel buffer, so the kernel window has the unused
    * data and it can advertise window capacity based on our processing speed, letting the client know to slow down if
