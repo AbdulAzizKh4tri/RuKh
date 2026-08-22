@@ -1377,7 +1377,7 @@ HTML_FILE_EXTENSION    = .html
 # of the possible markers and block names see the documentation.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_HEADER            = ./header.html
+HTML_HEADER            = ./custom/header.html
 
 # The HTML_FOOTER tag can be used to specify a user-defined HTML footer for each
 # generated HTML page. If the tag is left blank doxygen will generate a standard
@@ -1420,7 +1420,9 @@ HTML_STYLESHEET        =
 HTML_EXTRA_STYLESHEET  = ./doxygen-awesome-css/doxygen-awesome.css \
                         ./doxygen-awesome-css/doxygen-awesome-sidebar-only.css \
 						./doxygen-awesome-css/doxygen-awesome-sidebar-only-darkmode-toggle.css \
-						./custom/rukh.css
+						./custom/custom.css \
+						./custom/rukh.css \
+						./custom/terminal.css \
 
 # The HTML_EXTRA_FILES tag can be used to specify one or more extra images or
 # other source files which should be copied to the HTML output directory. Note
@@ -1434,6 +1436,7 @@ HTML_EXTRA_FILES       = ./doxygen-awesome-css/doxygen-awesome-darkmode-toggle.j
 						 ./doxygen-awesome-css/doxygen-awesome-fragment-copy-button.js \
 						 ./doxygen-awesome-css/doxygen-awesome-paragraph-link.js \
 						 ./doxygen-awesome-css/doxygen-awesome-interactive-toc.js \
+						 ./custom/toggle-alternative-theme.js
 
 
 HTML_COPY_CLIPBOARD = NO
@@ -1468,7 +1471,7 @@ HTML_COLORSTYLE_HUE    = 0
 # Minimum value: 0, maximum value: 255, default value: 100.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_COLORSTYLE_SAT    = 100
+HTML_COLORSTYLE_SAT    = 0
 
 # The HTML_COLORSTYLE_GAMMA tag controls the gamma correction applied to the
 # luminance component of the colors in the HTML output. Values below 100

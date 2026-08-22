@@ -1,0 +1,247 @@
+@media screen and (max-width: 767px) {
+    .github-corner svg {
+        width: 50px;
+        height: 50px;
+    }
+    #projectnumber {
+        margin-right: 22px;
+    }
+}
+
+#theme-selection {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    background: var(--side-nav-background);
+    padding: 5px 2px 5px 8px;
+    box-shadow: 0 -4px 4px -2px var(--side-nav-background);
+    display: flex;
+}
+
+#theme-selection label {
+    border: 1px solid var(--separator-color);
+    border-right: 0;
+    color: var(--page-foreground-color);
+    font-size: var(--toc-font-size);
+    padding: 0 8px;
+    display: inline-block;
+    height: 22px;
+    box-sizing: border-box;
+    border-radius: var(--border-radius-medium) 0 0 var(--border-radius-medium);
+    line-height: 20px;
+    background: var(--page-background-color);
+    opacity: 0.7;
+}
+
+@media (prefers-color-scheme: dark) {
+    html:not(.light-mode) #theme-select {
+        background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' fill='%23aaaaaa'><polygon points='0,0 100,0 50,50'/></svg>") no-repeat;
+        background-size: 8px;
+        background-position: calc(100% - 6px) 65%;
+        background-color: var(--page-background-color);
+    }
+}
+
+html.dark-mode #theme-select {
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' fill='%23aaaaaa'><polygon points='0,0 100,0 50,50'/></svg>") no-repeat;
+    background-size: 8px;
+    background-position: calc(100% - 6px) 65%;
+    background-color: var(--page-background-color);
+}
+
+#theme-select {
+    border: 1px solid var(--separator-color);
+    border-radius: 0 var(--border-radius-medium) var(--border-radius-medium) 0;
+    padding: 0;
+    height: 22px;
+    font-size: var(--toc-font-size);
+    font-family: var(--font-family);
+    width: 215px;
+    color: var(--primary-color);
+    border-left: 0;
+    display: inline-block;
+    opacity: 0.7;
+    outline: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' fill='%23888888'><polygon points='0,0 100,0 50,50'/></svg>") no-repeat;
+    background-size: 8px;
+    background-position: calc(100% - 6px) 65%;
+    background-repeat: no-repeat;
+    background-color: var(--page-background-color);
+}
+
+#theme-selection:hover #theme-select, #theme-selection:hover label {
+    opacity: 1;
+}
+
+#nav-tree-contents {
+    margin-bottom: 30px;
+}
+
+@media screen and (max-width: 767px) {
+    #theme-selection {
+        box-shadow: none;
+        background: none;
+        height: 20px;
+    }
+
+    #theme-select {
+        width: 80px;
+        opacity: 1;
+    }
+
+    #theme-selection label {
+        opacity: 1;
+    }
+
+    #nav-path ul li.navelem:first-child {
+        margin-left: 160px;
+    }
+
+    ul li.footer:not(:first-child) {
+        display: none;
+    }
+
+    #nav-path {
+        position: fixed;
+        bottom: 0;
+        background: var(--page-background-color);
+    }
+}
+
+
+/* ============================================================
+ * Member title (function docs)
+ * ============================================================ */
+
+/* Hide permalink by default */
+h2.memtitle > span.permalink {
+    display: none;
+}
+
+/* Show on title hover */
+h2.memtitle:hover > span.permalink {
+    display: inline;
+}
+
+/* Kill the diamond in every state */
+h2.memtitle > span.permalink > a,
+h2.memtitle > span.permalink > a:link,
+h2.memtitle > span.permalink > a:visited,
+h2.memtitle > span.permalink > a:hover,
+h2.memtitle > span.permalink > a:focus,
+h2.memtitle > span.permalink > a:active {
+    color: transparent !important;
+    text-shadow: none !important;
+    background: none !important;
+    font-size: inherit;
+    letter-spacing: -0.05em;
+    position: relative;
+    margin-right: 0;
+    text-decoration: none !important;
+}
+
+/* New symbol */
+h2.memtitle > span.permalink > a::before {
+    content: "#";
+    color: var(--page-secondary-foreground-color);
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9em;
+    font-weight: 600;
+    opacity: 0.55;
+    transition: color 0.15s ease, opacity 0.15s ease;
+    pointer-events: none;
+}
+
+h2.memtitle > span.permalink > a:hover::before {
+    color: var(--primary-color);
+    opacity: 1;
+}
+
+/* Overload counter [3/4] */
+h2.memtitle > span.overload {
+    font-size: 0.68em;
+    font-weight: 400;
+    opacity: 0.5;
+    margin-left: 0.35em;
+    vertical-align: 0.12em;
+    letter-spacing: -0.02em;
+}
+
+/* Title itself */
+h2.memtitle {
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+/* ============================================================
+ * Member title (function docs)
+ * ============================================================ */
+
+/* Hide permalink by default */
+h2.memtitle > span.permalink {
+    display: none;
+}
+
+/* Show on title hover */
+h2.memtitle:hover > span.permalink {
+    display: inline;
+}
+
+/* Kill the diamond in every state */
+h2.memtitle > span.permalink > a,
+h2.memtitle > span.permalink > a:link,
+h2.memtitle > span.permalink > a:visited,
+h2.memtitle > span.permalink > a:hover,
+h2.memtitle > span.permalink > a:focus,
+h2.memtitle > span.permalink > a:active {
+    color: transparent !important;
+    text-shadow: none !important;
+    background: none !important;
+    font-size: inherit;
+    letter-spacing: -0.05em;
+    position: relative;
+    margin-right: 0em;
+    text-decoration: none !important;
+}
+
+/* New symbol */
+h2.memtitle > span.permalink > a::before {
+    content: "#";
+    color: var(--page-secondary-foreground-color);
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9em;
+    font-weight: 600;
+    opacity: 0.55;
+    transition: color 0.15s ease, opacity 0.15s ease;
+    pointer-events: none;
+}
+
+h2.memtitle > span.permalink > a:hover::before {
+    color: var(--primary-color);
+    opacity: 1;
+}
+
+/* Overload counter [3/4] */
+h2.memtitle > span.overload {
+    font-size: 0.68em;
+    font-weight: 400;
+    opacity: 0.5;
+    margin-left: 0.35em;
+    vertical-align: 0.12em;
+    letter-spacing: -0.02em;
+}
+
+/* Title itself */
+h2.memtitle {
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}

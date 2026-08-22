@@ -1,0 +1,253 @@
+/* ============================================================
+ * Terminal Hacker — Doxygen Awesome Theme
+ *
+ * Old Unix terminal.
+ * Green phosphor. CRT glow.
+ * VT100/VT220 rather than "developer dark mode".
+ * ============================================================ */
+
+html.terminal {
+    /* --------------------------------------------------------
+     * Primary — phosphor green
+     * -------------------------------------------------------- */
+
+    --primary-color: #008800;
+    --primary-dark-color: #005500;
+    --primary-light-color: #00aa00;
+    --primary-lighter-color: #33cc33;
+    --primary-lightest-color: #99ee99;
+
+    /* --------------------------------------------------------
+     * Code / fragments — terminal paper
+     * -------------------------------------------------------- */
+
+    --fragment-background: #e6e6d8;
+    --fragment-foreground: #111111;
+
+    --code-background: #e6e6d8;
+    --code-foreground: #111111;
+
+    /* --------------------------------------------------------
+     * Page — old terminal documentation
+     * -------------------------------------------------------- */
+
+    --page-background-color: #eeeeE2;
+    --page-foreground-color: #111111;
+    --page-secondary-foreground-color: #444444;
+
+    /* --------------------------------------------------------
+     * Geometry
+     *
+     * Terminals don't do rounded cards.
+     * -------------------------------------------------------- */
+
+    --border-radius-large: 0px;
+    --border-radius-small: 0px;
+    --border-radius-medium: 0px;
+
+    --spacing-small: 3px;
+    --spacing-medium: 6px;
+    --spacing-large: 10px;
+
+    --top-height: 125px;
+
+    --box-shadow: none;
+    --separator-color: #99998c;
+
+    /* --------------------------------------------------------
+     * Navigation
+     * -------------------------------------------------------- */
+
+    --side-nav-background: #e2e2d4;
+    --side-nav-foreground: #111111;
+
+    --side-nav-arrow-opacity: 0.35;
+    --side-nav-arrow-hover-opacity: 1;
+
+    --header-background: #eeeeE2;
+    --header-foreground: #111111;
+
+    --searchbar-border-radius: 0px;
+
+    /* --------------------------------------------------------
+     * Tables / content
+     * -------------------------------------------------------- */
+
+    --toc-background: #e2e2d4;
+    --toc-foreground: #111111;
+
+    --tablehead-background: #ccccbb;
+
+    --blockquote-background: #dedecf;
+    --blockquote-foreground: #333333;
+
+    /* --------------------------------------------------------
+     * Menus
+     * -------------------------------------------------------- */
+
+    --menu-focus-background: #008800;
+    --menu-focus-foreground: #ffffff;
+
+    --menu-selected-background: rgba(0, 136, 0, 0.15);
+
+    /* --------------------------------------------------------
+     * Callouts — terminal muted palette
+     * -------------------------------------------------------- */
+
+    --warning-color: #eee6b8;
+    --warning-color-dark: #806800;
+    --warning-color-darker: #403400;
+
+    --note-color: #d8ead8;
+    --note-color-dark: #176117;
+    --note-color-darker: #0b300b;
+
+    --todo-color: #e2d8e8;
+    --todo-color-dark: #654075;
+    --todo-color-darker: #33203c;
+
+    --deprecated-color: #dddddd;
+    --deprecated-color-dark: #666666;
+    --deprecated-color-darker: #333333;
+
+    --bug-color: #ead0d0;
+    --bug-color-dark: #7a2020;
+    --bug-color-darker: #3d1010;
+
+    --invariant-color: #d4e5e5;
+    --invariant-color-dark: #175858;
+    --invariant-color-darker: #0b2c2c;
+
+    /* --------------------------------------------------------
+     * Typography
+     *
+     * Monospace is part of the aesthetic.
+     * -------------------------------------------------------- */
+
+    --font-family:
+        ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        "Liberation Mono",
+        monospace;
+
+    --page-font-size: 14px;
+}
+
+
+/* ============================================================
+ * DARK MODE
+ *
+ * Green phosphor CRT on black.
+ * ============================================================ */
+
+html.terminal.dark-mode {
+    color-scheme: dark;
+
+    /* --------------------------------------------------------
+     * Primary — phosphor green
+     * -------------------------------------------------------- */
+
+    --primary-color: #00cc00;
+    --primary-dark-color: #008800;
+    --primary-light-color: #00ff00;
+    --primary-lighter-color: #66ff66;
+    --primary-lightest-color: #b3ffb3;
+
+    /* --------------------------------------------------------
+     * Code / fragments
+     * -------------------------------------------------------- */
+
+    --fragment-background: #050805;
+    --fragment-foreground: #b8ffb8;
+
+    --code-background: #050805;
+    --code-foreground: #b8ffb8;
+
+    /* --------------------------------------------------------
+     * Page
+     * -------------------------------------------------------- */
+
+    --page-background-color: #080b08;
+    --page-foreground-color: #b8c8b8;
+    --page-secondary-foreground-color: #6f806f;
+
+    /* --------------------------------------------------------
+     * Geometry
+     * -------------------------------------------------------- */
+
+    --border-radius-large: 0px;
+    --border-radius-small: 0px;
+    --border-radius-medium: 0px;
+
+    --spacing-small: 3px;
+    --spacing-medium: 6px;
+    --spacing-large: 10px;
+
+    --box-shadow: none;
+    --separator-color: #263326;
+
+    /* --------------------------------------------------------
+     * Navigation
+     * -------------------------------------------------------- */
+
+    --side-nav-background: #0a0e0a;
+    --side-nav-foreground: #a8b8a8;
+
+    --side-nav-arrow-opacity: 0.3;
+    --side-nav-arrow-hover-opacity: 1;
+
+    --header-background: #080b08;
+    --header-foreground: #b8c8b8;
+
+    /* --------------------------------------------------------
+     * Tables / content
+     * -------------------------------------------------------- */
+
+    --toc-background: #0c120c;
+    --toc-foreground: var(--page-foreground-color);
+
+    --tablehead-background: #121b12;
+
+    --blockquote-background: #0d140d;
+    --blockquote-foreground: #819081;
+
+    /* --------------------------------------------------------
+     * Menus
+     * -------------------------------------------------------- */
+
+    --menu-focus-background: #00aa00;
+    --menu-focus-foreground: #020402;
+
+    --menu-selected-background: rgba(0, 204, 0, 0.13);
+
+    /* --------------------------------------------------------
+     * Callouts — dark terminal palette
+     * -------------------------------------------------------- */
+
+    --warning-color: #211d08;
+    --warning-color-dark: #c9a900;
+    --warning-color-darker: #eadf91;
+
+    --note-color: #081808;
+    --note-color-dark: #00bb00;
+    --note-color-darker: #70ff70;
+
+    --todo-color: #170d1d;
+    --todo-color-dark: #a66dcc;
+    --todo-color-darker: #d4a8ed;
+
+    --deprecated-color: #161616;
+    --deprecated-color-dark: #777777;
+    --deprecated-color-darker: #aaaaaa;
+
+    --bug-color: #200909;
+    --bug-color-dark: #dd4444;
+    --bug-color-darker: #ff9999;
+
+    --invariant-color: #081818;
+    --invariant-color-dark: #00aaaa;
+    --invariant-color-darker: #77eeee;
+}

@@ -24,27 +24,17 @@ $darkmode
 $extrastylesheet
 
 <!--CUSTOM HEAD-->
-<script type="text/javascript" src="$relpath^ThemeSwitcher.js"></script>
-<script type="text/javascript">
-	ThemeSwitcher.init();
-</script>
 <script type="text/javascript" src="$relpath^doxygen-awesome-darkmode-toggle.js"></script>
+<script type="text/javascript" src="$relpath^doxygen-awesome-fragment-copy-button.js"></script>
+<script type="text/javascript" src="$relpath^doxygen-awesome-paragraph-link.js"></script>
+<script type="text/javascript" src="$relpath^doxygen-awesome-interactive-toc.js"></script>
+
+<script type="text/javascript" src="$relpath^toggle-alternative-theme.js"></script>
+
 <script type="text/javascript">
 	DoxygenAwesomeDarkModeToggle.init()
-</script>
-
-<script type="text/javascript" src="$relpath^doxygen-awesome-fragment-copy-button.js"></script>
-<script type="text/javascript">
 	DoxygenAwesomeFragmentCopyButton.init()
-</script>
-
-<script type="text/javascript" src="$relpath^doxygen-awesome-paragraph-link.js"></script>
-<script type="text/javascript">
 	DoxygenAwesomeParagraphLink.init()
-</script>
-
-<script type="text/javascript" src="$relpath^doxygen-awesome-interactive-toc.js"></script>
-<script type="text/javascript">
 	DoxygenAwesomeInteractiveToc.init()
 </script>
 
@@ -95,6 +85,14 @@ $extrastylesheet
   <!--END SEARCHENGINE-->
  </tbody>
 </table>
+<div id="theme-selection">
+ <label for="theme-select">Theme:</label>
+ <select id="theme-select">
+  <option value="rukh">RuKh</option>
+  <option value="terminal">Terminal</option>
+  <option value="theme-default">Doxygen Awesome</option>
+ </select>
+</div>
 </div>
 <!--END TITLEAREA-->
 <!-- end header part -->
