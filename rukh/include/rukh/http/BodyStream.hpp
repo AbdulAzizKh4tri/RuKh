@@ -62,7 +62,7 @@ public:
 
     size_t n = 0;
     unsigned char scratch[4096];
-    while (data.size() <= limit) {
+    while (data.size() < limit) {
       auto span = std::span<unsigned char>(scratch, sizeof(scratch));
       n = co_await read(span);
       if (n == 0)

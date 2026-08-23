@@ -53,12 +53,13 @@ public:
   inline static size_t MAX_HEADER_BYTES = 8 * KB;
   /// Maximum allowed size of request body in bytes
   inline static size_t MAX_CONTENT_LENGTH = 1 * MB;
-  /// How filled up the write buffer is allowed to get before we decide the connection is dead.
-  inline static size_t MAX_WRITE_BUFFER_BYTES = 10 * MB;
   /// Transfer Encoding Chunked, maximum size allowed for a chunk
   inline static size_t MAX_TE_CHUNK_LENGTH = 1 * MB;
   /// Transfer Encoding Chunked, maximum size allowed for a request
   inline static size_t MAX_TE_LENGTH = 10 * MB;
+
+  /// For Responses: How filled up the write buffer is allowed to get before we decide the connection is dead.
+  inline static size_t MAX_WRITE_BUFFER_BYTES = 10 * MB;
 
   /// @}
 

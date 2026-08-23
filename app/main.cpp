@@ -62,6 +62,7 @@ int main() {
   server.setTlsContext(cert_path, key_path);
   server.setRouter(router);
   server.addListener(host, "8080");
+  server.addTlsListener(host, "8443");
 
   server.run(N);
 

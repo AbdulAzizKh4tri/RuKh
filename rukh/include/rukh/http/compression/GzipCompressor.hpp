@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "rukh/ServerConfig.hpp"
 #include <string>
 #include <string_view>
 #include <zlib.h>
@@ -46,7 +47,7 @@ namespace rukh::http::compression {
  */
 class GzipCompressor : public ICompressor {
 public:
-  GzipCompressor(int level = Z_DEFAULT_COMPRESSION) : level_(level) {
+  GzipCompressor(int level = ServerConfig::STATIC_GZIP_COMPRESS_LEVEL) : level_(level) {
     stream_.zalloc = Z_NULL;
     stream_.zfree = Z_NULL;
     stream_.opaque = Z_NULL;
