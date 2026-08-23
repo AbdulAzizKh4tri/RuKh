@@ -49,7 +49,7 @@ if(RUKH_ENABLE_SQLITE)
 
   FetchContent_MakeAvailable(sqlite3)
 
-  add_library(sqlite3_amalgamation OBJECT
+  add_library(sqlite3_amalgamation STATIC
     ${sqlite3_SOURCE_DIR}/sqlite3.c
   )
 
@@ -78,6 +78,7 @@ endif()
 ExternalProject_Add(liburing_ext
   GIT_REPOSITORY https://github.com/axboe/liburing.git
   GIT_TAG liburing-2.15
+  UPDATE_DISCONNECTED 1
   PREFIX ${RUKH_DEPS_DIR}/liburing
 
   CONFIGURE_COMMAND
@@ -99,7 +100,7 @@ set_target_properties(liburing_imported PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${RUKH_DEPS_INSTALL_DIR}/include
 )
 
-add_dependencies(rukh liburing_ext)
+add_dependencies(liburing_imported liburing_ext)
 
 # ── System dependencies ───────────────────────────────────────────────────────
 find_package(OpenSSL REQUIRED)

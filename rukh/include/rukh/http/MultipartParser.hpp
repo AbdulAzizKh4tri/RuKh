@@ -288,17 +288,30 @@ public:
     std::vector<std::pair<std::string, std::string>> headersVec;
     std::unordered_map<std::string, std::vector<std::string>> multiFieldValues;
 
+    size_t partCount = 0;
     while (contentConsumed_ < contentLength_) {
+      if (++partCount > ServerConfig::MAX_MULTIPART_PARTS)
+        throw ServerException("Maximum number of multipart parts exceeded", 413);
+
       auto [span, n] = co_await reader_.read();
 
       auto headerEndIt = std::search(span.begin(), span.end(), crlf2.begin(), crlf2.end());
       while (headerEndIt == span.end()) {
+
+        if (span.size() > ServerConfig::MAX_MULTIPART_PART_HEADER_SIZE)
+          throw ServerException("Multipart part headers too large", 400);
+
         auto [newSpan, n] = co_await reader_.read();
         span = newSpan;
         if (n == 0)
           throw ServerException("Malformed multipart request: Part headers not found or too large", 400);
         headerEndIt = std::search(span.begin(), span.end(), crlf2.begin(), crlf2.end());
       }
+
+      size_t headerSize = std::distance(span.begin(), headerEndIt) + 4;
+
+      if (headerSize > ServerConfig::MAX_MULTIPART_PART_HEADER_SIZE)
+        throw ServerException("Multipart part headers too large", 400);
 
       std::string headers = std::string(span.begin(), headerEndIt + 4);
       reader_.consumeBytes(headers.size());

@@ -34,7 +34,7 @@ namespace rukh::core {
  *
  * @see Task<void>
  */
-template <typename T> class Task {
+template <typename T> class [[nodiscard("Task doesn't run until co_awaited")]] Task {
 public:
   struct FinalAwaiter;
 

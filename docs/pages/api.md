@@ -25,6 +25,8 @@ The @rhttp{HttpServer::run, run(size_t N)} method is what actually starts the se
 
 See @rhttp{HttpServer}, @rhttp{ErrorFactory}, @rhttp{Router}.
 
+For more advanced users who wish to tune server constants, see @ref rukh::ServerConfig "ServerConfig".
+
 ---
 # Routing
 

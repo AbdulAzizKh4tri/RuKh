@@ -285,6 +285,7 @@ TAB_SIZE               = 4
 
 ALIASES = internalGroup="@name Internals ^^ @brief I can't think of a reason why you'd need to explicitly use any of this, but it's here"
 ALIASES += internalMethod="@warning This method is for internal use."
+ALIASES += internalField="@warning This field is for internal use."
 ALIASES += "rc{1}=@ref rukh::core::\1 \"\1\""
 ALIASES += "rc{2}=@ref rukh::core::\1 \"\2\""
 ALIASES += "rhttp{1}=@ref rukh::http::\1 \"\1\""
