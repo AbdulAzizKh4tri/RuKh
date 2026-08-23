@@ -5,7 +5,17 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(RUKH_DEPS_DIR "${CMAKE_SOURCE_DIR}/.deps" CACHE PATH
+    "Persistent dependency cache")
+
+set(RUKH_DEPS_INSTALL_DIR "${RUKH_DEPS_DIR}/install" CACHE PATH
+    "Persistent dependency install directory")
+
+set(FETCHCONTENT_BASE_DIR "${RUKH_DEPS_DIR}/fetchcontent" CACHE PATH
+    "FetchContent cache directory")
+
 include(ExternalProject)
+include(FetchContent)
 
 # ── Sources ───────────────────────────────────────────────────────────────────
 file(GLOB_RECURSE RUKH_SOURCES "src/*.cpp")
@@ -25,54 +35,71 @@ target_compile_options(rukh PRIVATE
 #            or #include "core/Executor.hpp"
 target_include_directories(rukh
   PUBLIC  include/
-  PRIVATE external/
 )
 
-# ── SQLite (amalgamation) ──────────────────────────────────────────────────
+# ── SQLite ────────────────────────────────────────────────────────────────────
 option(RUKH_ENABLE_SQLITE "Enable SQLite database backend" ON)
 
 if(RUKH_ENABLE_SQLITE)
-  # OBJECT, not STATIC: it's a single .c file only rukh consumes — no
-  # reason to pay for building a standalone .a archive.
-  add_library(sqlite3_amalgamation OBJECT external/sqlite3/sqlite3.c)
+  FetchContent_Declare(
+    sqlite3
+    URL https://sqlite.org/2026/sqlite-amalgamation-3530400.zip
+    URL_HASH SHA3_256=628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e
+  )
 
-  target_include_directories(sqlite3_amalgamation PUBLIC external/sqlite3)
+  FetchContent_MakeAvailable(sqlite3)
+
+  add_library(sqlite3_amalgamation OBJECT
+    ${sqlite3_SOURCE_DIR}/sqlite3.c
+  )
+
+  target_include_directories(sqlite3_amalgamation PUBLIC
+    ${sqlite3_SOURCE_DIR}
+  )
 
   target_compile_definitions(sqlite3_amalgamation PUBLIC
     SQLITE_THREADSAFE=2
   )
 
-  # Always optimize the amalgamation, even in a Debug build of rukh.
-  # You'll never want to single-step into SQLite's own internals, and
-  # its assert-heavy debug paths are dramatically slower.
-  target_compile_options(sqlite3_amalgamation PRIVATE -O2)
+  target_compile_options(sqlite3_amalgamation PRIVATE
+    -O2
+  )
 
-  target_compile_definitions(rukh PRIVATE RUKH_ENABLE_SQLITE)
+  target_compile_definitions(rukh PRIVATE
+    RUKH_ENABLE_SQLITE
+  )
 
-  # PRIVATE is the whole point here: rukh's *usage requirements* from
-  # sqlite3_amalgamation (its include path, its defines) stay private to
-  # rukh and do not propagate to anything that links rukh::rukh.
-  target_link_libraries(rukh PRIVATE sqlite3_amalgamation)
+  target_link_libraries(rukh PUBLIC
+    sqlite3_amalgamation
+  )
 endif()
 
 # ── liburing (ExternalProject) ────────────────────────────────────────────────
 ExternalProject_Add(liburing_ext
-  SOURCE_DIR ${PROJECT_SOURCE_DIR}/external/liburing
-  CONFIGURE_COMMAND ./configure --prefix=<INSTALL_DIR>
-  BUILD_COMMAND make
+  GIT_REPOSITORY https://github.com/axboe/liburing.git
+  GIT_TAG liburing-2.15
+  PREFIX ${RUKH_DEPS_DIR}/liburing
+
+  CONFIGURE_COMMAND
+    <SOURCE_DIR>/configure --prefix=${RUKH_DEPS_INSTALL_DIR}
+
+  BUILD_COMMAND make -j
   INSTALL_COMMAND make install
   BUILD_IN_SOURCE 1
+
+  BUILD_BYPRODUCTS ${RUKH_DEPS_INSTALL_DIR}/lib/liburing.a
 )
 
-ExternalProject_Get_Property(liburing_ext INSTALL_DIR)
-file(MAKE_DIRECTORY ${INSTALL_DIR}/include)
+file(MAKE_DIRECTORY ${RUKH_DEPS_INSTALL_DIR}/include)
 
 add_library(liburing_imported STATIC IMPORTED)
+
 set_target_properties(liburing_imported PROPERTIES
-  IMPORTED_LOCATION             ${INSTALL_DIR}/lib/liburing.a
-  INTERFACE_INCLUDE_DIRECTORIES ${INSTALL_DIR}/include
+  IMPORTED_LOCATION ${RUKH_DEPS_INSTALL_DIR}/lib/liburing.a
+  INTERFACE_INCLUDE_DIRECTORIES ${RUKH_DEPS_INSTALL_DIR}/include
 )
-add_dependencies(liburing_imported liburing_ext)
+
+add_dependencies(rukh liburing_ext)
 
 # ── System dependencies ───────────────────────────────────────────────────────
 find_package(OpenSSL REQUIRED)
@@ -93,6 +120,7 @@ target_link_libraries(rukh PUBLIC
   liburing_imported
   PkgConfig::BROTLIENC
   PkgConfig::BROTLICOMMON
+  nlohmann_json::nlohmann_json
 )
 
 # ── PCH ───────────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 build/
+.deps/
 cmake-source-cache/
-external/
 .vscode/
 .github/
 .cache/

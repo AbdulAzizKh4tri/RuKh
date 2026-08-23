@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace rukh::db {
+
 /// RAII sqlite3_stmt guard
 struct StatementResetGuard {
   sqlite3_stmt *&s;
@@ -73,3 +75,5 @@ struct ConnectionReleaseGuard {
   ConnectionQueue *q;
   ~ConnectionReleaseGuard() { q->release(c); }
 };
+
+} // namespace rukh::db
