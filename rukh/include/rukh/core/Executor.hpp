@@ -125,6 +125,28 @@ public:
   void markRootFinished(void *addr);
 
 private:
+  struct PendingFileOpPrep {
+    enum class Type { READ, WRITE };
+
+    Type type;
+
+    int fd;
+    void *readBuf;
+    const void *writeBuf;
+    size_t len;
+    uint64_t offset;
+
+    uint64_t userData;
+
+    std::coroutine_handle<> handle;
+    int *resultPtr;
+  };
+
+  struct PendingFileOp {
+    std::coroutine_handle<> handle;
+    int *resultPtr;
+  };
+
   core::EpollInstance epoll_;
   std::vector<core::Task<void>> ownedTasks_;
   std::unordered_map<void *, size_t> ownedTaskMap_;
@@ -141,7 +163,8 @@ private:
 
   IoUringInstance ioUring_;
   uint64_t nextUserData_ = 0; // unique ID for IO uring file ops
-  std::unordered_map<uint64_t, std::pair<std::coroutine_handle<>, int *>> pendingFileOps_;
+  std::unordered_map<uint64_t, PendingFileOp> pendingFileOps_;
+  std::deque<PendingFileOpPrep> pendingFileOpPreps_;
 
   int eventFd_;
   std::mutex poolResumeQueueMutex_;

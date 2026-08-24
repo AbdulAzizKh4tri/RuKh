@@ -79,15 +79,15 @@ void Executor::submitFileRead(int fd, void *buf, size_t len, std::coroutine_hand
                               uint64_t offset) {
   /// \todo We may not need pendingFileOps_ at all, we may be able to let prepRead handle that. Check
   /// io_uring_sqe_set_data
-  pendingFileOps_[nextUserData_] = {h, resultPtr};
-  ioUring_.prepRead(fd, buf, len, nextUserData_, offset);
+  constexpr auto type = PendingFileOpPrep::Type::READ;
+  pendingFileOpPreps_.emplace_back(type, fd, buf, nullptr, len, offset, nextUserData_, h, resultPtr);
   nextUserData_++;
 }
 
 void Executor::submitFileWrite(int fd, const void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr,
                                uint64_t offset) {
-  pendingFileOps_[nextUserData_] = {h, resultPtr};
-  ioUring_.prepWrite(fd, buf, len, nextUserData_, offset);
+  constexpr auto type = PendingFileOpPrep::Type::WRITE;
+  pendingFileOpPreps_.emplace_back(type, fd, nullptr, buf, len, offset, nextUserData_, h, resultPtr);
   nextUserData_++;
 }
 
@@ -154,9 +154,10 @@ void Executor::run(std::atomic<bool> &shutdown) {
       }
     }
 
-    // setting this directly to epoll_wait_timeout makes it so that
+    // setting this directly to EPOLL_WAIT_TIMEOUT makes it so that
     // download speed = STATIC_STREAM_CHUNK_SIZE / EPOLL_WAIT_TIMEOUT seconds
-    int timeout = pendingFileOps_.empty() ? ServerConfig::EPOLL_WAIT_TIMEOUT * 1000 : 0;
+    int timeout =
+        (pendingFileOpPreps_.empty() and pendingFileOps_.empty()) ? ServerConfig::EPOLL_WAIT_TIMEOUT * 1000 : 0;
     int n = epoll_.wait(events, maxEvents, timeout);
     for (auto &event : std::span(events, n)) {
       int fd = event.data.fd;
@@ -201,6 +202,24 @@ void Executor::run(std::atomic<bool> &shutdown) {
         continue;
       readyQueue_.push({it->second.handle, true});
       suspendedTasks_.erase(it);
+    }
+
+    // std::deque<PendingFileOpPrep> pendingFileOpPreps_;
+    while (!pendingFileOpPreps_.empty()) {
+      auto p = pendingFileOpPreps_.front();
+      bool prepSuccess;
+      if (p.type == PendingFileOpPrep::Type::READ) {
+        prepSuccess = ioUring_.prepRead(p.fd, p.readBuf, p.len, p.userData, p.offset);
+      } else {
+        prepSuccess = ioUring_.prepWrite(p.fd, p.writeBuf, p.len, p.userData, p.offset);
+      }
+
+      if (not prepSuccess) {
+        break;
+      }
+
+      pendingFileOps_[p.userData] = {p.handle, p.resultPtr};
+      pendingFileOpPreps_.pop_front();
     }
 
     ioUring_.ioSubmit();

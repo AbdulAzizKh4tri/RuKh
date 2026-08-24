@@ -178,6 +178,7 @@ public:
           }
 
           if (res.value() > ServerConfig::MAX_CONTENT_LENGTH) {
+            /// \todo Closing the connection before sending the response is causing problems
             co_await sendErrorResponseAndClose(413);
             co_return;
           }
