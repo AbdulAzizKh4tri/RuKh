@@ -124,7 +124,7 @@ public:
   /// @name File IO
 
   /// Maximum number of concurrent file ops
-  inline static int IO_URING_RING_SIZE = 512;
+  inline static int IO_URING_RING_SIZE = 64;
 
   /// @}
 

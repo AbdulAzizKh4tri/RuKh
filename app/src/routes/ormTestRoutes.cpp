@@ -130,10 +130,10 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     bob.password = "secret";
 
     co_await runner.run("transaction commit", [db, &bob]() -> core::Task<void> {
-      db::ScopedTransaction transaction(db);
-      co_await transaction.begin();
-      unwrap(co_await bob.save(&transaction), "save");
-      auto res = co_await transaction.commit();
+      auto transaction = co_await db::ScopedTransaction::create(db);
+      co_await transaction->begin();
+      unwrap(co_await bob.save(&*transaction), "save");
+      auto res = co_await transaction->commit();
       expect(res, "commit() returned false");
 
       auto found = unwrap(co_await User::find(bob.id), "find");
@@ -144,21 +144,21 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
     co_await runner.run("transaction rollback", [db, &bob]() -> core::Task<void> {
       bob.age = 6;
       {
-        db::ScopedTransaction transaction(db);
-        co_await transaction.begin();
+        auto transaction = co_await db::ScopedTransaction::create(db);
+        co_await transaction->begin();
         // Deliberately not reassigning `bob` here — the outer variable must keep
         // representing the pre-transaction state for the "outside" check below.
 
-        auto res = co_await bob.save(&transaction);
+        auto res = co_await bob.save(&*transaction);
         unwrap(res, "save inside transaction");
 
         auto outside = unwrap(co_await User::find(bob.id), "find outside transaction");
         expect(outside.has_value() && outside->age == 12, "expected age to still be 12 outside the transaction");
 
-        auto inside = unwrap(co_await User::find(bob.id, &transaction), "find inside transaction");
+        auto inside = unwrap(co_await User::find(bob.id, &*transaction), "find inside transaction");
         expect(inside.has_value() && inside->age == 6, "expected age to be 6 inside the transaction");
 
-        expect(co_await transaction.rollback(), "rollback() returned false");
+        expect(co_await transaction->rollback(), "rollback() returned false");
       }
 
       auto found = unwrap(co_await User::find(bob.id), "find");
@@ -174,11 +174,11 @@ void registerOrmTestRoutes(rukh::http::Router &router, const rukh::http::ErrorFa
 
       int64_t carolId = 0;
       {
-        db::ScopedTransaction transaction(db);
-        co_await transaction.begin();
-        unwrap(co_await carol.save(&transaction), "save");
+        auto transaction = co_await db::ScopedTransaction::create(db);
+        co_await transaction->begin();
+        unwrap(co_await carol.save(&*transaction), "save");
         expect(carol.id > 0, "id not populated after insert inside transaction");
-        expect(co_await transaction.rollback(), "rollback() returned false");
+        expect(co_await transaction->rollback(), "rollback() returned false");
       }
       // carolId was populated by the insert even though the row never actually landed —
       // this is the caveat: any in-memory copy from before a rollback is stale.

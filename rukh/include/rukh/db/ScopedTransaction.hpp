@@ -13,25 +13,46 @@
 #include <rukh/db/ITransaction.hpp>
 
 namespace rukh::db {
-
 /**
  * @brief Semi RAII wrapper for @ref rukh::db::ITransaction
  *
  * @ref rukh::db::ITransaction::abandon "abandon"s transaction and warns user if ScopedTransaction goes out of scope
  * without commit/rollback.
  *
+ * Construction is async (acquiring the underlying transaction may need to wait on the
+ * connection pool). use @ref create instead of the constructor directly.
+ *
  * @note can't rollback "cleanly" because destructors don't allow co_await. Open to suggestions if clean rollback is
  * possible.
  */
 class ScopedTransaction : public ITransaction {
 public:
-  /// Acquire a transaction, ownership transfers to `this` object.
-  ScopedTransaction(IDatabase *db) : db_(db) {
-    auto t = db_->acquireTransaction();
+  /**
+   * @brief Acquire a transaction and wrap it. This is the only way to construct one,
+   * acquiring may need to suspend, which a constructor can't do.
+   */
+  static core::Task<std::expected<ScopedTransaction, DatabaseError>> create(IDatabase *db) {
+    auto t = co_await db->acquireTransaction();
     if (not t)
-      throw DatabaseException("Failed to start transaction " + t.error().message);
-    transaction_ = std::move(*t);
+      co_return std::unexpected(t.error());
+    co_return std::move(ScopedTransaction(db, std::move(*t)));
   }
+
+  ScopedTransaction(ScopedTransaction &&other) noexcept : db_(other.db_), transaction_(std::move(other.transaction_)) {
+    other.transaction_ = nullptr; // moved-from destructortor becomes a no-op below
+  }
+
+  ScopedTransaction &operator=(ScopedTransaction &&other) noexcept {
+    if (this != &other) {
+      db_ = other.db_;
+      transaction_ = std::move(other.transaction_);
+      other.transaction_ = nullptr;
+    }
+    return *this;
+  }
+
+  ScopedTransaction(const ScopedTransaction &) = delete;
+  ScopedTransaction &operator=(const ScopedTransaction &) = delete;
 
   /// @name Forwarders
   /// Forwards to whatever ITransaction the DB provides.@{
@@ -49,10 +70,12 @@ public:
   /// @}
 
   /**
-   * @brief Release transaction if ended. Warn user and try the DB provided @ref rukh::db::ITransaction::abandon "abandon"
-   * function if not.
+   * @brief Release transaction if ended. Warn user and try the DB provided @ref rukh::db::ITransaction::abandon
+   * "abandon" function if not.
    */
   ~ScopedTransaction() {
+    if (!transaction_)
+      return; // moved-from, nothing to release
     if (isTransactionEnded()) {
       db_->releaseTransaction(transaction_.get());
       transaction_.reset();
@@ -65,8 +88,9 @@ public:
   }
 
 private:
+  ScopedTransaction(IDatabase *db, std::unique_ptr<ITransaction> t) : db_(db), transaction_(std::move(t)) {}
+
   IDatabase *db_;
   std::unique_ptr<ITransaction> transaction_;
 };
-
 } // namespace rukh::db

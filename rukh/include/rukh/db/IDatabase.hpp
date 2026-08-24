@@ -26,7 +26,7 @@ public:
   executeQuery(const std::string &query, const std::vector<DbValue> &params = {}) = 0;
 
   /// Acquire a transaction, ownership transfers to caller. Must release.
-  virtual std::expected<std::unique_ptr<ITransaction>, DatabaseError> acquireTransaction() = 0;
+  virtual core::Task<std::expected<std::unique_ptr<ITransaction>, DatabaseError>> acquireTransaction() = 0;
 
   /// Release a transaction back to the pool
   virtual void releaseTransaction(ITransaction *transaction) = 0;

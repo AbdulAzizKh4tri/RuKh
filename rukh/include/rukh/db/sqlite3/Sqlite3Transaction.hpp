@@ -97,8 +97,6 @@ private:
   std::move_only_function<void() noexcept> abandonFn_;
   pool::ThreadPool *threadPool_;
   std::atomic<bool> busy_;
-  std::mutex mutex_;
-  std::condition_variable cv_;
   bool ended_ = false;
 
   struct TransactionLockGuard {
@@ -108,16 +106,13 @@ private:
   };
 
   void acquireTransactionLock() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    cv_.wait(lock, [this] { return not busy_; });
-    busy_ = true;
+    bool expected = false;
+    if (!busy_.compare_exchange_strong(expected, true))
+      throw DatabaseException(
+          "Transaction accessed concurrently — a transaction handle must be used sequentially by one caller");
   }
 
-  void releaseTransactionLock() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    busy_ = false;
-    cv_.notify_one();
-  }
+  void releaseTransactionLock() { busy_.store(false); }
 };
 
 } // namespace rukh::db
