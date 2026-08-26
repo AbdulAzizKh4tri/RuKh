@@ -515,12 +515,6 @@ public:
         if (not fileResponse->serializeHeaderInto(io_.getWriteBuffer()))
           co_return;
 
-        /// Sending headers
-        while (io_.hasPendingWrites()) {
-          if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
-            co_return;
-        }
-
         SPDLOG_DEBUG("contentLength: {}", contentLength);
         if (contentLength < ServerConfig::FILE_STREAM_THRESHOLD_BYTES) {
           SPDLOG_DEBUG("buffering");
@@ -541,6 +535,11 @@ public:
               co_return;
           }
         } else {
+          /// Sending headers
+          while (io_.hasPendingWrites()) {
+            if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
+              co_return;
+          }
           SPDLOG_DEBUG("streaming");
           if (contentLength != co_await io_.sendFile(fileResponse->getFd(), fileResponse->getOffset(), contentLength)) {
             SPDLOG_ERROR("Failed to send file: {}", fileResponse->getFilePath().string());
