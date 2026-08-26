@@ -69,6 +69,28 @@ public:
   }
 
   /**
+   * @brief Prepare a splice operation (kernel-space file/pipe/socket data
+   * movement, no userspace copy).
+   *
+   * @param fdIn source fd
+   * @param offIn offset into fdIn if it's a regular file, -1 if fdIn is a pipe
+   *
+   * @param fdOut destination fd
+   * @param offOut offset into fdOut if it's a regular file, -1 otherwise
+   *
+   * @param len max bytes to move in this call
+   * @param userData identifies which splice completed, same convention as prepRead/prepWrite
+   */
+  bool prepSplice(int inFd, off_t inOffSet, int outFd, off_t outOffSet, size_t len, uint64_t userData) {
+    auto *sqe = io_uring_get_sqe(&ring_);
+    if (not sqe)
+      return false;
+    io_uring_prep_splice(sqe, inFd, inOffSet, outFd, outOffSet, len, SPLICE_F_MOVE);
+    io_uring_sqe_set_data64(sqe, userData);
+    return true;
+  }
+
+  /**
    * @brief Submit the io_uring ring to the kernel. This is what actually starts the I/O.
    */
   void ioSubmit() { io_uring_submit(&ring_); }

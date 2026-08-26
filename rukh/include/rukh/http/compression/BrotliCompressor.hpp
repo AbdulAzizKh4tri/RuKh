@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "rukh/ServerConfig.hpp"
 #include <brotli/encode.h>
 #include <string>
 #include <string_view>
@@ -92,7 +93,7 @@ private:
     const uint8_t *nextIn = reinterpret_cast<const uint8_t *>(input.data());
     size_t availIn = input.size();
     std::string output;
-    uint8_t buf[4096];
+    uint8_t buf[ServerConfig::COMPRESSION_BUFFER_SIZE];
 
     do {
       uint8_t *nextOut = buf;

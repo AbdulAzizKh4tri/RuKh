@@ -5,22 +5,25 @@
 
 #pragma once
 
+#include "rukh/core/AsyncFileReader.hpp"
 #include <chrono>
 #include <exception>
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <variant>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/ServerConfig.hpp>
 #include <rukh/TypeHelpers.hpp>
-#include <rukh/core/Awaitables.hpp>
 #include <rukh/core/ExecutorContext.hpp>
+#include <rukh/core/SocketAwaitables.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/http/BodyStream.hpp>
 #include <rukh/http/ChunkDecoder.hpp>
 #include <rukh/http/ErrorFactory.hpp>
+#include <rukh/http/HttpFileResponse.hpp>
 #include <rukh/http/HttpRequest.hpp>
 #include <rukh/http/HttpResponse.hpp>
 #include <rukh/http/HttpStreamResponse.hpp>
@@ -481,8 +484,72 @@ public:
             }
           }
         }
-      }
 
+      } else if (HttpFileResponse *fileResponse = std::get_if<HttpFileResponse>(&response)) {
+
+        auto result = fileResponse->openFile();
+        if (result.has_value()) {
+          switch (result.value()) {
+          case core::FileOpenError::NotFound:
+            co_await sendErrorResponseAndClose(404);
+            co_return;
+          case core::FileOpenError::Forbidden:
+            co_await sendErrorResponseAndClose(403);
+            co_return;
+          case core::FileOpenError::Malformed:
+            co_await sendErrorResponseAndClose(400);
+            co_return;
+          case core::FileOpenError::ResourceExhausted:
+            co_await sendErrorResponseAndClose(503);
+            co_return;
+          case core::FileOpenError::Unexpected:
+          default:
+            co_await sendErrorResponseAndClose(500);
+            co_return;
+          }
+        }
+
+        size_t contentLength = fileResponse->getContentLength()
+                                   .value(); // throw if no value, cuz why the hell would you not set content length.
+
+        if (not fileResponse->serializeHeaderInto(io_.getWriteBuffer()))
+          co_return;
+
+        /// Sending headers
+        while (io_.hasPendingWrites()) {
+          if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
+            co_return;
+        }
+
+        SPDLOG_DEBUG("contentLength: {}", contentLength);
+        if (contentLength < ServerConfig::FILE_STREAM_THRESHOLD_BYTES) {
+          SPDLOG_DEBUG("buffering");
+          core::AsyncFileReader reader(fileResponse->getFd());
+          reader.seek(fileResponse->getOffset());
+
+          io_.getWriteBuffer().resize(io_.getWriteBuffer().size() + contentLength);
+          auto span = std::span<unsigned char>(
+              io_.getWriteBuffer().data() + io_.getWriteBuffer().size() - contentLength, contentLength);
+
+          if (not co_await reader.readChunkInto(span)) {
+            io_.resetConnection();
+            co_return;
+          }
+
+          while (io_.hasPendingWrites()) {
+            if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
+              co_return;
+          }
+        } else {
+          SPDLOG_DEBUG("streaming");
+          if (contentLength != co_await io_.sendFile(fileResponse->getFd(), fileResponse->getOffset(), contentLength)) {
+            SPDLOG_ERROR("Failed to send file: {}", fileResponse->getFilePath().string());
+            io_.resetConnection();
+            co_return;
+          }
+        }
+        logRequest(request_, *fileResponse);
+      }
       resetForNextRequest();
     }
   }
@@ -571,6 +638,18 @@ private:
   }
 
   void logRequest(const HttpRequest &req, const HttpStreamResponse &res) {
+    int status = res.getStatusCode();
+    if (status >= 500) {
+      SPDLOG_ERROR("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(),
+                   req.getPort());
+    } else if (status >= 400) {
+      SPDLOG_WARN("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
+    } else {
+      SPDLOG_INFO("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(), req.getPort());
+    }
+  }
+
+  void logRequest(const HttpRequest &req, const HttpFileResponse &res) {
     int status = res.getStatusCode();
     if (status >= 500) {
       SPDLOG_ERROR("{}  {:<8} {:<20}  {:<16}:{:<6}", status, req.getMethod(), req.getPath(), req.getIp(),

@@ -6,6 +6,7 @@
 #include <rukh/core/AsyncFileReader.hpp>
 #include <rukh/core/AsyncFileWriter.hpp>
 #include <rukh/http/ErrorFactory.hpp>
+#include <rukh/http/HttpFileResponse.hpp>
 #include <rukh/http/HttpRequest.hpp>
 #include <rukh/http/HttpResponse.hpp>
 #include <rukh/http/HttpStreamResponse.hpp>
@@ -16,16 +17,16 @@
 
 namespace rukh::http::middleware {
 
-bool etagMatches(std::string_view ifNoneMatch, const std::string &etag) {
-  while (!ifNoneMatch.empty()) {
-    auto end = ifNoneMatch.find(',');
-    std::string_view token = ifNoneMatch.substr(0, end);
+bool etagMatches(std::string_view cacheHeader, const std::string &etag) {
+  while (not cacheHeader.empty()) {
+    auto end = cacheHeader.find(',');
+    std::string_view token = cacheHeader.substr(0, end);
     trim(token);
     if (token == etag)
       return true;
     if (end == std::string_view::npos)
       break;
-    ifNoneMatch.remove_prefix(end + 1);
+    cacheHeader.remove_prefix(end + 1);
   }
   return false;
 }
@@ -128,6 +129,7 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
   bool hasRangeHeader = not request.getHeaderLower("range").empty();
 
   bool isCompressible = not hasRangeHeader;
+  isCompressible = isCompressible and ServerConfig::ENABLE_STATIC_COMPRESSION;
   isCompressible =
       isCompressible && std::find(compression::compressibleMimeTypes.begin(), compression::compressibleMimeTypes.end(),
                                   mime) != compression::compressibleMimeTypes.end();
@@ -219,11 +221,6 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     }
   }
 
-  std::optional<core::AsyncFileReader> fileOpt = core::AsyncFileReader::open(resolved, fileSize);
-  if (not fileOpt.has_value())
-    co_return buildErrorResponse(request, 403);
-  core::AsyncFileReader &file = fileOpt.value();
-
   // Design decision: checking for 304 AFTER the open in case permissions change.
   auto cacheControl = getOrDefault(config_.mimeCacheControl, mime, config_.defaultCacheControl);
   auto lastWrite = std::chrono::file_clock::to_sys(entry.last_write_time());
@@ -262,215 +259,157 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     co_return buildErrorResponse(request, 416);
   }
 
-  bool allowRange = false;
+  bool useRange = false;
   if (not ranges.empty()) {
     if (ifRange.empty()) {
-      allowRange = true;
+      useRange = true;
     } else {
-      bool ifRangeMatched = false;
 
       if (not ifRange.empty() && ifRange.front() == '"') {
-        ifRangeMatched = etagMatches(ifRange, eTag);
+        useRange = etagMatches(ifRange, eTag);
       } else {
         auto ifRangeDate = parseHttpDate(std::string(ifRange));
         if (ifRangeDate.has_value())
-          ifRangeMatched = (lastWriteSeconds <= *ifRangeDate);
+          useRange = (lastWriteSeconds <= *ifRangeDate);
       }
-
-      allowRange = ifRangeMatched;
     }
   }
 
-  if (allowRange) {
-    bool isMultiPart = ranges.size() > 1;
+  size_t totalSize = 0;
+  bool isMultiPart = ranges.size() > 1;
 
-    size_t totalSize = 0;
-    std::string boundaryCore = "Boundary" + std::to_string(std::hash<std::thread::id>()(std::this_thread::get_id()));
-    std::string boundaryDelimiter = "--" + boundaryCore;
-    std::string partContentType = "";
+  std::string boundaryCore = "Boundary" + std::to_string(std::hash<std::thread::id>()(std::this_thread::get_id()));
+  std::string boundaryDelimiter = "--" + boundaryCore;
+  std::string partContentType = "";
+
+  if (useRange and isMultiPart) {
+    partContentType = "content-type: " + mime + "\r\n";
+    size_t contentRangeBaseSize =
+        sizeof("content-range: bytes ") - 1 + sizeof("-") - 1 + sizeof("/") - 1 + sizeof("\r\n") - 1;
+    for (const auto &[start, end] : ranges) {
+      totalSize += boundaryDelimiter.size() + 2; // --boundary + CRLF
+
+      size_t contentRangeSize = contentRangeBaseSize + digit_count(*start) + digit_count(*end) + digit_count(fileSize);
+      totalSize += contentRangeSize;
+      totalSize += partContentType.size();
+      totalSize += 2; // blank line
+
+      totalSize += *end - *start + 1 + 2; // body + CRLF
+    }
+    totalSize += boundaryDelimiter.size() + 4; // --boundary-- + CRLF
+  } else if (useRange) {
+    totalSize = ranges[0].second.value() - ranges[0].first.value() + 1;
+  } else {
+    totalSize = fileSize;
+  }
+
+  if (method == "HEAD") {
+    HttpResponse response;
 
     if (isMultiPart) {
-      partContentType = "content-type: " + mime + "\r\n";
-      size_t contentRangeBaseSize =
-          sizeof("content-range: bytes ") - 1 + sizeof("-") - 1 + sizeof("/") - 1 + sizeof("\r\n") - 1;
-      for (const auto &[start, end] : ranges) {
-        totalSize += boundaryDelimiter.size() + 2; // --boundary + CRLF
-
-        size_t contentRangeSize =
-            contentRangeBaseSize + digit_count(*start) + digit_count(*end) + digit_count(fileSize);
-        totalSize += contentRangeSize;
-        totalSize += partContentType.size();
-        totalSize += 2; // blank line
-
-        totalSize += *end - *start + 1 + 2; // body + CRLF
-      }
-      totalSize += boundaryDelimiter.size() + 4; // --boundary-- + CRLF
+      response.setStatusCode(206);
+      response.headers.setHeaderLower("content-type", "multipart/byteranges; boundary=" + boundaryCore);
+    } else if (useRange) {
+      response.setStatusCode(206);
+      response.headers.setHeaderLower("content-type", mime);
+      response.headers.setContentRange(*ranges[0].first, *ranges[0].second, fileSize);
     } else {
-      totalSize = ranges[0].second.value() - ranges[0].first.value() + 1;
+      response.setStatusCode(200);
+      response.headers.setHeaderLower("content-type", mime);
     }
 
-    if (method == "HEAD") {
-      HttpResponse response(206);
-      if (isMultiPart) {
-        response.headers.setHeaderLower("content-type", "multipart/byteranges; boundary=" + boundaryCore);
-      } else {
-        response.headers.setHeaderLower("content-type", mime);
-        response.headers.setContentRange(*ranges[0].first, *ranges[0].second, fileSize);
-      }
-      response.headers.setHeaderLower("content-length", std::to_string(totalSize));
-      response.headers.addHeaderLower("accept-ranges", "bytes");
-      addCacheHeaders(response, eTag, lastWrite, cacheControl);
-      co_return response;
-    }
+    if (compressor)
+      response.headers.setHeaderLower("content-encoding", finalEncoding);
 
-    if (totalSize <= ServerConfig::STATIC_STREAM_THRESHOLD_BYTES) {
-      std::string body;
-      body.reserve(totalSize);
-      if (isMultiPart) {
-        for (const auto &[start, end] : ranges) {
-          body += boundaryDelimiter;
-          body += "\r\n";
+    response.headers.setHeaderLower("content-length", std::to_string(totalSize));
 
-          body += constructContentRange(*start, *end, fileSize);
-          body += "\r\n";
-          body += partContentType;
-          body += "\r\n";
+    response.headers.addHeaderLower("accept-ranges", "bytes");
+    response.headers.addHeaderLower("vary", "accept-encoding");
 
-          file.seek(*start);
-          auto fileChunkOpt = co_await file.readChunk(*end - *start + 1);
-          if (fileChunkOpt.has_value())
-            body += *fileChunkOpt;
-          body += "\r\n";
-        }
-        body += boundaryDelimiter;
-        body += "--\r\n";
-      } else {
-        file.seek(*ranges[0].first);
-        auto fileChunkOpt = co_await file.readChunk(totalSize);
-        if (fileChunkOpt.has_value())
-          body += *fileChunkOpt;
-      }
-      HttpResponse response(206, std::move(body));
-      response.headers.addHeaderLower("accept-ranges", "bytes");
-      if (isMultiPart) {
-        response.headers.setHeaderLower("content-type", "multipart/byteranges; boundary=" + boundaryCore);
-      } else {
-        response.headers.setHeaderLower("content-type", mime);
-        response.headers.setContentRange(*ranges[0].first, *ranges[0].second, fileSize);
-      }
-      addCacheHeaders(response, eTag, lastWrite, cacheControl);
-      co_return response;
-    } else {
-      HttpStreamResponse response(206);
-      response.headers.setHeaderLower("accept-ranges", "bytes");
-      response.headers.setHeaderLower("content-length", std::to_string(totalSize));
-      response.setChunked(false);
-      if (isMultiPart) {
-        response.headers.setHeaderLower("content-type", "multipart/byteranges; boundary=" + boundaryCore);
-        auto nextBlock = [file = std::move(file), ranges = std::move(ranges), boundaryDelimiter, boundaryCore, fileSize,
-                          start = static_cast<size_t>(1), end = static_cast<size_t>(0), idx = static_cast<int>(-1),
-                          mime, sentClosingBoundary = false]() mutable -> core::Task<std::optional<std::string>> {
-          std::string contentType = "content-type: " + mime + "\r\n";
-          std::string body;
-          body.reserve(ServerConfig::STATIC_STREAM_CHUNK_SIZE);
-
-          if (start >= end) {
-            idx++;
-            if (idx == static_cast<int>(ranges.size())) {
-              if (sentClosingBoundary)
-                co_return std::nullopt;
-              sentClosingBoundary = true;
-              co_return std::string("--") + boundaryCore + "--\r\n";
-            }
-            start = *ranges[idx].first;
-            end = *ranges[idx].second;
-            body += boundaryDelimiter;
-            body += "\r\n";
-            body += constructContentRange(start, end, fileSize);
-            body += "\r\n";
-            body += contentType;
-            body += "\r\n";
-          }
-
-          file.seek(start);
-          size_t maxPayload = ServerConfig::STATIC_STREAM_CHUNK_SIZE > body.size()
-                                  ? (ServerConfig::STATIC_STREAM_CHUNK_SIZE - body.size())
-                                  : 0;
-          if (maxPayload == 0)
-            co_return body;
-
-          size_t blockEnd = std::min(end, start + maxPayload - 1);
-          auto blockSize = blockEnd - start + 1;
-          start = blockEnd + 1;
-
-          auto chunk = co_await file.readChunk(blockSize);
-          if (not chunk.has_value())
-            co_return std::nullopt;
-
-          body += *chunk;
-          if (blockEnd == end)
-            body += "\r\n";
-
-          co_return body;
-        };
-        response.setNextChunkFn(std::move(nextBlock));
-      } else {
-        auto start = *ranges[0].first;
-        auto end = *ranges[0].second;
-        response.headers.setHeaderLower("content-type", mime);
-        response.headers.setContentRange(start, end, fileSize);
-        auto nextBlock = [file = std::move(file), start, end]() mutable -> core::Task<std::optional<std::string>> {
-          if (start > end)
-            co_return std::nullopt;
-
-          file.seek(start);
-          auto blockEnd = std::min(end, start + ServerConfig::STATIC_STREAM_CHUNK_SIZE - 1);
-          auto blockSize = blockEnd - start + 1;
-          start = blockEnd + 1;
-          co_return co_await file.readChunk(blockSize);
-        };
-        response.setNextChunkFn(std::move(nextBlock));
-      }
-      addCacheHeaders(response, eTag, lastWrite, cacheControl);
-      co_return response;
-    }
+    addCacheHeaders(response, eTag, lastWrite, cacheControl);
+    co_return response;
   }
 
-  if (fileSize <= ServerConfig::STATIC_STREAM_THRESHOLD_BYTES) {
-    std::string body = co_await file.readAll();
-    HttpResponse response(200, mime, std::move(body));
-    response.headers.addHeaderLower("accept-ranges", "bytes");
-    if (compressor)
-      response.headers.setHeaderLower("content-encoding", finalEncoding);
-    response.headers.addHeaderLower("vary", "accept-encoding");
+  if (isMultiPart) {
+    std::optional<core::AsyncFileReader> fileOpt = core::AsyncFileReader::open(resolved, fileSize);
+    if (not fileOpt.has_value())
+      co_return buildErrorResponse(request, 403);
+    core::AsyncFileReader &file = fileOpt.value();
+
+    HttpStreamResponse response(206);
+    response.headers.setHeaderLower("accept-ranges", "bytes");
+    response.headers.setHeaderLower("content-length", std::to_string(totalSize));
+    response.setChunked(false);
+
+    response.headers.setHeaderLower("content-type", "multipart/byteranges; boundary=" + boundaryCore);
+    auto nextBlock = [file = std::move(file), ranges = std::move(ranges), boundaryDelimiter, boundaryCore, fileSize,
+                      start = static_cast<size_t>(1), end = static_cast<size_t>(0), idx = static_cast<int>(-1), mime,
+                      sentClosingBoundary = false]() mutable -> core::Task<std::optional<std::string>> {
+      std::string contentType = "content-type: " + mime + "\r\n";
+      std::string body;
+      body.reserve(ServerConfig::STATIC_STREAM_CHUNK_SIZE);
+
+      if (start >= end) {
+        idx++;
+        if (idx == static_cast<int>(ranges.size())) {
+          if (sentClosingBoundary)
+            co_return std::nullopt;
+          sentClosingBoundary = true;
+          co_return std::string("--") + boundaryCore + "--\r\n";
+        }
+        start = *ranges[idx].first;
+        end = *ranges[idx].second;
+        body += boundaryDelimiter;
+        body += "\r\n";
+        body += constructContentRange(start, end, fileSize);
+        body += "\r\n";
+        body += contentType;
+        body += "\r\n";
+      }
+
+      file.seek(start);
+      size_t maxPayload = ServerConfig::STATIC_STREAM_CHUNK_SIZE > body.size()
+                              ? (ServerConfig::STATIC_STREAM_CHUNK_SIZE - body.size())
+                              : 0;
+      if (maxPayload == 0)
+        co_return body;
+
+      size_t blockEnd = std::min(end, start + maxPayload - 1);
+      auto blockSize = blockEnd - start + 1;
+      start = blockEnd + 1;
+
+      auto chunk = co_await file.readChunk(blockSize);
+      if (not chunk.has_value())
+        co_return std::nullopt;
+
+      body += *chunk;
+      if (blockEnd == end)
+        body += "\r\n";
+
+      co_return body;
+    };
+    response.setNextChunkFn(std::move(nextBlock));
     addCacheHeaders(response, eTag, lastWrite, cacheControl);
-    if (method == "HEAD")
-      response.stripBody();
     co_return response;
   } else {
-    if (method == "HEAD") {
-      HttpResponse response(200);
-      response.headers.addHeaderLower("accept-ranges", "bytes");
-      if (compressor)
-        response.headers.setHeaderLower("content-encoding", finalEncoding);
-      response.headers.addHeaderLower("vary", "accept-encoding");
-      response.headers.setHeaderLower("content-type", mime);
-      response.headers.setHeaderLower("content-length", std::to_string(fileSize));
-      addCacheHeaders(response, eTag, lastWrite, cacheControl);
-      co_return response;
-    }
-
-    HttpStreamResponse response(200, [file = std::move(file)]() mutable -> core::Task<std::optional<std::string>> {
-      co_return co_await file.readChunk(ServerConfig::STATIC_STREAM_CHUNK_SIZE);
-    });
-    response.setChunked(false);
-    response.headers.setHeaderLower("content-length", std::to_string(fileSize));
+    HttpFileResponse response(200, mime, resolved);
     response.headers.addHeaderLower("accept-ranges", "bytes");
+    response.headers.addHeaderLower("vary", "accept-encoding");
+
     if (compressor)
       response.headers.setHeaderLower("content-encoding", finalEncoding);
-    response.headers.addHeaderLower("vary", "accept-encoding");
-    response.headers.setHeaderLower("content-type", mime);
+
     addCacheHeaders(response, eTag, lastWrite, cacheControl);
+
+    if (useRange) {
+      response.setStatusCode(206);
+      const size_t start = *ranges[0].first;
+      response.setOffset(start);
+      response.headers.setContentRange(start, *ranges[0].second, fileSize);
+    }
+
+    response.setContentLength(totalSize);
+
     co_return response;
   }
 }

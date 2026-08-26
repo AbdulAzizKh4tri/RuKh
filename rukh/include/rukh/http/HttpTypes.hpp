@@ -7,15 +7,16 @@
 
 #include <functional>
 
+#include <rukh/core/Task.hpp>
+#include <rukh/http/HttpFileResponse.hpp>
 #include <rukh/http/HttpRequest.hpp>
 #include <rukh/http/HttpResponse.hpp>
 #include <rukh/http/HttpStreamResponse.hpp>
-#include <rukh/core/Task.hpp>
 
-namespace rukh::http  {
+namespace rukh::http {
 
 /// varaint containing both HttpResponse types
-using Response = std::variant<HttpResponse, HttpStreamResponse>;
+using Response = std::variant<HttpResponse, HttpStreamResponse, HttpFileResponse>;
 
 /// The function to be set when defining routes in the `Router`
 using Handler = std::move_only_function<core::Task<Response>(HttpRequest &)>;
@@ -37,4 +38,4 @@ using Next = std::move_only_function<core::Task<Response>()>;
  *
  */
 using Middleware = std::move_only_function<core::Task<Response>(HttpRequest &, Next)>;
-} // namespace rukh
+} // namespace rukh::http

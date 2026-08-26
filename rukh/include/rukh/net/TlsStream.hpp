@@ -12,12 +12,14 @@
 #include <spdlog/spdlog.h>
 #include <sys/socket.h>
 
+#include <rukh/core/Task.hpp>
 #include <rukh/net/Socket.hpp>
 #include <rukh/net/StreamResults.hpp>
 
 namespace rukh::net {
 
-/// TLS stream
+/// @brief TLS stream
+/// \todo revisit OpenSSL docs
 class TlsStream {
 public:
   /// Check `HttpServer::setTlsContext` for reference
@@ -41,8 +43,14 @@ public:
   /// send data with TLS and return number of bytes sent
   ssize_t send(const std::span<const unsigned char> data) const;
 
+  /// send file and return number of bytes sent or error
+  core::Task<ssize_t> sendFile(int fileFd, off_t offset, size_t count) const;
+
   /// abort connection, RST
   void resetConnection();
+
+  /// whether file can be sent over this socket using sendFile.
+  bool supportsSendFile();
 
   /// Check `Socket::setNonBlocking`
   int setSocketNonBlocking();

@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <rukh/core/Executor.hpp>
 
 #include <spdlog/spdlog.h>
@@ -11,6 +12,8 @@ namespace rukh::core {
 
 thread_local Executor *tl_executor = nullptr;
 thread_local bool tl_timed_out = false;
+thread_local PipePool tl_pipe_pool;
+
 void notifyTaskFinished(std::coroutine_handle<> h) noexcept {
   if (tl_executor)
     tl_executor->markRootFinished(h.address());
@@ -56,6 +59,7 @@ void Executor::enableWriteEvents(int fd) {
     return;
   epoll_.modify(fd, EPOLLIN | EPOLLOUT | EPOLLET, fd);
 }
+
 void Executor::disableWriteEvents(int fd) {
   auto erased = writeInterested_.erase(fd);
   if (erased == 0)
@@ -77,8 +81,6 @@ void Executor::waitForWrite(int fd, std::coroutine_handle<> caller, std::chrono:
 
 void Executor::submitFileRead(int fd, void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr,
                               uint64_t offset) {
-  /// \todo We may not need pendingFileOps_ at all, we may be able to let prepRead handle that. Check
-  /// io_uring_sqe_set_data
   constexpr auto type = PendingFileOpPrep::Type::READ;
   pendingFileOpPreps_.emplace_back(type, fd, buf, nullptr, len, offset, nextUserData_, h, resultPtr);
   nextUserData_++;
@@ -88,6 +90,12 @@ void Executor::submitFileWrite(int fd, const void *buf, size_t len, std::corouti
                                uint64_t offset) {
   constexpr auto type = PendingFileOpPrep::Type::WRITE;
   pendingFileOpPreps_.emplace_back(type, fd, nullptr, buf, len, offset, nextUserData_, h, resultPtr);
+  nextUserData_++;
+}
+
+void Executor::submitSplice(int srcFd, off_t srcOffset, int dstFd, off_t dstOffset, size_t len,
+                            std::coroutine_handle<> h, int *resultPtr) {
+  pendingSpliceOpPreps_.emplace_back(srcFd, srcOffset, dstFd, dstOffset, len, nextUserData_, h, resultPtr);
   nextUserData_++;
 }
 
@@ -116,15 +124,22 @@ void Executor::run(std::atomic<bool> &shutdown) {
     }
 
     ioUring_.drainCompletions([this](uint64_t userData, int result) {
-      auto it = pendingFileOps_.find(userData);
-      if (it == pendingFileOps_.end())
+      if (result < 0)
+        SPDLOG_ERROR("CQE failed: {}", strerror(-result));
+      if (auto it = pendingFileOps_.find(userData); it != pendingFileOps_.end()) {
+        auto [handle, resultPtr] = it->second;
+        *resultPtr = result;
+        readyQueue_.push({handle, false});
+        pendingFileOps_.erase(it);
         return;
+      }
 
-      auto [handle, resultPtr] = it->second;
-      *resultPtr = result;
-      readyQueue_.push({handle, false});
-      pendingFileOps_.erase(it);
-      return;
+      if (auto it = pendingSpliceOps_.find(userData); it != pendingSpliceOps_.end()) {
+        auto [handle, resultPtr] = it->second;
+        *resultPtr = result;
+        readyQueue_.push({handle, false});
+        pendingSpliceOps_.erase(it);
+      }
     });
 
     while (not readyQueue_.empty()) {
@@ -156,8 +171,10 @@ void Executor::run(std::atomic<bool> &shutdown) {
 
     // setting this directly to EPOLL_WAIT_TIMEOUT makes it so that
     // download speed = STATIC_STREAM_CHUNK_SIZE / EPOLL_WAIT_TIMEOUT seconds
-    int timeout =
-        (pendingFileOpPreps_.empty() and pendingFileOps_.empty()) ? ServerConfig::EPOLL_WAIT_TIMEOUT * 1000 : 0;
+
+    const bool noPendingOps = (pendingFileOpPreps_.empty() and pendingFileOps_.empty() and
+                               pendingSpliceOpPreps_.empty() and pendingSpliceOps_.empty());
+    const int timeout = noPendingOps ? ServerConfig::EPOLL_WAIT_TIMEOUT_S * 1000 : 0;
     int n = epoll_.wait(events, maxEvents, timeout);
     for (auto &event : std::span(events, n)) {
       int fd = event.data.fd;
@@ -166,7 +183,7 @@ void Executor::run(std::atomic<bool> &shutdown) {
         uint64_t val;
         ::read(eventFd_, &val, sizeof(val));
         std::unique_lock lock(poolResumeQueueMutex_);
-        while (!poolResumeQueue_.empty()) {
+        while (not poolResumeQueue_.empty()) {
           readyQueue_.push({poolResumeQueue_.front(), false});
           poolResumeQueue_.pop();
         }
@@ -182,7 +199,7 @@ void Executor::run(std::atomic<bool> &shutdown) {
       bool writeReady = event.events & EPOLLOUT;
 
       bool shouldWake =
-          isError || (it->second.waitingForWrite && writeReady) || (!it->second.waitingForWrite && readReady);
+          isError || (it->second.waitingForWrite && writeReady) || (not it->second.waitingForWrite && readReady);
 
       if (not shouldWake)
         continue;
@@ -205,9 +222,11 @@ void Executor::run(std::atomic<bool> &shutdown) {
     }
 
     // std::deque<PendingFileOpPrep> pendingFileOpPreps_;
-    while (!pendingFileOpPreps_.empty()) {
+    while (not pendingFileOpPreps_.empty()) {
       auto p = pendingFileOpPreps_.front();
       bool prepSuccess;
+      /// \todo We may not need pendingFileOps_ at all, we may be able to let prepRead handle that. Check
+      /// io_uring_sqe_set_data
       if (p.type == PendingFileOpPrep::Type::READ) {
         prepSuccess = ioUring_.prepRead(p.fd, p.readBuf, p.len, p.userData, p.offset);
       } else {
@@ -220,6 +239,17 @@ void Executor::run(std::atomic<bool> &shutdown) {
 
       pendingFileOps_[p.userData] = {p.handle, p.resultPtr};
       pendingFileOpPreps_.pop_front();
+    }
+
+    while (not pendingSpliceOpPreps_.empty()) {
+      auto p = pendingSpliceOpPreps_.front();
+      if (not ioUring_.prepSplice(p.srcFd, p.srcOffset, p.dstFd, p.dstOffset, p.len, p.userData)) {
+        SPDLOG_ERROR("Failed to prepare splice with {} {} {} {} {}", p.srcFd, p.srcOffset, p.dstFd, p.dstOffset, p.len,
+                     p.userData);
+        break;
+      }
+      pendingSpliceOps_[p.userData] = {p.handle, p.resultPtr};
+      pendingSpliceOpPreps_.pop_front();
     }
 
     ioUring_.ioSubmit();

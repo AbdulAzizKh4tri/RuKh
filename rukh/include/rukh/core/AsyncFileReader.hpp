@@ -5,16 +5,37 @@
 
 #pragma once
 
+#include <coroutine>
 #include <filesystem>
 
-#include <rukh/core/Awaitables.hpp>
+#include <rukh/core/Executor.hpp>
 
 namespace rukh::core {
+
+/// Awaitable for AsyncFileReader to read from a file using IoUringInstance
+struct FileReadAwaitable {
+  int fd;
+  void *buf;
+  size_t len;
+  uint64_t offset = (uint64_t)-1; // use file offset by default
+  int result = 0;
+
+  bool await_ready() const noexcept { return false; }
+
+  void await_suspend(std::coroutine_handle<> h) noexcept {
+    core::tl_executor->submitFileRead(fd, buf, len, h, &result, offset);
+  }
+
+  int await_resume() { return result; }
+};
 
 /// Asynchronous file reading via io_uring
 class AsyncFileReader {
 public:
   AsyncFileReader() : fd_(-1) {}
+  AsyncFileReader(int fd) : fd_(fd) {}
+  AsyncFileReader(int fd, uintmax_t fileSize) : fd_(fd), fileSize_(fileSize) {}
+
   ~AsyncFileReader() {
     if (fd_ != -1)
       ::close(fd_);
@@ -73,7 +94,8 @@ public:
    * @returns A string with the contents of the file
    */
   Task<std::string> readAll() {
-    std::string buf(fileSize_, '\0');
+    std::string buf;
+    buf.reserve(fileSize_);
     int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = fileSize_, .offset = offset_};
     if (n < 0)
       throw std::runtime_error("File Read Awaitable failed");
@@ -84,10 +106,11 @@ public:
   /**
    * @brief Read a chunk of the file into a string.
    * @param size The number of bytes to read
-   * @returns A string of upto @p size bytes, nullopt if nothing left to read.
+   * @returns A string of @p size bytes, nullopt if nothing left to read.
    */
   Task<std::optional<std::string>> readChunk(size_t size) {
-    std::string buf(size, '\0');
+    std::string buf;
+    buf.reserve(size);
     int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = size, .offset = offset_};
     if (n < 0)
       throw std::runtime_error("File Read Awaitable failed");
@@ -98,6 +121,21 @@ public:
     co_return buf;
   }
 
+  /**
+   * @brief Read a chunk of the file into buf.
+   * @returns A of size bytes, nullopt if nothing left to read.
+   */
+  Task<bool> readChunkInto(std::span<unsigned char> buf) {
+    size_t size = buf.size();
+    int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = size, .offset = offset_};
+    if (n < 0)
+      throw std::runtime_error("File Read Awaitable failed");
+    if (n < size)
+      co_return false;
+    offset_ += n;
+    co_return true;
+  }
+
   /// set file read offset
   void seek(uint64_t offset) { offset_ = offset; }
 
@@ -105,8 +143,5 @@ private:
   int fd_ = -1;
   uintmax_t fileSize_;
   uint64_t offset_ = 0;
-
-  AsyncFileReader(int fd) : fd_(fd) {}
-  AsyncFileReader(int fd, uintmax_t fileSize) : fd_(fd), fileSize_(fileSize) {}
 };
 } // namespace rukh::core

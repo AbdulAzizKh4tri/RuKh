@@ -104,10 +104,14 @@ ssize_t TlsStream::send(const std::span<const unsigned char> data) const {
   return n;
 }
 
+core::Task<ssize_t> TlsStream::sendFile(int fileFd, off_t offset, size_t count) const { co_return -1; }
+
 void TlsStream::resetConnection() {
   linger l{1, 0};
   setsockopt(socket_.getFd(), SOL_SOCKET, SO_LINGER, &l, sizeof(l));
 }
+
+bool TlsStream::supportsSendFile() { return false; }
 
 int TlsStream::setSocketNonBlocking() { return socket_.setNonBlocking(); }
 

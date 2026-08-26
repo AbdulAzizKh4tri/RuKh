@@ -5,16 +5,36 @@
 
 #pragma once
 
+#include <coroutine>
 #include <filesystem>
 
-#include <rukh/core/Awaitables.hpp>
+#include <rukh/core/Executor.hpp>
 
 namespace rukh::core {
+
+/// Awaitable for AsyncFileWriter to write to a file using IoUringInstance
+struct FileWriteAwaitable {
+  int fd;
+  const void *buf;
+  size_t len;
+  uint64_t offset = (uint64_t)-1; // use file offset by default
+  int result = 0;
+
+  bool await_ready() const noexcept { return false; }
+
+  void await_suspend(std::coroutine_handle<> h) noexcept {
+    core::tl_executor->submitFileWrite(fd, buf, len, h, &result, offset);
+  }
+
+  int await_resume() { return result; }
+};
 
 /// Asynchronous file writing via io_uring
 class AsyncFileWriter {
 public:
   AsyncFileWriter() : fd_(-1) {}
+  AsyncFileWriter(int fd) : fd_(fd) {}
+
   ~AsyncFileWriter() {
     if (fd_ != -1)
       ::close(fd_);
@@ -66,6 +86,5 @@ public:
 private:
   int fd_ = -1;
   uint64_t offset_ = 0;
-  AsyncFileWriter(int fd) : fd_(fd) {}
 };
 } // namespace rukh::core

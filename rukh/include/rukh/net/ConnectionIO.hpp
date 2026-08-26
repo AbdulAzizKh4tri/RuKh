@@ -128,6 +128,10 @@ public:
 
   [[nodiscard]] WriteDataAwaitable write(int inactivitySeconds = 0) noexcept { return {*this, inactivitySeconds}; }
 
+  core::Task<ssize_t> sendFile(int fileFd, off_t offset, size_t count) const {
+    return stream_->sendFile(fileFd, offset, count);
+  }
+
   /// Tries to drain whatever data is available in the kernel buffer into the read buffer up to maxBufferSize.
   ReadResult drainIntoReadBuffer(size_t targetSize, size_t maxBufferSize) {
     bool gotData = false;

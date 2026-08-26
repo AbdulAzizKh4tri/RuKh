@@ -75,6 +75,8 @@ struct RouteNode {
  *
  * I recommend creating seperate functions for routes grouping, and passing the Router object to those functions.
  *
+ * \todo per route middleware
+ *
  * @see RouteNode
  * @see HttpTypes.hpp
  * @see HttpRequest

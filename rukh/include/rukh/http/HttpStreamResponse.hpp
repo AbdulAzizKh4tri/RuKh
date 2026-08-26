@@ -73,7 +73,7 @@ public:
 
   /// @internalMethod
   bool serializeBlockInto(std::string_view chunk, std::vector<unsigned char> &buf, const std::string &mime = "");
-  /// @{
+  /// @}
 
 private:
   int statusCode_;

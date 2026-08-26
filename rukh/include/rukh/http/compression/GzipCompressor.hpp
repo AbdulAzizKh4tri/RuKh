@@ -86,7 +86,7 @@ public:
     stream_.avail_in = static_cast<uInt>(input.size());
 
     std::string output;
-    char buf[4096];
+    char buf[ServerConfig::COMPRESSION_BUFFER_SIZE];
     int ret;
     do {
       stream_.next_out = reinterpret_cast<Bytef *>(buf);
@@ -105,7 +105,7 @@ public:
     stream_.avail_in = static_cast<uInt>(input.size());
 
     std::string output;
-    char buf[4096];
+    char buf[ServerConfig::COMPRESSION_BUFFER_SIZE];
     do {
       stream_.next_out = reinterpret_cast<Bytef *>(buf);
       stream_.avail_out = sizeof(buf);
@@ -123,7 +123,7 @@ public:
     stream_.avail_in = 0;
 
     std::string output;
-    char buf[4096];
+    char buf[ServerConfig::COMPRESSION_BUFFER_SIZE];
     int ret;
     do {
       stream_.next_out = reinterpret_cast<Bytef *>(buf);

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <coroutine>
 #include <cstddef>
+#include <cstdint>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
@@ -102,6 +103,9 @@ public:
    */
   void submitFileWrite(int fd, const void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr, uint64_t offset);
 
+  void submitSplice(int srcFd, int64_t srcOffset, int dstFd, int64_t dstOffset, size_t len, std::coroutine_handle<> h,
+                    int *resultPtr);
+
   /**
    * @brief The executor loop that runs everything.
    *
@@ -147,6 +151,24 @@ private:
     int *resultPtr;
   };
 
+  struct PendingSpliceOpPrep {
+    int srcFd;
+    off_t srcOffset;
+    int dstFd;
+    off_t dstOffset;
+    size_t len;
+
+    uint64_t userData;
+
+    std::coroutine_handle<> handle;
+    int *resultPtr;
+  };
+
+  struct PendingSpliceOps {
+    std::coroutine_handle<> handle;
+    int *resultPtr;
+  };
+
   core::EpollInstance epoll_;
   std::vector<core::Task<void>> ownedTasks_;
   std::unordered_map<void *, size_t> ownedTaskMap_;
@@ -165,6 +187,9 @@ private:
   uint64_t nextUserData_ = 0; // unique ID for IO uring file ops
   std::unordered_map<uint64_t, PendingFileOp> pendingFileOps_;
   std::deque<PendingFileOpPrep> pendingFileOpPreps_;
+
+  std::unordered_map<uint64_t, PendingSpliceOps> pendingSpliceOps_;
+  std::deque<PendingSpliceOpPrep> pendingSpliceOpPreps_;
 
   int eventFd_;
   std::mutex poolResumeQueueMutex_;

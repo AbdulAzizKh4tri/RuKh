@@ -6,9 +6,9 @@
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/ServerConfig.hpp>
-#include <rukh/core/Awaitables.hpp>
 #include <rukh/core/Executor.hpp>
 #include <rukh/core/ExecutorContext.hpp>
+#include <rukh/core/SocketAwaitables.hpp>
 #include <rukh/http/HttpConnection.hpp>
 
 namespace rukh::http {
@@ -27,6 +27,8 @@ void HttpServer::setTlsContext(std::string certPath, std::string keyPath) {
 
   if (SSL_CTX_use_PrivateKey_file(tlsContext_.get(), keyPath.c_str(), SSL_FILETYPE_PEM) <= 0)
     throw ServerException("Failed to load private key");
+
+  SSL_CTX_set_options(tlsContext_.get(), SSL_OP_ENABLE_KTLS);
 }
 
 void HttpServer::addListener(const std::string &host, const std::string &port) {

@@ -8,6 +8,10 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <rukh/core/ExecutorContext.hpp>
+#include <rukh/core/FileIoHelpers.hpp>
+#include <rukh/core/SpliceAwaitable.hpp>
+#include <rukh/net/StreamResults.hpp>
 #include <rukh/net/utils.hpp>
 
 namespace rukh::net {
@@ -31,6 +35,38 @@ ssize_t TcpStream::send(const std::span<const unsigned char> data) const {
   return n;
 }
 
+core::Task<ssize_t> TcpStream::sendFile(int fileFd, off_t offset, size_t count) const {
+  core::Pipe pipe = core::tl_pipe_pool.acquire();
+  size_t remaining = count;
+
+  while (remaining > 0) {
+    size_t chunkSize = std::min(remaining, ServerConfig::PIPE_BUFFER_SIZE);
+
+    int n1 = co_await core::SpliceAwaitable{fileFd, offset, pipe.in, -1, chunkSize};
+
+    if (n1 <= 0) {
+      core::tl_pipe_pool.release(pipe);
+      co_return n1;
+    }
+
+    size_t inPipe = n1;
+    while (inPipe > 0) {
+      int n2 = co_await core::SpliceAwaitable{pipe.out, -1, socket_.getFd(), -1, inPipe};
+      if (n2 <= 0) {
+        core::tl_pipe_pool.release(pipe);
+        co_return n2;
+      }
+      inPipe -= n2;
+    }
+
+    offset += n1;
+    remaining -= n1;
+  }
+
+  core::tl_pipe_pool.release(pipe);
+  co_return count;
+}
+
 ReceiveResult TcpStream::receive(std::span<unsigned char> data) const {
   ssize_t n = ::recv(socket_.getFd(), data.data(), data.size(), 0);
   if (n > 0)
@@ -45,6 +81,8 @@ ReceiveResult TcpStream::receive(std::span<unsigned char> data) const {
 }
 
 HandshakeResult TcpStream::handshake() { return HandshakeResult::NO_TLS; }
+
+bool TcpStream::supportsSendFile() { return true; }
 
 int TcpStream::setSocketNonBlocking() { return socket_.setNonBlocking(); }
 

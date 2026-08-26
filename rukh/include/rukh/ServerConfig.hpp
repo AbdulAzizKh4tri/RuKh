@@ -10,7 +10,8 @@
 
 namespace rukh {
 
-/// Server Configuration
+/// @brief Server Configuration
+///\todo make everything constexpr, read from conf file at compile time
 class ServerConfig {
 public:
   static constexpr size_t KB = 1024;
@@ -41,7 +42,7 @@ public:
   inline static int GRACEFUL_SHUTDOWN_TIMEOUT_S = 20;
 
   /// Timeout for EpollInstance::wait
-  inline static int EPOLL_WAIT_TIMEOUT = 1;
+  inline static double EPOLL_WAIT_TIMEOUT_S = 0.25;
 
   /// @}
 
@@ -59,7 +60,10 @@ public:
   inline static size_t MAX_TE_LENGTH = 10 * MB;
 
   /// For Responses: How filled up the write buffer is allowed to get before we decide the connection is dead.
-  inline static size_t MAX_WRITE_BUFFER_BYTES = 10 * MB;
+  inline static size_t MAX_WRITE_BUFFER_BYTES = 32 * MB;
+
+  /// The threshold at which a file is streamed instead of buffered and sent.
+  inline static size_t FILE_STREAM_THRESHOLD_BYTES = 128 * KB;
 
   /// @}
 
@@ -110,11 +114,12 @@ public:
 
   /// @name Static File Serving
 
-  /// The threshold at which a file is streamed instead of sent.
-  inline static size_t STATIC_STREAM_THRESHOLD_BYTES = 5 * MB;
+  inline static bool ENABLE_STATIC_COMPRESSION = true;
+
+  inline static size_t COMPRESSION_BUFFER_SIZE = 64 * KB;
 
   /// The chunk size used when streaming files
-  inline static size_t STATIC_STREAM_CHUNK_SIZE = 8 * KB;
+  inline static size_t STATIC_STREAM_CHUNK_SIZE = 8 * MB;
 
   /// The directory to cache compressed/processed static files in
   inline static std::filesystem::path STATIC_CACHE_DIR = "./.server_cache";
@@ -124,7 +129,8 @@ public:
   /// @name File IO
 
   /// Maximum number of concurrent file ops
-  inline static int IO_URING_RING_SIZE = 64;
+  inline static int IO_URING_RING_SIZE = 512;
+  inline static size_t PIPE_BUFFER_SIZE = 4 * MB;
 
   /// @}
 
