@@ -1,10 +1,12 @@
 /**
  * @file FileIoHelpers.hpp
  * @brief Everything FileIo
+ * \todo docs
  */
 #pragma once
 
 #include <fcntl.h>
+#include <spdlog/spdlog.h>
 
 #include <rukh/ServerConfig.hpp>
 
@@ -36,13 +38,21 @@ public:
     if (::pipe2(fds, O_NONBLOCK) < 0)
       throw std::runtime_error("Failed to create pipe");
 
-    if (ServerConfig::PIPE_BUFFER_SIZE != 64 * 1024)
-      fcntl(fds[1], F_SETPIPE_SZ, ServerConfig::PIPE_BUFFER_SIZE);
+    if (ServerConfig::PIPE_BUFFER_SIZE != 64 * 1024) {
+      auto r = fcntl(fds[1], F_SETPIPE_SZ, ServerConfig::PIPE_BUFFER_SIZE);
+      if (r < 0)
+        SPDLOG_ERROR("FAILED TO SET PIPE SIZE");
+    }
 
     return {fds[1], fds[0]};
   }
 
   void release(Pipe p) { freePipes_.push_back(p); }
+
+  void discard(Pipe p) {
+    ::close(p.in);
+    ::close(p.out);
+  }
 
 private:
   std::vector<Pipe> freePipes_;

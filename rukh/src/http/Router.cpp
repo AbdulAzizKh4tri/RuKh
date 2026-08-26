@@ -272,4 +272,4 @@ void Router::validatePattern(const std::string &pattern, const std::vector<std::
     }
   }
 }
-} // namespace rukh
+} // namespace rukh::http

@@ -1,3 +1,4 @@
+#include "rukh/core/SocketAwaitables.hpp"
 #include <rukh/net/TcpStream.hpp>
 
 #include <arpa/inet.h>
@@ -11,8 +12,10 @@
 #include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/FileIoHelpers.hpp>
 #include <rukh/core/SpliceAwaitable.hpp>
+#include <rukh/core/YieldAwaitable.hpp>
 #include <rukh/net/StreamResults.hpp>
 #include <rukh/net/utils.hpp>
+#include <rukh/utils.hpp>
 
 namespace rukh::net {
 
@@ -38,31 +41,40 @@ ssize_t TcpStream::send(const std::span<const unsigned char> data) const {
 core::Task<ssize_t> TcpStream::sendFile(int fileFd, off_t offset, size_t count) const {
   core::Pipe pipe = core::tl_pipe_pool.acquire();
   size_t remaining = count;
-
   while (remaining > 0) {
     size_t chunkSize = std::min(remaining, ServerConfig::PIPE_BUFFER_SIZE);
 
-    int n1 = co_await core::SpliceAwaitable{fileFd, offset, pipe.in, -1, chunkSize};
-
+    int n1;
+    for (;;) {
+      n1 = co_await core::SpliceAwaitable{fileFd, offset, pipe.in, -1, chunkSize};
+      if (n1 != -EAGAIN)
+        break;
+      co_await core::YieldAwaitable{};
+    }
     if (n1 <= 0) {
-      core::tl_pipe_pool.release(pipe);
+      core::tl_pipe_pool.discard(pipe);
       co_return n1;
     }
 
     size_t inPipe = n1;
     while (inPipe > 0) {
-      int n2 = co_await core::SpliceAwaitable{pipe.out, -1, socket_.getFd(), -1, inPipe};
+      int n2;
+      for (;;) {
+        n2 = co_await core::SpliceAwaitable{pipe.out, -1, socket_.getFd(), -1, inPipe};
+        if (n2 != -EAGAIN)
+          break;
+        co_await core::WriteAwaitable{socket_.getFd(),
+                                      rukh::now() + std::chrono::seconds(ServerConfig::INACTIVITY_TIMEOUT_S)};
+      }
       if (n2 <= 0) {
-        core::tl_pipe_pool.release(pipe);
+        core::tl_pipe_pool.discard(pipe);
         co_return n2;
       }
       inPipe -= n2;
     }
-
     offset += n1;
     remaining -= n1;
   }
-
   core::tl_pipe_pool.release(pipe);
   co_return count;
 }

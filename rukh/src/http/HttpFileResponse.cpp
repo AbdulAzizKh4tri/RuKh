@@ -30,20 +30,19 @@ HttpFileResponse::HttpFileResponse(HttpFileResponse &&other) {
   contentLength_ = other.contentLength_;
   headers = std::move(other.headers);
   cookies = std::move(other.cookies);
+  ownsFd_ = other.ownsFd_;
 
   other.fd_ = -1;
 }
 
 HttpFileResponse &HttpFileResponse::operator=(HttpFileResponse &&other) {
-  if (fd_ != -1)
-    ::close(fd_);
-
   statusCode_ = other.statusCode_;
   version_ = other.version_;
   filePath_ = other.filePath_;
   fd_ = other.fd_;
   offset_ = other.offset_;
   contentLength_ = other.contentLength_;
+  ownsFd_ = other.ownsFd_;
 
   headers = std::move(other.headers);
   cookies = std::move(other.cookies);
@@ -53,7 +52,7 @@ HttpFileResponse &HttpFileResponse::operator=(HttpFileResponse &&other) {
 }
 
 HttpFileResponse::~HttpFileResponse() {
-  if (fd_ != -1)
+  if (ownsFd_ and fd_ != -1)
     ::close(fd_);
 }
 

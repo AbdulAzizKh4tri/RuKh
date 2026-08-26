@@ -22,7 +22,7 @@ inline void registerMiddlewares(rukh::http::Router &router, const std::string &h
   corsMiddleware.setCorsMaxAge(10);
 
   auto static_dir = std::filesystem::path(__FILE__).parent_path() / "../public";
-  StaticMiddleware staticMiddleware(getErrorFactory(), static_dir, "static");
+  StaticMiddleware staticMiddleware(getErrorFactory(), {.root = static_dir, .prefix = "static"});
   staticMiddleware.setMimeCacheControl("text/css", "no-cache, no-store"); // just for testing
 
   SessionConfig sessionConfig;

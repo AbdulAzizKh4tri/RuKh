@@ -1,3 +1,4 @@
+#include "rukh/core/FileCache.hpp"
 #include <cstdint>
 #include <rukh/core/Executor.hpp>
 
@@ -13,6 +14,7 @@ namespace rukh::core {
 thread_local Executor *tl_executor = nullptr;
 thread_local bool tl_timed_out = false;
 thread_local PipePool tl_pipe_pool;
+thread_local FileCache tl_file_cache;
 
 void notifyTaskFinished(std::coroutine_handle<> h) noexcept {
   if (tl_executor)
@@ -99,6 +101,8 @@ void Executor::submitSplice(int srcFd, off_t srcOffset, int dstFd, off_t dstOffs
   nextUserData_++;
 }
 
+void Executor::wakeMe(std::coroutine_handle<> h) { readyQueue_.push({h, false}); }
+
 void Executor::markRootFinished(void *addr) { finishedRoots_.push_back(addr); }
 
 void Executor::run(std::atomic<bool> &shutdown) {
@@ -124,7 +128,7 @@ void Executor::run(std::atomic<bool> &shutdown) {
     }
 
     ioUring_.drainCompletions([this](uint64_t userData, int result) {
-      if (result < 0)
+      if (result < 0 and result != -EAGAIN)
         SPDLOG_ERROR("CQE failed: {}", strerror(-result));
       if (auto it = pendingFileOps_.find(userData); it != pendingFileOps_.end()) {
         auto [handle, resultPtr] = it->second;

@@ -103,8 +103,11 @@ public:
    */
   void submitFileWrite(int fd, const void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr, uint64_t offset);
 
+  ///\todo docs
   void submitSplice(int srcFd, int64_t srcOffset, int dstFd, int64_t dstOffset, size_t len, std::coroutine_handle<> h,
                     int *resultPtr);
+
+  void wakeMe(std::coroutine_handle<>);
 
   /**
    * @brief The executor loop that runs everything.

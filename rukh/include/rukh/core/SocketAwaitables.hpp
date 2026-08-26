@@ -30,9 +30,12 @@ struct WriteAwaitable {
 
   bool await_ready() const noexcept { return false; }
 
-  void await_suspend(std::coroutine_handle<> h) const noexcept { core::tl_executor->waitForWrite(fd, h, deadline); }
+  void await_suspend(std::coroutine_handle<> h) const noexcept {
+    core::tl_executor->enableWriteEvents(fd);
+    core::tl_executor->waitForWrite(fd, h, deadline);
+  }
 
-  void await_resume() const noexcept {}
+  void await_resume() const noexcept { core::tl_executor->disableWriteEvents(fd); }
 };
 
 } // namespace rukh::core

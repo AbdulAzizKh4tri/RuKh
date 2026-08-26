@@ -8,10 +8,13 @@
 #include <string>
 #include <unordered_map>
 
+#include <rukh/core/ExecutorContext.hpp>
+#include <rukh/core/FileCache.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/http/ErrorFactory.hpp>
 #include <rukh/http/HttpRequest.hpp>
 #include <rukh/http/HttpTypes.hpp>
+#include <rukh/http/compression/CompressorFactory.hpp>
 
 namespace rukh::http::middleware {
 
@@ -43,8 +46,8 @@ struct StaticConfig {
  */
 class StaticMiddleware {
 public:
-  StaticMiddleware(ErrorFactory &errorFactory, StaticConfig);
-  StaticMiddleware(ErrorFactory &errorFactory, const std::string &root, const std::string &prefix);
+public:
+  StaticMiddleware(ErrorFactory &errorFactory, StaticConfig config);
 
   core::Task<Response> operator()(const HttpRequest &request, Next next);
 
@@ -62,5 +65,10 @@ private:
   ErrorFactory &errorFactory_;
   std::filesystem::path canonicalRoot_;
   std::filesystem::path compressedRoot_;
+
+  std::optional<core::CachedFile> lookupOrOpen(const std::string &relative, int &errorStatus);
+  core::Task<std::optional<core::CachedFile>>
+  lookupOrBuildCompressed(const std::string &relative, const std::string &encoding, const core::CachedFile &source,
+                          compression::ICompressor &compressor, int &errorStatus);
 };
 } // namespace rukh::http::middleware

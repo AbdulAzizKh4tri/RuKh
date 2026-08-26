@@ -56,24 +56,14 @@ std::string constructContentRange(size_t start, size_t end, size_t fileSize) {
   return contentRange;
 }
 
+std::string generateETag(std::filesystem::file_time_type mtime, uintmax_t size, const std::string &compression = "") {
+  return '"' + std::to_string(mtime.time_since_epoch().count()) + '-' + std::to_string(size) + '-' + compression + '"';
+}
+
 StaticMiddleware::StaticMiddleware(ErrorFactory &errorFactory, StaticConfig config)
     : config_(config), errorFactory_(errorFactory) {
   canonicalRoot_ = std::filesystem::weakly_canonical(config_.root);
   compressedRoot_ = std::filesystem::weakly_canonical(ServerConfig::STATIC_CACHE_DIR);
-}
-
-StaticMiddleware::StaticMiddleware(ErrorFactory &errorFactory, const std::string &root, const std::string &prefix)
-    : errorFactory_(errorFactory) {
-  config_.root = root;
-  config_.prefix = getNormalizedPath(prefix);
-  canonicalRoot_ = std::filesystem::weakly_canonical(root);
-  compressedRoot_ = std::filesystem::weakly_canonical(ServerConfig::STATIC_CACHE_DIR);
-}
-
-std::string generateETag(const std::filesystem::directory_entry &entry, const std::string &compression = "") {
-  auto mtime = entry.last_write_time().time_since_epoch().count();
-  auto size = entry.file_size();
-  return '"' + std::to_string(mtime) + '-' + std::to_string(size) + '-' + compression + '"';
 }
 
 template <typename Res>
@@ -86,6 +76,106 @@ void addCacheHeaders(Res &response, const std::string &etag,
 
   response.headers.setHeaderLower("etag", etag);
   response.headers.setHeaderLower("last-modified", toHttpDate(lastWrite));
+}
+
+std::optional<core::CachedFile> StaticMiddleware::lookupOrOpen(const std::string &relative, int &errorStatus) {
+  auto result = core::tl_file_cache.getOrInsert(relative, [&]() -> std::expected<core::CachedFile, int> {
+    std::filesystem::path resolved = std::filesystem::weakly_canonical(canonicalRoot_ / relative);
+    if (not resolved.native().starts_with(canonicalRoot_.native()))
+      return std::unexpected(403);
+
+    std::filesystem::directory_entry entry(resolved);
+    if (not entry.exists())
+      return std::unexpected(404);
+    if (entry.is_directory()) {
+      resolved /= "index.html";
+      entry.assign(resolved);
+      if (not entry.exists())
+        return std::unexpected(404);
+    }
+
+    int fd = ::open(resolved.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd == -1)
+      return std::unexpected((errno == EACCES || errno == EPERM) ? 403 : 500);
+
+    core::CachedFile cf;
+    cf.fd = fd;
+    cf.size = entry.file_size();
+    cf.mtime = entry.last_write_time();
+    cf.resolvedPath = resolved;
+    cf.mime = getOrDefault(MIME_TYPES, resolved.extension().string(), "application/octet-stream");
+    cf.etag = generateETag(cf.mtime, cf.size);
+    return cf;
+  });
+
+  if (not result) {
+    errorStatus = result.error();
+    return std::nullopt;
+  }
+  return *result;
+}
+
+core::Task<std::optional<core::CachedFile>>
+StaticMiddleware::lookupOrBuildCompressed(const std::string &relative, const std::string &encoding,
+                                          const core::CachedFile &source, compression::ICompressor &compressor,
+                                          int &errorStatus) {
+  std::string key = relative + "|" + encoding;
+
+  auto quick = core::tl_file_cache.get(key);
+  if (quick.has_value())
+    co_return quick;
+
+  // Miss: do the async compression work outside the lock, then insert synchronously.
+  core::AsyncFileReader src(source.fd, source.size, /*owns=*/false);
+  std::string raw = co_await src.readAll();
+  std::string compressed = compressor.compress(raw);
+
+  std::filesystem::path compressedPath = compressedRoot_ / (relative + "." + encoding);
+  std::error_code dirEc;
+  std::filesystem::create_directories(compressedPath.parent_path(), dirEc);
+
+  static std::atomic<uint64_t> threadIdCounter = 0;
+  thread_local uint64_t myThreadId = threadIdCounter++;
+  thread_local uint64_t tmpCounter = 0;
+  std::filesystem::path tmpPath =
+      compressedPath.string() + ".tmp." + std::to_string(myThreadId) + "." + std::to_string(tmpCounter++);
+
+  std::optional<core::AsyncFileWriter> writerOpt = core::AsyncFileWriter::open(tmpPath);
+  if (not writerOpt) {
+    errorStatus = 500;
+    co_return std::nullopt;
+  }
+  if (not co_await writerOpt->writeAll(compressed)) {
+    std::filesystem::remove(tmpPath);
+    errorStatus = 500;
+    co_return std::nullopt;
+  }
+  std::error_code renameEc;
+  std::filesystem::rename(tmpPath, compressedPath, renameEc);
+  if (renameEc) {
+    std::filesystem::remove(tmpPath);
+    errorStatus = 500;
+    co_return std::nullopt;
+  }
+
+  auto result = core::tl_file_cache.getOrInsert(key, [&]() -> std::expected<core::CachedFile, int> {
+    int fd = ::open(compressedPath.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd == -1)
+      return std::unexpected(500);
+    core::CachedFile cf;
+    cf.fd = fd;
+    cf.size = compressed.size();
+    cf.mtime = source.mtime;
+    cf.resolvedPath = compressedPath;
+    cf.mime = source.mime;
+    cf.etag = generateETag(source.mtime, cf.size, encoding);
+    return cf;
+  });
+  if (not result) {
+    errorStatus = result.error();
+    co_return std::nullopt;
+  }
+  co_return *result;
 }
 
 core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Next next) {
@@ -104,27 +194,19 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
   if (not relative.empty() && relative.front() == '/')
     relative.erase(0, 1);
 
-  std::filesystem::path resolved = std::filesystem::weakly_canonical(canonicalRoot_ / relative);
-
-  if (not resolved.native().starts_with(canonicalRoot_.native())) {
-    co_return buildErrorResponse(request, 403);
-  }
-
-  std::filesystem::directory_entry entry(resolved);
-  if (not entry.exists())
-    co_return co_await next();
-  if (entry.is_directory()) {
-    resolved /= "index.html";
-    relative = relative.empty() ? "index.html" : relative + "/index.html";
-    entry.assign(resolved);
-    if (not entry.exists())
+  int errorStatus = 0;
+  auto cachedOpt = lookupOrOpen(relative, errorStatus);
+  if (not cachedOpt) {
+    if (errorStatus == 404)
       co_return co_await next();
+    co_return buildErrorResponse(request, errorStatus);
   }
 
-  auto fileSize = entry.file_size();
+  const core::CachedFile &cached = *cachedOpt;
 
-  std::string extension = resolved.extension().string(); // e.g. ".html"
-  std::string mime = getOrDefault(MIME_TYPES, extension, "application/octet-stream");
+  auto fileSize = cached.size;
+  std::filesystem::path resolved = cached.resolvedPath;
+  std::string mime = cached.mime;
 
   bool hasRangeHeader = not request.getHeaderLower("range").empty();
 
@@ -135,9 +217,12 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
                                   mime) != compression::compressibleMimeTypes.end();
   isCompressible = isCompressible && fileSize >= ServerConfig::COMPRESS_MIN_BYTES;
 
-  std::string compressedExtension = "";
+  int contentFd = cached.fd;
+  uintmax_t contentSize = fileSize;
+  std::string eTag = cached.etag;
   std::string finalEncoding = "";
   Compressor compressor;
+
   if (isCompressible) {
     const auto acceptEncodingHeader = toLowerCase(request.getHeaderLower("accept-encoding"));
     std::vector<std::pair<std::string, float>> encodingPrefs;
@@ -148,84 +233,34 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     std::sort(encodingPrefs.begin(), encodingPrefs.end(),
               [](const auto &a, const auto &b) { return a.second > b.second; });
 
-    bool identityAllowed = true;
-
-    if (std::find(excluded.begin(), excluded.end(), "identity") != excluded.end()) {
-      identityAllowed = false;
-    }
+    bool identityAllowed = std::find(excluded.begin(), excluded.end(), "identity") == excluded.end();
 
     for (const auto &encoding : encodingPrefs) {
       compressor = compression::getCompressor(encoding.first);
-      if (compressor || encoding.first == "identity") {
+      if (compressor || encoding.first == "identity")
         break;
-      }
     }
 
-    if (not compressor && not identityAllowed) {
+    if (not compressor && not identityAllowed)
       co_return buildErrorResponse(request, 406);
-    }
 
     if (compressor) {
       finalEncoding = compressor->getEncoding();
-      compressedExtension = "." + finalEncoding;
-      auto compressedRelative = relative + compressedExtension;
-      std::filesystem::path compressedPath = compressedRoot_ / compressedRelative;
+      int compErrorStatus = 0;
+      auto compressedOpt =
+          co_await lookupOrBuildCompressed(relative, finalEncoding, cached, *compressor, compErrorStatus);
+      if (not compressedOpt)
+        co_return buildErrorResponse(request, compErrorStatus);
 
-      std::filesystem::directory_entry compressedEntry(compressedPath);
-      bool originalFileModified = false;
-      if (compressedEntry.exists()) {
-        originalFileModified = entry.last_write_time() > compressedEntry.last_write_time();
-        if (not originalFileModified) {
-          entry.assign(compressedEntry);
-          resolved = compressedPath;
-          fileSize = entry.file_size();
-        }
-      }
-      if (not compressedEntry.exists() || originalFileModified) {
-        std::optional<core::AsyncFileReader> srcOpt = core::AsyncFileReader::open(resolved, fileSize);
-        if (not srcOpt)
-          co_return buildErrorResponse(request, 500);
-
-        std::string raw = co_await srcOpt->readAll();
-        std::string compressed = compressor->compress(raw);
-
-        std::filesystem::create_directories(compressedPath.parent_path());
-
-        static std::atomic<uint64_t> threadIdCounter = 0;
-        thread_local uint64_t myThreadId = threadIdCounter++;
-        thread_local uint64_t tmpCounter = 0;
-        std::filesystem::path tmpPath =
-            compressedPath.string() + ".tmp." + std::to_string(myThreadId) + "." + std::to_string(tmpCounter++);
-
-        std::optional<core::AsyncFileWriter> writerOpt = core::AsyncFileWriter::open(tmpPath);
-        if (not writerOpt)
-          co_return buildErrorResponse(request, 500);
-
-        bool ok = co_await writerOpt->writeAll(compressed);
-        if (not ok) {
-          std::filesystem::remove(tmpPath);
-          co_return buildErrorResponse(request, 500);
-        }
-
-        std::error_code ec;
-        std::filesystem::rename(tmpPath, compressedPath, ec);
-        if (ec) {
-          std::filesystem::remove(tmpPath);
-          co_return buildErrorResponse(request, 500);
-        }
-
-        entry.assign(compressedPath);
-        resolved = compressedPath;
-        fileSize = compressed.size();
-      }
+      contentFd = compressedOpt->fd;
+      contentSize = compressedOpt->size;
+      eTag = compressedOpt->etag;
     }
   }
 
-  // Design decision: checking for 304 AFTER the open in case permissions change.
   auto cacheControl = getOrDefault(config_.mimeCacheControl, mime, config_.defaultCacheControl);
-  auto lastWrite = std::chrono::file_clock::to_sys(entry.last_write_time());
+  auto lastWrite = std::chrono::file_clock::to_sys(cached.mtime);
   auto lastWriteSeconds = std::chrono::time_point_cast<std::chrono::seconds>(lastWrite);
-  std::string eTag = generateETag(entry, finalEncoding);
   auto ifRange = request.getHeaderLower("if-range");
   auto ifNoneMatch = request.getHeaderLower("if-none-match");
   auto ifModifiedSince = request.getHeaderLower("if-modified-since");
@@ -255,7 +290,7 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
   }
 
   auto ranges = request.getRanges();
-  if (not validateAndCleanRanges(ranges, fileSize)) {
+  if (not validateAndCleanRanges(ranges, contentSize)) {
     co_return buildErrorResponse(request, 416);
   }
 
@@ -264,7 +299,6 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     if (ifRange.empty()) {
       useRange = true;
     } else {
-
       if (not ifRange.empty() && ifRange.front() == '"') {
         useRange = etagMatches(ifRange, eTag);
       } else {
@@ -287,20 +321,19 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     size_t contentRangeBaseSize =
         sizeof("content-range: bytes ") - 1 + sizeof("-") - 1 + sizeof("/") - 1 + sizeof("\r\n") - 1;
     for (const auto &[start, end] : ranges) {
-      totalSize += boundaryDelimiter.size() + 2; // --boundary + CRLF
-
-      size_t contentRangeSize = contentRangeBaseSize + digit_count(*start) + digit_count(*end) + digit_count(fileSize);
+      totalSize += boundaryDelimiter.size() + 2;
+      size_t contentRangeSize =
+          contentRangeBaseSize + digit_count(*start) + digit_count(*end) + digit_count(contentSize);
       totalSize += contentRangeSize;
       totalSize += partContentType.size();
-      totalSize += 2; // blank line
-
-      totalSize += *end - *start + 1 + 2; // body + CRLF
+      totalSize += 2;
+      totalSize += *end - *start + 1 + 2;
     }
-    totalSize += boundaryDelimiter.size() + 4; // --boundary-- + CRLF
+    totalSize += boundaryDelimiter.size() + 4;
   } else if (useRange) {
     totalSize = ranges[0].second.value() - ranges[0].first.value() + 1;
   } else {
-    totalSize = fileSize;
+    totalSize = contentSize;
   }
 
   if (method == "HEAD") {
@@ -312,7 +345,7 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     } else if (useRange) {
       response.setStatusCode(206);
       response.headers.setHeaderLower("content-type", mime);
-      response.headers.setContentRange(*ranges[0].first, *ranges[0].second, fileSize);
+      response.headers.setContentRange(*ranges[0].first, *ranges[0].second, contentSize);
     } else {
       response.setStatusCode(200);
       response.headers.setHeaderLower("content-type", mime);
@@ -322,7 +355,6 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
       response.headers.setHeaderLower("content-encoding", finalEncoding);
 
     response.headers.setHeaderLower("content-length", std::to_string(totalSize));
-
     response.headers.addHeaderLower("accept-ranges", "bytes");
     response.headers.addHeaderLower("vary", "accept-encoding");
 
@@ -331,19 +363,17 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
   }
 
   if (isMultiPart) {
-    std::optional<core::AsyncFileReader> fileOpt = core::AsyncFileReader::open(resolved, fileSize);
-    if (not fileOpt.has_value())
-      co_return buildErrorResponse(request, 403);
-    core::AsyncFileReader &file = fileOpt.value();
+    core::AsyncFileReader file(contentFd, contentSize, /*owns=*/false);
 
     HttpStreamResponse response(206);
     response.headers.setHeaderLower("accept-ranges", "bytes");
     response.headers.setHeaderLower("content-length", std::to_string(totalSize));
     response.setChunked(false);
-
     response.headers.setHeaderLower("content-type", "multipart/byteranges; boundary=" + boundaryCore);
-    auto nextBlock = [file = std::move(file), ranges = std::move(ranges), boundaryDelimiter, boundaryCore, fileSize,
-                      start = static_cast<size_t>(1), end = static_cast<size_t>(0), idx = static_cast<int>(-1), mime,
+
+    auto nextBlock = [file = std::move(file), ranges = std::move(ranges), boundaryDelimiter, boundaryCore,
+                      fileSize = contentSize, start = static_cast<size_t>(1), end = static_cast<size_t>(0),
+                      idx = static_cast<int>(-1), mime,
                       sentClosingBoundary = false]() mutable -> core::Task<std::optional<std::string>> {
       std::string contentType = "content-type: " + mime + "\r\n";
       std::string body;
@@ -405,10 +435,11 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
       response.setStatusCode(206);
       const size_t start = *ranges[0].first;
       response.setOffset(start);
-      response.headers.setContentRange(start, *ranges[0].second, fileSize);
+      response.headers.setContentRange(start, *ranges[0].second, contentSize);
     }
 
     response.setContentLength(totalSize);
+    response.setFd(contentFd, /*owns=*/false);
 
     co_return response;
   }

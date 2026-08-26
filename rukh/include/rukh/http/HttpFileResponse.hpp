@@ -1,6 +1,7 @@
 /**
  * @file HttpFileResponse.hpp
  * @brief Rukh's HTTP File Response
+ * \todo cleanup and docs
  */
 #pragma once
 
@@ -52,6 +53,14 @@ public:
   }
   std::optional<size_t> getContentLength() const { return contentLength_; }
 
+  void setFd(int fd, bool owns = false) {
+    fd_ = fd;
+    ownsFd_ = owns;
+  }
+
+  int getFd() const { return fd_; }
+  bool ownsFd() const { return ownsFd_; }
+
   std::filesystem::path getFilePath() const { return filePath_; }
   void setFilePath(const std::filesystem::path &filePath) { filePath_ = filePath; }
 
@@ -66,9 +75,6 @@ public:
 
   /// @internalMethod
   bool serializeHeaderInto(std::vector<unsigned char> &buf) const;
-
-  /// @internalMethod
-  int getFd() const { return fd_; }
 
   std::optional<core::FileOpenError> openFile() {
 
@@ -110,6 +116,7 @@ private:
   std::string version_ = "HTTP/1.1";
   std::filesystem::path filePath_;
   int fd_ = -1;
+  bool ownsFd_ = true;
   size_t offset_ = 0;
   std::optional<size_t> contentLength_;
 };

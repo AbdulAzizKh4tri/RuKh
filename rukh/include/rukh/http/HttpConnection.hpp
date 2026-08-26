@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include "rukh/core/AsyncFileReader.hpp"
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -17,6 +16,7 @@
 #include <rukh/Exceptions.hpp>
 #include <rukh/ServerConfig.hpp>
 #include <rukh/TypeHelpers.hpp>
+#include <rukh/core/AsyncFileReader.hpp>
 #include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/SocketAwaitables.hpp>
 #include <rukh/core/Task.hpp>
@@ -487,7 +487,10 @@ public:
 
       } else if (HttpFileResponse *fileResponse = std::get_if<HttpFileResponse>(&response)) {
 
-        auto result = fileResponse->openFile();
+        std::optional<core::FileOpenError> result;
+        if (fileResponse->getFd() < 0)
+          result = fileResponse->openFile();
+
         if (result.has_value()) {
           switch (result.value()) {
           case core::FileOpenError::NotFound:
@@ -515,10 +518,8 @@ public:
         if (not fileResponse->serializeHeaderInto(io_.getWriteBuffer()))
           co_return;
 
-        SPDLOG_DEBUG("contentLength: {}", contentLength);
         if (contentLength < ServerConfig::FILE_STREAM_THRESHOLD_BYTES) {
-          SPDLOG_DEBUG("buffering");
-          core::AsyncFileReader reader(fileResponse->getFd());
+          core::AsyncFileReader reader(fileResponse->getFd(), false);
           reader.seek(fileResponse->getOffset());
 
           io_.getWriteBuffer().resize(io_.getWriteBuffer().size() + contentLength);
@@ -540,7 +541,6 @@ public:
             if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
               co_return;
           }
-          SPDLOG_DEBUG("streaming");
           if (contentLength != co_await io_.sendFile(fileResponse->getFd(), fileResponse->getOffset(), contentLength)) {
             SPDLOG_ERROR("Failed to send file: {}", fileResponse->getFilePath().string());
             io_.resetConnection();

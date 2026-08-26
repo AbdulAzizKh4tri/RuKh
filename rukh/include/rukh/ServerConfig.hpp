@@ -63,7 +63,7 @@ public:
   inline static size_t MAX_WRITE_BUFFER_BYTES = 32 * MB;
 
   /// The threshold at which a file is streamed instead of buffered and sent.
-  inline static size_t FILE_STREAM_THRESHOLD_BYTES = 128 * KB;
+  inline static size_t FILE_STREAM_THRESHOLD_BYTES = 0;
 
   /// @}
 
@@ -130,7 +130,7 @@ public:
 
   /// Maximum number of concurrent file ops
   inline static int IO_URING_RING_SIZE = 512;
-  inline static size_t PIPE_BUFFER_SIZE = 4 * MB;
+  inline static size_t PIPE_BUFFER_SIZE = 1 * MB;
 
   /// @}
 
