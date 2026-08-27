@@ -105,6 +105,10 @@ ssize_t TlsStream::send(const std::span<const unsigned char> data) const {
 }
 
 core::Task<ssize_t> TlsStream::sendFile(int fileFd, off_t offset, size_t count) const { co_return -1; }
+core::Task<ssize_t> TlsStream::sendFileMmap(const std::string &filePath, off_t offset, size_t count) const {
+  co_return -1;
+}
+core::Task<ssize_t> TlsStream::sendFileSplice(int fileFd, off_t offset, size_t count) const { co_return -1; }
 
 void TlsStream::resetConnection() {
   linger l{1, 0};

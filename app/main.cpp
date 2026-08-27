@@ -36,7 +36,9 @@ int main() {
   std::cout << "How many threads?" << std::endl;
   std::cin >> N;
 
-  logging::configureLog(logging.contains('y'), "server.log", true);
+  auto logger = logging::configureLog(logging.contains('y'), "server.log", true);
+  if (logger)
+    logger->set_level(spdlog::level::warn);
   SPDLOG_DEBUG("C++ standard: {}", __cplusplus);
 
   Router router(getErrorFactory());
@@ -44,7 +46,7 @@ int main() {
     registerMiddlewares(router, host);
 
   HttpServer server(getErrorFactory());
-  size_t threadPoolSize = N * 2;
+  size_t threadPoolSize = N;
   pool::ThreadPool threadPool(threadPoolSize);
 
   size_t connectionPoolSize = threadPoolSize;

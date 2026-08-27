@@ -18,6 +18,7 @@
 #include <rukh/TypeHelpers.hpp>
 #include <rukh/core/AsyncFileReader.hpp>
 #include <rukh/core/ExecutorContext.hpp>
+#include <rukh/core/FileCache.hpp>
 #include <rukh/core/SocketAwaitables.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/http/BodyStream.hpp>
@@ -512,13 +513,39 @@ public:
           }
         }
 
-        size_t contentLength = fileResponse->getContentLength()
-                                   .value(); // throw if no value, cuz why the hell would you not set content length.
-
-        if (not fileResponse->serializeHeaderInto(io_.getWriteBuffer()))
+        if (not fileResponse->getContentLength().has_value()) {
+          SPDLOG_ERROR("FileResponse: No file content length provided");
+          co_await sendErrorResponseAndClose(500);
           co_return;
+        }
 
-        if (contentLength < ServerConfig::FILE_STREAM_THRESHOLD_BYTES) {
+        size_t contentLength = fileResponse->getContentLength().value();
+        if (fileResponse->isCached()) {
+          std::vector<unsigned char> &cachedFile = *fileResponse->getCachedFileContent();
+
+          if (fileResponse->getOffset() > cachedFile.size() ||
+              contentLength > cachedFile.size() - fileResponse->getOffset()) {
+            co_await sendErrorResponseAndClose(416);
+            co_return;
+          }
+
+          if (not fileResponse->serializeHeaderInto(io_.getWriteBuffer()))
+            co_return;
+
+          const unsigned char *dataStart = cachedFile.data() + fileResponse->getOffset();
+
+          auto &writeBuffer = io_.getWriteBuffer();
+          const size_t bodyOffset = writeBuffer.size();
+          writeBuffer.resize(bodyOffset + contentLength);
+
+          std::memcpy(writeBuffer.data() + bodyOffset, dataStart, contentLength);
+
+          while (io_.hasPendingWrites()) {
+            if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
+              co_return;
+          }
+        } else if (contentLength <
+                   ServerConfig::FILE_BUFFERING_THRESHOLD) { // non-static paths that may not have small files cached.
           core::AsyncFileReader reader(fileResponse->getFd(), false);
           reader.seek(fileResponse->getOffset());
 
@@ -536,13 +563,18 @@ public:
               co_return;
           }
         } else {
+
           /// Sending headers
+          if (not fileResponse->serializeHeaderInto(io_.getWriteBuffer()))
+            co_return;
           while (io_.hasPendingWrites()) {
             if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
               co_return;
           }
-          if (contentLength != co_await io_.sendFile(fileResponse->getFd(), fileResponse->getOffset(), contentLength)) {
-            SPDLOG_ERROR("Failed to send file: {}", fileResponse->getFilePath().string());
+
+          if (auto r = co_await io_.sendFile(fileResponse->getFd(), fileResponse->getOffset(), contentLength);
+              r != contentLength) {
+            // SPDLOG_ERROR("Failed to send file: {}", fileResponse->getFilePath().string());
             io_.resetConnection();
             co_return;
           }

@@ -9,12 +9,12 @@
 #include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <liburing.h>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
 
 #include <rukh/core/EpollInstance.hpp>
-#include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/IoUringInstance.hpp>
 #include <rukh/core/Task.hpp>
 
@@ -36,7 +36,7 @@ public:
   struct TaskDeadline {
     /// The deadline for this task
     std::chrono::steady_clock::time_point deadline;
-    int fd;
+    int64_t fd;
     /// Used as an ID of sorts to compare with `SuspendedTask`
     int suspensionSeq;
 
@@ -50,7 +50,7 @@ public:
     bool timedOut;
   };
 
-  Executor();
+  Executor(io_uring ring);
   ~Executor() = default;
 
   /**
@@ -72,6 +72,15 @@ public:
 
   /// Wait on a file fd for WRITE until deadline
   void waitForWrite(int fd, std::coroutine_handle<> caller, std::chrono::steady_clock::time_point deadline);
+
+  /// Wait on a random event, returns a synthetic key which can be used to trigger the event, see fireEvent
+  int64_t waitForEvent(std::coroutine_handle<> caller, std::chrono::steady_clock::time_point deadline);
+
+  /// used to trigger a synthetic event, see waitForEvent.
+  void fireEvent(int key);
+
+  /// wake the coroutine in `cycles` of the event loops
+  void wakeMeIn(uint8_t cycles, std::coroutine_handle<> h);
 
   /**
    * @brief Submit a file read operation
@@ -106,8 +115,6 @@ public:
   ///\todo docs
   void submitSplice(int srcFd, int64_t srcOffset, int dstFd, int64_t dstOffset, size_t len, std::coroutine_handle<> h,
                     int *resultPtr);
-
-  void wakeMe(std::coroutine_handle<>);
 
   /**
    * @brief The executor loop that runs everything.
@@ -179,7 +186,7 @@ private:
 
   std::vector<void *> finishedRoots_;
 
-  int nextSeq_ = 0;
+  uint64_t nextSeq_ = 0;
   std::unordered_map<int, SuspendedTask> suspendedTasks_;
   std::priority_queue<TaskDeadline, std::vector<TaskDeadline>, std::greater<TaskDeadline>> taskDeadlines_;
 
@@ -197,5 +204,11 @@ private:
   int eventFd_;
   std::mutex poolResumeQueueMutex_;
   std::queue<std::coroutine_handle<>> poolResumeQueue_;
+
+  int64_t syntheticEventKey_ = -1;
+
+  static const u_int64_t MAX_WAKEUP_TURN = 10; // maximum turns the WakeAwaitable can push the task forward
+  u_int64_t wakeTime_ = 0;
+  std::vector<std::vector<int64_t>> wakeUpQueue_{MAX_WAKEUP_TURN};
 };
 } // namespace rukh::core

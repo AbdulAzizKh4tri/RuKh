@@ -223,6 +223,7 @@ public:
   }
 
   const unsigned char *readBufferData() const { return readBuffer_.data() + readOffset_; }
+  unsigned char *writeBufferData() const { return (unsigned char *)writeBuffer_.data() + writeOffset_; }
   size_t getReadOffset() const { return readOffset_; }
   size_t getWriteOffset() const { return writeOffset_; }
   size_t getReadBufferSize() const { return readBuffer_.size() - readOffset_; }

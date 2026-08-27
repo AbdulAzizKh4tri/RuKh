@@ -1,3 +1,5 @@
+#include <liburing.h>
+#include <liburing/io_uring.h>
 #include <rukh/http/HttpServer.hpp>
 
 #include <atomic>
@@ -45,7 +47,7 @@ void HttpServer::setRouter(Router &router) { router_ = &router; };
 
 std::atomic<bool> HttpServer::shutdown = false;
 
-void HttpServer::run(size_t N) {
+void HttpServer::run(u_int N) {
   signal(SIGPIPE, SIG_IGN);
 
   signal(SIGINT, [](int) {
@@ -76,16 +78,38 @@ void HttpServer::run(size_t N) {
   if (N > 1) /// Pure tomfoolery
     SPDLOG_INFO("KAGE BUNSHIN NO JUTSU");
 
+  io_uring firstRing = {};
+  io_uring_params firstParams = {};
+
+  if (io_uring_queue_init_params(ServerConfig::IO_URING_RING_SIZE, &firstRing, &firstParams) < 0)
+    throw ServerException("Failed to initialize io_uring");
+
+  unsigned int max_iou_workers[2] = {/*bounded*/ N, /*unbounded*/ N * 2};
+  io_uring_register_iowq_max_workers(&firstRing, max_iou_workers);
+
   for (int i = 0; i < N; i++)
-    executorThreads.emplace_back([this] { workerMain(); });
+    executorThreads.emplace_back([this, i, &firstRing] { workerMain(firstRing, i == 0); });
   for (auto &t : executorThreads)
     t.join();
 
   spdlog::shutdown();
 }
 
-void HttpServer::workerMain() {
-  core::Executor executor;
+void HttpServer::workerMain(io_uring &firstRing, bool isFirst) {
+
+  io_uring ring;
+  if (isFirst) {
+    ring = firstRing;
+  } else {
+    io_uring_params params = {};
+    params.flags = IORING_SETUP_ATTACH_WQ;
+    params.wq_fd = firstRing.ring_fd;
+    if (io_uring_queue_init_params(ServerConfig::IO_URING_RING_SIZE, &ring, &params) < 0)
+      throw ServerException("Failed to initialize io_uring");
+  }
+
+  core::Executor executor(ring);
+
   core::tl_executor = &executor;
   std::vector<std::unique_ptr<net::ListenerSocket>> tcpListeners, tlsListeners;
 

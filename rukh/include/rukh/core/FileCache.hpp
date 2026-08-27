@@ -4,9 +4,7 @@
  */
 #pragma once
 
-#include <expected>
 #include <filesystem>
-#include <functional>
 #include <string>
 #include <unordered_map>
 
@@ -21,6 +19,8 @@ struct CachedFile {
   std::string etag;
   std::string mime;
   std::filesystem::path resolvedPath;
+
+  std::shared_ptr<std::vector<unsigned char>> cachedContent;
 };
 
 class FileCache {
@@ -42,20 +42,9 @@ public:
     return std::nullopt;
   };
 
-  std::expected<CachedFile, int> getOrInsert(const std::string &key,
-                                             const std::function<std::expected<CachedFile, int>()> &populate) {
-    if (auto it = map_.find(key); it != map_.end())
-      return it->second;
-
-    if (auto it = map_.find(key); it != map_.end())
-      return it->second;
-
-    auto result = populate();
-    if (not result)
-      return std::unexpected(result.error());
-
-    auto [it, ok] = map_.emplace(key, std::move(*result));
-    return it->second;
+  bool insert(const std::string &key, const CachedFile cf) {
+    auto [_, inserted] = map_.insert_or_assign(key, cf);
+    return inserted;
   }
 
   void evict(const std::string &key) {
@@ -71,5 +60,7 @@ public:
 private:
   std::unordered_map<std::string, CachedFile> map_;
 };
+
+inline thread_local FileCache tl_file_cache;
 
 } // namespace rukh::core

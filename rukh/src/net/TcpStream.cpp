@@ -1,4 +1,3 @@
-#include "rukh/core/SocketAwaitables.hpp"
 #include <rukh/net/TcpStream.hpp>
 
 #include <arpa/inet.h>
@@ -6,13 +5,16 @@
 #include <netinet/tcp.h>
 #include <span>
 #include <spdlog/spdlog.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
 #include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/FileIoHelpers.hpp>
+#include <rukh/core/MmapCache.hpp>
+#include <rukh/core/SocketAwaitables.hpp>
 #include <rukh/core/SpliceAwaitable.hpp>
-#include <rukh/core/YieldAwaitable.hpp>
+#include <rukh/core/WakeInAwaitable.hpp>
 #include <rukh/net/StreamResults.hpp>
 #include <rukh/net/utils.hpp>
 #include <rukh/utils.hpp>
@@ -39,7 +41,72 @@ ssize_t TcpStream::send(const std::span<const unsigned char> data) const {
 }
 
 core::Task<ssize_t> TcpStream::sendFile(int fileFd, off_t offset, size_t count) const {
-  core::Pipe pipe = core::tl_pipe_pool.acquire();
+  size_t remaining = count;
+  while (remaining > 0) {
+    ssize_t n = ::sendfile(socket_.getFd(), fileFd, &offset, remaining); // offset is advanced in-place by the kernel
+    if (n < 0) {
+      if (errno == EAGAIN) {
+        co_await core::WriteAwaitable{socket_.getFd(),
+                                      rukh::now() + std::chrono::seconds(ServerConfig::INACTIVITY_TIMEOUT_S)};
+        continue;
+      }
+      co_return -errno;
+    }
+    if (n == 0)
+      break; // file ended early (truncated concurrently) — treat as short response, same as before
+    remaining -= n;
+  }
+  co_return static_cast<ssize_t>(count - remaining);
+}
+
+core::Task<ssize_t> TcpStream::sendFileMmap(const std::string &filePath, off_t offset, size_t count) const {
+  if (count == 0) {
+    co_return 0;
+  }
+
+  auto mmapFile = core::tl_mmap_cache.get(filePath);
+  if (not mmapFile) {
+    co_return -errno;
+  }
+
+  if (offset + count > mmapFile->size) {
+    co_return -EINVAL;
+  }
+
+  const unsigned char *buffer = static_cast<const unsigned char *>(mmapFile->mmappedData) + offset;
+  size_t remaining = count;
+  ssize_t total_sent = 0;
+
+  // 2. Stream the memory region straight into the network socket
+  while (remaining > 0) {
+    // Relying on your framework's network write awaitable (e.g., io_uring_prep_send)
+    // If you use io_uring, use IORING_OP_SEND. If epoll, use your write-ready awaitable.
+
+    std::span span = std::span(buffer + total_sent, remaining);
+    ssize_t bytes_sent = send(span);
+
+    if (bytes_sent == 0) {
+      co_await core::WriteAwaitable{socket_.getFd(),
+                                    rukh::now() + std::chrono::seconds(ServerConfig::INACTIVITY_TIMEOUT_S)};
+      continue;
+    } else if (bytes_sent < 0) {
+      co_return bytes_sent;
+    }
+
+    total_sent += bytes_sent;
+    remaining -= bytes_sent;
+  }
+
+  co_return total_sent;
+}
+
+core::Task<ssize_t> TcpStream::sendFileSplice(int fileFd, off_t offset, size_t count) const {
+  auto pipeOpt =
+      co_await core::tl_pipe_pool.acquire(rukh::now() + std::chrono::seconds(ServerConfig::INACTIVITY_TIMEOUT_S));
+  if (not pipeOpt)
+    co_return -EBUSY;
+
+  core::Pipe pipe = *pipeOpt;
   size_t remaining = count;
   while (remaining > 0) {
     size_t chunkSize = std::min(remaining, ServerConfig::PIPE_BUFFER_SIZE);
@@ -49,7 +116,7 @@ core::Task<ssize_t> TcpStream::sendFile(int fileFd, off_t offset, size_t count) 
       n1 = co_await core::SpliceAwaitable{fileFd, offset, pipe.in, -1, chunkSize};
       if (n1 != -EAGAIN)
         break;
-      co_await core::YieldAwaitable{};
+      co_await core::WakeInAwaitable{2};
     }
     if (n1 <= 0) {
       core::tl_pipe_pool.discard(pipe);

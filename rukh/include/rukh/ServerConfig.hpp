@@ -62,8 +62,11 @@ public:
   /// For Responses: How filled up the write buffer is allowed to get before we decide the connection is dead.
   inline static size_t MAX_WRITE_BUFFER_BYTES = 32 * MB;
 
-  /// The threshold at which a file is streamed instead of buffered and sent.
-  inline static size_t FILE_STREAM_THRESHOLD_BYTES = 0;
+  /// The threshold under which a file is cached in memory.
+  inline static size_t FILE_CONTENT_CACHE_THRESHOLD = 64 * KB;
+
+  /// The threshold under which the file will be buffered and sent instead of streamed via sendFile()
+  inline static size_t FILE_BUFFERING_THRESHOLD = 64 * KB;
 
   /// @}
 
@@ -129,7 +132,7 @@ public:
   /// @name File IO
 
   /// Maximum number of concurrent file ops
-  inline static int IO_URING_RING_SIZE = 512;
+  inline static int IO_URING_RING_SIZE = 256;
   inline static size_t PIPE_BUFFER_SIZE = 1 * MB;
 
   /// @}

@@ -1,6 +1,6 @@
 /**
  * @file IoUringInstance.hpp
- * @brief RAII wrapper for io_uring
+ * @brief RAII and convenience wrapper for io_uring
  */
 
 #pragma once
@@ -12,13 +12,10 @@
 
 namespace rukh::core {
 
-/// RAII wrapper for io_uring
+/// RAII and convenience wrapper for io_uring
 class IoUringInstance {
 public:
-  IoUringInstance(int depth = ServerConfig::IO_URING_RING_SIZE) {
-    if (io_uring_queue_init(depth, &ring_, 0) < 0)
-      throw std::runtime_error("io_uring_queue_init failed");
-  }
+  IoUringInstance(io_uring ring) : ring_(ring) {}
 
   ~IoUringInstance() { io_uring_queue_exit(&ring_); }
 
@@ -117,6 +114,8 @@ public:
       io_uring_cqe_seen(&ring_, cqe);
     }
   }
+
+  io_uring &getRing() { return ring_; }
 
 private:
   io_uring ring_;

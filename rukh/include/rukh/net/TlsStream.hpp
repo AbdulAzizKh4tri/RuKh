@@ -45,6 +45,8 @@ public:
 
   /// send file and return number of bytes sent or error
   core::Task<ssize_t> sendFile(int fileFd, off_t offset, size_t count) const;
+  core::Task<ssize_t> sendFileMmap(const std::string &filePath, off_t offset, size_t count) const;
+  core::Task<ssize_t> sendFileSplice(int fileFd, off_t offset, size_t count) const;
 
   /// abort connection, RST
   void resetConnection();

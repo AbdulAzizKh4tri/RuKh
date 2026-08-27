@@ -6,6 +6,7 @@
 #pragma once
 
 #include <atomic>
+#include <liburing.h>
 #include <memory>
 #include <openssl/ssl.h>
 #include <string>
@@ -62,7 +63,7 @@ public:
    * Each instance of workerMain listens on the configured ports and accepts new connections.
    * RSTs connection if the connection count goes over the configured threshold.
    */
-  void run(size_t N = 1);
+  void run(u_int N = 1);
 
   ErrorFactory &getErrorFactory();
 
@@ -78,7 +79,7 @@ private:
 
   std::atomic<int> globalConnectionCount_ = 0;
 
-  void workerMain();
+  void workerMain(io_uring&, bool);
 
   core::Task<void> tcpAcceptLoop(net::ListenerSocket &listener);
 

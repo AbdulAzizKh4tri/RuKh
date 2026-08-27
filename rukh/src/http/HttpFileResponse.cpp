@@ -11,8 +11,6 @@ namespace rukh::http {
 
 HttpFileResponse::HttpFileResponse() : statusCode_(-1) {}
 
-HttpFileResponse::HttpFileResponse(int statusCode) : statusCode_(statusCode) {}
-
 HttpFileResponse::HttpFileResponse(int statusCode, std::filesystem::path filePath)
     : statusCode_(statusCode), filePath_(filePath) {}
 
@@ -21,39 +19,62 @@ HttpFileResponse::HttpFileResponse(int statusCode, const std::string &contentTyp
   headers.setHeaderLower("content-type", contentType);
 }
 
-HttpFileResponse::HttpFileResponse(HttpFileResponse &&other) {
-  statusCode_ = other.statusCode_;
-  version_ = other.version_;
-  filePath_ = other.filePath_;
-  fd_ = other.fd_;
-  offset_ = other.offset_;
-  contentLength_ = other.contentLength_;
-  headers = std::move(other.headers);
-  cookies = std::move(other.cookies);
-  ownsFd_ = other.ownsFd_;
-
-  other.fd_ = -1;
-}
-
-HttpFileResponse &HttpFileResponse::operator=(HttpFileResponse &&other) {
-  statusCode_ = other.statusCode_;
-  version_ = other.version_;
-  filePath_ = other.filePath_;
-  fd_ = other.fd_;
-  offset_ = other.offset_;
-  contentLength_ = other.contentLength_;
-  ownsFd_ = other.ownsFd_;
-
-  headers = std::move(other.headers);
-  cookies = std::move(other.cookies);
-
-  other.fd_ = -1;
-  return *this;
-}
-
 HttpFileResponse::~HttpFileResponse() {
   if (ownsFd_ and fd_ != -1)
     ::close(fd_);
+}
+
+void HttpFileResponse::setOffset(size_t offset) { offset_ = offset; }
+size_t HttpFileResponse::getOffset() const { return offset_; }
+
+void HttpFileResponse::setContentLength(size_t contentLength) {
+  HttpFileResponse::contentLength_ = contentLength;
+  HttpFileResponse::headers.setHeaderLower("content-length", std::to_string(contentLength));
+}
+std::optional<size_t> HttpFileResponse::getContentLength() const { return contentLength_; }
+
+void HttpFileResponse::setFd(int fd, bool owns) {
+  HttpFileResponse::fd_ = fd;
+  HttpFileResponse::ownsFd_ = owns;
+}
+
+int HttpFileResponse::getFd() const { return fd_; }
+bool HttpFileResponse::ownsFd() const { return ownsFd_; }
+
+std::filesystem::path HttpFileResponse::getFilePath() const { return filePath_; }
+void HttpFileResponse::setFilePath(const std::filesystem::path &filePath) { filePath_ = filePath; }
+
+std::optional<core::FileOpenError> HttpFileResponse::openFile() {
+
+  fd_ = ::open(filePath_.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+  if (fd_ >= 0)
+    return std::nullopt;
+
+  core::FileOpenError error;
+  SPDLOG_ERROR("Failed to open file: {}", strerror(errno));
+  switch (errno) {
+  case ENOENT:
+  case ENOTDIR:
+    error = core::FileOpenError::NotFound;
+    break;
+  case EACCES:
+  case EPERM:
+    error = core::FileOpenError::Forbidden;
+    break;
+  case ENAMETOOLONG:
+  case ELOOP:
+    error = core::FileOpenError::Malformed;
+    break;
+  case EMFILE:
+  case ENFILE:
+  case ENOMEM:
+    error = core::FileOpenError::ResourceExhausted;
+    break;
+  default:
+    error = core::FileOpenError::Unexpected;
+    break;
+  }
+  return error;
 }
 
 bool HttpFileResponse::serializeHeaderInto(std::vector<unsigned char> &buf) const {
@@ -126,5 +147,13 @@ void HttpFileResponse::setContentType(const std::string &contentType) {
 std::string HttpFileResponse::getVersion() const { return version_; }
 int HttpFileResponse::getStatusCode() const { return statusCode_; }
 void HttpFileResponse::setStatusCode(int statusCode) { statusCode_ = statusCode; }
+
+bool HttpFileResponse::isCached() const { return cachedFileContent_ != nullptr; }
+
+std::shared_ptr<std::vector<unsigned char>> &HttpFileResponse::getCachedFileContent() { return cachedFileContent_; }
+
+void HttpFileResponse::setCachedFileContent(const std::shared_ptr<std::vector<unsigned char>> content) {
+  cachedFileContent_ = content;
+}
 
 } // namespace rukh::http

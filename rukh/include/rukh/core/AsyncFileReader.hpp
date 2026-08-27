@@ -33,8 +33,8 @@ struct FileReadAwaitable {
 class AsyncFileReader {
 public:
   AsyncFileReader() : fd_(-1) {}
-  AsyncFileReader(int fd, bool owns = true) : fd_(fd), ownsFd_(owns) {}
-  AsyncFileReader(int fd, size_t fileSize, bool owns = true) : fd_(fd), fileSize_(fileSize), ownsFd_(owns) {}
+  AsyncFileReader(int fd, bool owns) : fd_(fd), ownsFd_(owns) {}
+  AsyncFileReader(int fd, size_t fileSize, bool owns) : fd_(fd), fileSize_(fileSize), ownsFd_(owns) {}
 
   ~AsyncFileReader() {
     if (ownsFd_ and fd_ != -1)
@@ -79,13 +79,30 @@ public:
    * @returns A string with the contents of the file
    */
   Task<std::string> readAll() {
+    if (not fileSize_)
+      throw std::runtime_error("readAll(): File size not set");
+
     std::string buf;
-    buf.reserve(fileSize_);
-    int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = fileSize_, .offset = offset_};
+    buf.reserve(*fileSize_);
+    int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = *fileSize_, .offset = offset_};
     if (n < 0)
-      throw std::runtime_error("File Read Awaitable failed");
+      throw std::runtime_error("readAll(): File Read Awaitable failed");
     buf.resize(n);
     co_return buf;
+  }
+
+  /**
+   * @brief Read the entire file into a passed buffer.
+   */
+  Task<void> readAllInto(std::vector<unsigned char> &buf) {
+    if (not fileSize_)
+      throw std::runtime_error("readAllInto(): File size not set");
+
+    buf.reserve(*fileSize_);
+    int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = *fileSize_, .offset = offset_};
+    if (n < 0)
+      throw std::runtime_error("readAllInto(): File Read Awaitable failed");
+    buf.resize(n);
   }
 
   /**
@@ -98,7 +115,7 @@ public:
     buf.reserve(size);
     int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = size, .offset = offset_};
     if (n < 0)
-      throw std::runtime_error("File Read Awaitable failed");
+      throw std::runtime_error("readChunk(): File Read Awaitable failed");
     if (n == 0)
       co_return std::nullopt;
     offset_ += n;
@@ -114,7 +131,7 @@ public:
     size_t size = buf.size();
     int n = co_await FileReadAwaitable{.fd = fd_, .buf = buf.data(), .len = size, .offset = offset_};
     if (n < 0)
-      throw std::runtime_error("File Read Awaitable failed");
+      throw std::runtime_error("readChunk(): File Read Awaitable failed");
     if (n < size)
       co_return false;
     offset_ += n;
@@ -124,10 +141,12 @@ public:
   /// set file read offset
   void seek(uint64_t offset) { offset_ = offset; }
 
+  void setFileSize(uintmax_t size) { fileSize_ = size; }
+
 private:
   int fd_ = -1;
   bool ownsFd_ = false;
-  uintmax_t fileSize_;
+  std::optional<uintmax_t> fileSize_;
   uint64_t offset_ = 0;
 };
 } // namespace rukh::core

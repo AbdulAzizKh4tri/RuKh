@@ -1,3 +1,4 @@
+#include <optional>
 #include <rukh/http/middleware/StaticMiddleware.hpp>
 
 #include <filesystem>
@@ -78,41 +79,52 @@ void addCacheHeaders(Res &response, const std::string &etag,
   response.headers.setHeaderLower("last-modified", toHttpDate(lastWrite));
 }
 
-std::optional<core::CachedFile> StaticMiddleware::lookupOrOpen(const std::string &relative, int &errorStatus) {
-  auto result = core::tl_file_cache.getOrInsert(relative, [&]() -> std::expected<core::CachedFile, int> {
-    std::filesystem::path resolved = std::filesystem::weakly_canonical(canonicalRoot_ / relative);
-    if (not resolved.native().starts_with(canonicalRoot_.native()))
-      return std::unexpected(403);
+core::Task<std::optional<core::CachedFile>> StaticMiddleware::lookupOrOpen(const std::string &key, int &errorStatus) {
+  auto alreadyExistingFile = core::tl_file_cache.get(key);
+  if (alreadyExistingFile.has_value())
+    co_return alreadyExistingFile;
 
-    std::filesystem::directory_entry entry(resolved);
-    if (not entry.exists())
-      return std::unexpected(404);
-    if (entry.is_directory()) {
-      resolved /= "index.html";
-      entry.assign(resolved);
-      if (not entry.exists())
-        return std::unexpected(404);
-    }
-
-    int fd = ::open(resolved.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-    if (fd == -1)
-      return std::unexpected((errno == EACCES || errno == EPERM) ? 403 : 500);
-
-    core::CachedFile cf;
-    cf.fd = fd;
-    cf.size = entry.file_size();
-    cf.mtime = entry.last_write_time();
-    cf.resolvedPath = resolved;
-    cf.mime = getOrDefault(MIME_TYPES, resolved.extension().string(), "application/octet-stream");
-    cf.etag = generateETag(cf.mtime, cf.size);
-    return cf;
-  });
-
-  if (not result) {
-    errorStatus = result.error();
+  const auto err = [&errorStatus](int status) {
+    errorStatus = status;
     return std::nullopt;
+  };
+
+  std::filesystem::path resolved = std::filesystem::weakly_canonical(canonicalRoot_ / key);
+  if (not resolved.native().starts_with(canonicalRoot_.native()))
+    co_return err(403);
+
+  std::filesystem::directory_entry entry(resolved);
+  if (not entry.exists())
+    co_return err(404);
+
+  if (entry.is_directory()) {
+    resolved /= "index.html";
+    entry.assign(resolved);
+    if (not entry.exists())
+      co_return err(404);
   }
-  return *result;
+
+  int fd = ::open(resolved.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+  if (fd == -1)
+    co_return err((errno == EACCES || errno == EPERM) ? 403 : 500);
+
+  core::CachedFile cf;
+  cf.fd = fd;
+  cf.size = entry.file_size();
+  cf.mtime = entry.last_write_time();
+  cf.resolvedPath = resolved;
+  cf.mime = getOrDefault(MIME_TYPES, resolved.extension().string(), "application/octet-stream");
+  cf.etag = generateETag(cf.mtime, cf.size);
+
+  if (cf.size < ServerConfig::FILE_CONTENT_CACHE_THRESHOLD) {
+    core::AsyncFileReader reader(fd, cf.size, /*owns=*/false);
+    cf.cachedContent = std::make_shared<std::vector<unsigned char>>();
+    co_await reader.readAllInto(*cf.cachedContent);
+  }
+
+  core::tl_file_cache.insert(key, cf);
+
+  co_return cf;
 }
 
 core::Task<std::optional<core::CachedFile>>
@@ -121,9 +133,9 @@ StaticMiddleware::lookupOrBuildCompressed(const std::string &relative, const std
                                           int &errorStatus) {
   std::string key = relative + "|" + encoding;
 
-  auto quick = core::tl_file_cache.get(key);
-  if (quick.has_value())
-    co_return quick;
+  auto alreadyExistingFile = core::tl_file_cache.get(key);
+  if (alreadyExistingFile.has_value())
+    co_return alreadyExistingFile;
 
   // Miss: do the async compression work outside the lock, then insert synchronously.
   core::AsyncFileReader src(source.fd, source.size, /*owns=*/false);
@@ -158,24 +170,21 @@ StaticMiddleware::lookupOrBuildCompressed(const std::string &relative, const std
     co_return std::nullopt;
   }
 
-  auto result = core::tl_file_cache.getOrInsert(key, [&]() -> std::expected<core::CachedFile, int> {
-    int fd = ::open(compressedPath.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-    if (fd == -1)
-      return std::unexpected(500);
-    core::CachedFile cf;
-    cf.fd = fd;
-    cf.size = compressed.size();
-    cf.mtime = source.mtime;
-    cf.resolvedPath = compressedPath;
-    cf.mime = source.mime;
-    cf.etag = generateETag(source.mtime, cf.size, encoding);
-    return cf;
-  });
-  if (not result) {
-    errorStatus = result.error();
+  int fd = ::open(compressedPath.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+  if (fd == -1) {
+    errorStatus = 500;
     co_return std::nullopt;
   }
-  co_return *result;
+  core::CachedFile cf;
+  cf.fd = fd;
+  cf.size = compressed.size();
+  cf.mtime = source.mtime;
+  cf.resolvedPath = compressedPath;
+  cf.mime = source.mime;
+  cf.etag = generateETag(source.mtime, cf.size, encoding);
+
+  core::tl_file_cache.insert(key, cf);
+  co_return cf;
 }
 
 core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Next next) {
@@ -195,31 +204,32 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     relative.erase(0, 1);
 
   int errorStatus = 0;
-  auto cachedOpt = lookupOrOpen(relative, errorStatus);
+  auto cachedOpt = co_await lookupOrOpen(relative, errorStatus);
   if (not cachedOpt) {
     if (errorStatus == 404)
       co_return co_await next();
     co_return buildErrorResponse(request, errorStatus);
   }
 
-  const core::CachedFile &cached = *cachedOpt;
+  const core::CachedFile &cachedFile = *cachedOpt;
 
-  auto fileSize = cached.size;
-  std::filesystem::path resolved = cached.resolvedPath;
-  std::string mime = cached.mime;
+  auto fileSize = cachedFile.size;
+  std::filesystem::path resolved = cachedFile.resolvedPath;
+  std::string mime = cachedFile.mime;
 
   bool hasRangeHeader = not request.getHeaderLower("range").empty();
 
   bool isCompressible = not hasRangeHeader;
-  isCompressible = isCompressible and ServerConfig::ENABLE_STATIC_COMPRESSION;
+  isCompressible = isCompressible and ServerConfig::ENABLE_STATIC_COMPRESSION and
+                   not request.getHeaderLower("accept-encoding").empty();
   isCompressible =
       isCompressible && std::find(compression::compressibleMimeTypes.begin(), compression::compressibleMimeTypes.end(),
                                   mime) != compression::compressibleMimeTypes.end();
   isCompressible = isCompressible && fileSize >= ServerConfig::COMPRESS_MIN_BYTES;
 
-  int contentFd = cached.fd;
+  int contentFd = cachedFile.fd;
   uintmax_t contentSize = fileSize;
-  std::string eTag = cached.etag;
+  std::string eTag = cachedFile.etag;
   std::string finalEncoding = "";
   Compressor compressor;
 
@@ -248,7 +258,7 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
       finalEncoding = compressor->getEncoding();
       int compErrorStatus = 0;
       auto compressedOpt =
-          co_await lookupOrBuildCompressed(relative, finalEncoding, cached, *compressor, compErrorStatus);
+          co_await lookupOrBuildCompressed(relative, finalEncoding, cachedFile, *compressor, compErrorStatus);
       if (not compressedOpt)
         co_return buildErrorResponse(request, compErrorStatus);
 
@@ -259,7 +269,7 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
   }
 
   auto cacheControl = getOrDefault(config_.mimeCacheControl, mime, config_.defaultCacheControl);
-  auto lastWrite = std::chrono::file_clock::to_sys(cached.mtime);
+  auto lastWrite = std::chrono::file_clock::to_sys(cachedFile.mtime);
   auto lastWriteSeconds = std::chrono::time_point_cast<std::chrono::seconds>(lastWrite);
   auto ifRange = request.getHeaderLower("if-range");
   auto ifNoneMatch = request.getHeaderLower("if-none-match");
@@ -423,6 +433,11 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
     co_return response;
   } else {
     HttpFileResponse response(200, mime, resolved);
+    if (cachedFile.cachedContent != nullptr)
+      response.setCachedFileContent(cachedFile.cachedContent);
+    response.setFd(contentFd, /*owns=*/false);
+    response.setContentLength(totalSize);
+
     response.headers.addHeaderLower("accept-ranges", "bytes");
     response.headers.addHeaderLower("vary", "accept-encoding");
 
@@ -437,9 +452,6 @@ core::Task<Response> StaticMiddleware::operator()(const HttpRequest &request, Ne
       response.setOffset(start);
       response.headers.setContentRange(start, *ranges[0].second, contentSize);
     }
-
-    response.setContentLength(totalSize);
-    response.setFd(contentFd, /*owns=*/false);
 
     co_return response;
   }

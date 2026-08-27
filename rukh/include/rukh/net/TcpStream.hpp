@@ -11,6 +11,7 @@
 #include <sys/sendfile.h>
 #include <sys/socket.h>
 
+#include <rukh/core/PipePool.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/net/Socket.hpp>
 #include <rukh/net/StreamResults.hpp>
@@ -27,6 +28,12 @@ public:
 
   /// send file and return number of bytes sent
   core::Task<ssize_t> sendFile(int fileFd, off_t offset, size_t count) const;
+
+  /// send file using mmap and return number of bytes sent.
+  core::Task<ssize_t> sendFileMmap(const std::string &filePath, off_t offset, size_t count) const;
+
+  /// send file using io_uring_splice
+  core::Task<ssize_t> sendFileSplice(int fileFd, off_t offset, size_t count) const;
 
   /// receive data into the passed buffer
   ReceiveResult receive(std::span<unsigned char> data) const;

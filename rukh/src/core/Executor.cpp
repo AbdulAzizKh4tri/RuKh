@@ -1,7 +1,7 @@
-#include "rukh/core/FileCache.hpp"
-#include <cstdint>
 #include <rukh/core/Executor.hpp>
 
+#include <cstdint>
+#include <liburing.h>
 #include <spdlog/spdlog.h>
 #include <sys/eventfd.h>
 
@@ -13,15 +13,13 @@ namespace rukh::core {
 
 thread_local Executor *tl_executor = nullptr;
 thread_local bool tl_timed_out = false;
-thread_local PipePool tl_pipe_pool;
-thread_local FileCache tl_file_cache;
 
 void notifyTaskFinished(std::coroutine_handle<> h) noexcept {
   if (tl_executor)
     tl_executor->markRootFinished(h.address());
 }
 
-Executor::Executor() {
+Executor::Executor(io_uring ring) : ioUring_(ring) {
   eventFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
   if (eventFd_ < 0)
     throw std::runtime_error("eventfd failed");
@@ -81,6 +79,31 @@ void Executor::waitForWrite(int fd, std::coroutine_handle<> caller, std::chrono:
   taskDeadlines_.push({deadline, fd, seq});
 }
 
+int64_t Executor::waitForEvent(std::coroutine_handle<> caller, std::chrono::steady_clock::time_point deadline) {
+  int seq = nextSeq_++;
+  int64_t key = syntheticEventKey_--;
+  suspendedTasks_[key] = {caller, false, seq};
+  taskDeadlines_.push({deadline, key, seq});
+  return key;
+}
+
+void Executor::fireEvent(int key) {
+  auto it = suspendedTasks_.find(key);
+  if (it == suspendedTasks_.end())
+    return; // already timedout
+  readyQueue_.push({it->second.handle, false});
+  suspendedTasks_.erase(it);
+}
+
+// basically waitForEvent, except we do the waking a few event loop cycles later.
+void Executor::wakeMeIn(u_int8_t cycles, std::coroutine_handle<> caller) {
+  int seq = nextSeq_++;
+  int64_t key = syntheticEventKey_--;
+  suspendedTasks_[key] = {caller, false, seq};
+
+  wakeUpQueue_[(wakeTime_ + cycles) % MAX_WAKEUP_TURN].push_back(key);
+}
+
 void Executor::submitFileRead(int fd, void *buf, size_t len, std::coroutine_handle<> h, int *resultPtr,
                               uint64_t offset) {
   constexpr auto type = PendingFileOpPrep::Type::READ;
@@ -100,8 +123,6 @@ void Executor::submitSplice(int srcFd, off_t srcOffset, int dstFd, off_t dstOffs
   pendingSpliceOpPreps_.emplace_back(srcFd, srcOffset, dstFd, dstOffset, len, nextUserData_, h, resultPtr);
   nextUserData_++;
 }
-
-void Executor::wakeMe(std::coroutine_handle<> h) { readyQueue_.push({h, false}); }
 
 void Executor::markRootFinished(void *addr) { finishedRoots_.push_back(addr); }
 
@@ -128,8 +149,8 @@ void Executor::run(std::atomic<bool> &shutdown) {
     }
 
     ioUring_.drainCompletions([this](uint64_t userData, int result) {
-      if (result < 0 and result != -EAGAIN)
-        SPDLOG_ERROR("CQE failed: {}", strerror(-result));
+      // if (result < 0 and result != -EAGAIN)
+      //   SPDLOG_ERROR("CQE failed: {}", strerror(-result));
       if (auto it = pendingFileOps_.find(userData); it != pendingFileOps_.end()) {
         auto [handle, resultPtr] = it->second;
         *resultPtr = result;
@@ -248,15 +269,18 @@ void Executor::run(std::atomic<bool> &shutdown) {
     while (not pendingSpliceOpPreps_.empty()) {
       auto p = pendingSpliceOpPreps_.front();
       if (not ioUring_.prepSplice(p.srcFd, p.srcOffset, p.dstFd, p.dstOffset, p.len, p.userData)) {
-        SPDLOG_ERROR("Failed to prepare splice with {} {} {} {} {}", p.srcFd, p.srcOffset, p.dstFd, p.dstOffset, p.len,
-                     p.userData);
         break;
       }
       pendingSpliceOps_[p.userData] = {p.handle, p.resultPtr};
       pendingSpliceOpPreps_.pop_front();
     }
-
     ioUring_.ioSubmit();
+
+    for (auto wakeKey : wakeUpQueue_[wakeTime_ % MAX_WAKEUP_TURN]) {
+      readyQueue_.push({suspendedTasks_[wakeKey].handle, false});
+      suspendedTasks_.erase(wakeKey);
+    }
+    wakeTime_++;
   }
 }
 } // namespace rukh::core

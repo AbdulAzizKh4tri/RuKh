@@ -8,7 +8,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <rukh/core/ExecutorContext.hpp>
 #include <rukh/core/FileCache.hpp>
 #include <rukh/core/Task.hpp>
 #include <rukh/http/ErrorFactory.hpp>
@@ -66,7 +65,7 @@ private:
   std::filesystem::path canonicalRoot_;
   std::filesystem::path compressedRoot_;
 
-  std::optional<core::CachedFile> lookupOrOpen(const std::string &relative, int &errorStatus);
+  core::Task<std::optional<core::CachedFile>> lookupOrOpen(const std::string &relative, int &errorStatus);
   core::Task<std::optional<core::CachedFile>>
   lookupOrBuildCompressed(const std::string &relative, const std::string &encoding, const core::CachedFile &source,
                           compression::ICompressor &compressor, int &errorStatus);
