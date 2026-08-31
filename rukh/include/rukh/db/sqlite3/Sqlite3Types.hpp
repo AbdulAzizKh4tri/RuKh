@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <shared_mutex>
 #include <sqlite3.h>
 #include <unordered_map>
 
@@ -23,7 +24,8 @@ struct StatementResetGuard {
 /// A Connection object with cached sqlite3_stmt statements.
 struct Connection {
   sqlite3 *dbConnection;
-  std::unordered_map<std::string, sqlite3_stmt *> statements;
+  std::unordered_map<std::string, std::pair<sqlite3_stmt *, bool /*isWrite*/>> statements;
+  std::shared_mutex *mutex;
 };
 
 } // namespace rukh::db

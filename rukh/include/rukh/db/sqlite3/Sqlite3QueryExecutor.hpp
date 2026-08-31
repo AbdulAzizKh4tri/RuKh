@@ -5,12 +5,15 @@
 #pragma once
 
 #include <expected>
+#include <mutex>
+#include <shared_mutex>
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
 
 #include <rukh/Exceptions.hpp>
 #include <rukh/db/DbTypes.hpp>
 #include <rukh/db/sqlite3/Sqlite3Types.hpp>
+#include <utility>
 
 namespace rukh::db {
 
@@ -48,11 +51,14 @@ public:
                                                                        const std::vector<DbValue> &params = {}) {
 
     sqlite3 *dbConnection = conn->dbConnection;
-    std::unordered_map<std::string, sqlite3_stmt *> &statements = conn->statements;
+    std::unordered_map<std::string, std::pair<sqlite3_stmt *, bool>> &statements = conn->statements;
 
     sqlite3_stmt *stmt;
+    bool isWrite;
     if (statements.contains(sql)) {
-      stmt = statements[sql];
+      const auto &tmp = statements[sql];
+      stmt = tmp.first;
+      isWrite = tmp.second;
     } else {
       int rc = sqlite3_prepare_v3(dbConnection, sql.c_str(), -1, SQLITE_PREPARE_PERSISTENT, &stmt, nullptr);
       if (rc != SQLITE_OK) {
@@ -61,10 +67,23 @@ public:
         SPDLOG_ERROR("SQL: {}", sql.c_str());
         return std::unexpected(DatabaseError{DbErrorType::QUERY_ERROR, err});
       }
-      statements[sql] = stmt;
+      isWrite = not sqlite3_stmt_readonly(stmt);
+      statements[sql] = {stmt, isWrite};
     }
     StatementResetGuard statementGuard(stmt);
 
+    if (isWrite) {
+      std::unique_lock lock(*conn->mutex);
+      return runQuery(dbConnection, stmt, params);
+    } else {
+      std::shared_lock lock(*conn->mutex);
+      return runQuery(dbConnection, stmt, params);
+    }
+  };
+
+private:
+  static std::expected<QueryResult, DatabaseError> runQuery(sqlite3 *dbConnection, sqlite3_stmt *stmt,
+                                                            const std::vector<DbValue> &params) {
     for (int i = 0; i < (int)params.size(); i++)
       bindQueryParam(stmt, i, params);
 
@@ -161,4 +180,5 @@ public:
     return result;
   }
 };
+
 } // namespace rukh::db

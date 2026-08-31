@@ -25,8 +25,11 @@ add_library(rukh STATIC ${RUKH_SOURCES})
 target_compile_definitions(rukh PRIVATE
   $<IF:$<CONFIG:Debug>,SPDLOG_ACTIVE_LEVEL=0,SPDLOG_ACTIVE_LEVEL=2>
 )
+
 target_compile_options(rukh PRIVATE
-  $<IF:$<CONFIG:Release>,-O3,-O0 -g>
+  $<$<CONFIG:Debug>:-O0 -g>
+  $<$<CONFIG:Release>:-O3 -g>
+  $<$<CONFIG:RelWithDebInfo>:-O3 -g -fno-omit-frame-pointer>
 )
 
 # ── Include paths ─────────────────────────────────────────────────────────────
@@ -59,6 +62,7 @@ if(RUKH_ENABLE_SQLITE)
 
   target_compile_definitions(sqlite3_amalgamation PUBLIC
     SQLITE_THREADSAFE=2
+	HAVE_FDATASYNC=1
   )
 
   target_compile_options(sqlite3_amalgamation PRIVATE

@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <shared_mutex>
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
 #include <string>
@@ -18,8 +19,8 @@
 #include <rukh/pool/ThreadPool.hpp>
 
 namespace rukh::db {
+
 /// ms to wait on SQLITE_BUSY instead of failing immediately
-/// \todo maybe make it configurable
 const int SQLITE3_BUSY_TIMEOUT = 5000;
 
 /// Sqlite3 implementation of IDatabase
@@ -31,7 +32,9 @@ public:
    * @param threadPool
    * @param ConnectionPoolSize Number of connections to sqlite to keep in ConnectionQueue
    *
-   * Enables foreign keys and WAL mode
+   * The reason we use a threadPool pointer instead of creating our own ThreadPool is because we don't want to create
+   * too many threads competing for too few physical cores. This way, a set number of threads are shared with the rest
+   * of the application.
    *
    * @throws DatabaseException if unable to open database or unable to configure connections correctly.
    */
@@ -40,6 +43,10 @@ public:
 
     std::vector<Connection *> conns;
     conns.reserve(ConnectionPoolSize);
+
+    int rc = sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
+    if (rc != SQLITE_OK)
+      throw DatabaseException("Failed to configure SQLITE_CONFIG_MULTITHREAD!");
 
     for (int i = 0; i < ConnectionPoolSize; i++) {
       sqlite3 *dbConnection;
@@ -55,19 +62,12 @@ public:
       rc = sqlite3_exec(dbConnection, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
       if (rc != SQLITE_OK) {
         sqlite3_close(dbConnection);
-        throw DatabaseException("Failed to enable foreign keys");
-      }
-
-      if (i == 0) {
-        rc = sqlite3_exec(dbConnection, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
-        if (rc != SQLITE_OK) {
-          sqlite3_close(dbConnection);
-          throw DatabaseException("Failed to enable WAL mode");
-        }
+        throw DatabaseException("Failed to enable foreign keys!");
       }
 
       connections_.push_back(std::make_unique<Connection>());
       connections_.back()->dbConnection = dbConnection;
+      connections_.back()->mutex = &mutex_;
       conns.push_back(connections_.back().get());
     }
 
@@ -80,8 +80,8 @@ public:
    */
   ~Sqlite3Db() {
     for (auto &conn : connections_) {
-      for (auto &[_, statement] : conn->statements)
-        sqlite3_finalize(statement);
+      for (auto &[_, st] : conn->statements)
+        sqlite3_finalize(st.first);
       sqlite3_close(conn->dbConnection);
     }
   }
@@ -134,6 +134,8 @@ public:
 private:
   std::vector<std::unique_ptr<Connection>> connections_;
   std::unique_ptr<core::AsyncPool<Connection>> connectionPool_;
+  std::shared_mutex mutex_;
+
   pool::ThreadPool *threadPool_;
 
   struct ConnectionReleaseGuard {
