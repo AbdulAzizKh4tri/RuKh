@@ -591,7 +591,7 @@ private:
   struct ConnGuard {
     std::atomic<int> &c;
     ConnGuard(std::atomic<int> &c) : c(c) {}
-    // ~ConnGuard() { c.fetch_sub(1, std::memory_order_relaxed); }
+    ~ConnGuard() { c.fetch_sub(1, std::memory_order_relaxed); }
   };
 
   HttpRequest request_;
