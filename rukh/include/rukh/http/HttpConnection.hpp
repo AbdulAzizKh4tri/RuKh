@@ -39,8 +39,8 @@ namespace rukh::http {
 /// HTTP connection with the entire HTTP lifecycle
 template <typename Stream> class HttpConnection {
 public:
-  HttpConnection(std::unique_ptr<Stream> stream, Router &router, ErrorFactory &errorFactory,
-                 std::atomic<bool> &shutdown, std::atomic<int> &globalConnectionCount)
+  HttpConnection(Stream *stream, Router &router, ErrorFactory &errorFactory, std::atomic<bool> &shutdown,
+                 std::atomic<int> &globalConnectionCount)
       : io_(std::move(stream)), router_(router), errorFactory_(errorFactory), shutdown_(shutdown),
         ConnGuard_(globalConnectionCount) {
     request_.setIp(io_.getIp());
@@ -59,8 +59,7 @@ public:
    */
   core::Task<void> run() {
     // This is intentionally one flat coroutine rather than a chain of sub-coroutines
-    // (readHeaders(), readBody(), etc.). Keeping everything in one coroutine means
-    // one frame allocation for the entire lifetime of the connection (atleast on the happy path).
+    // (readHeaders(), readBody(), etc.) to avoid unnecessary frame allocation on the hotpath.
 
     resetInactivity();
 
@@ -427,8 +426,7 @@ public:
             chunkOpt = co_await responseStream->getNextChunk();
           } catch (const std::exception &e) {
             SPDLOG_ERROR("Stream handler threw exception: {}", e.what());
-            if (not responseStream->serializeBlockInto("Internal Server Error: " + std::string(e.what()),
-                                                       io_.getWriteBuffer())) {
+            if (not responseStream->serializeBlockInto(std::string(e.what()), io_.getWriteBuffer())) {
               io_.resetConnection();
               co_return;
             }
@@ -593,7 +591,7 @@ private:
   struct ConnGuard {
     std::atomic<int> &c;
     ConnGuard(std::atomic<int> &c) : c(c) {}
-    ~ConnGuard() { c.fetch_sub(1, std::memory_order_relaxed); }
+    // ~ConnGuard() { c.fetch_sub(1, std::memory_order_relaxed); }
   };
 
   HttpRequest request_;

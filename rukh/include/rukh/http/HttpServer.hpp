@@ -79,7 +79,7 @@ private:
 
   std::atomic<int> globalConnectionCount_ = 0;
 
-  void workerMain(io_uring&, bool);
+  void workerMain(io_uring &, bool);
 
   core::Task<void> tcpAcceptLoop(net::ListenerSocket &listener);
 

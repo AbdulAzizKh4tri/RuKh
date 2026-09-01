@@ -1,3 +1,4 @@
+#include <memory>
 #include <rukh/net/ListenerSocket.hpp>
 
 #include <netinet/in.h> // sockaddr_in, INET_ADDRSTRLEN, htons
@@ -43,30 +44,30 @@ void ListenerSocket::listen(int backlog) {
   SPDLOG_INFO("Listening on {}:{}", host_, port_);
 }
 
-std::optional<TlsStream> ListenerSocket::acceptTls(SSL_CTX *ctx) {
+std::unique_ptr<TlsStream> ListenerSocket::acceptTls(SSL_CTX *ctx) {
   sockaddr_storage addr{};
   socklen_t len = sizeof(addr);
   int newSocket_fd = ::accept4(socket_.getFd(), (sockaddr *)&addr, &len, SOCK_NONBLOCK | SOCK_CLOEXEC);
   if (newSocket_fd < 0) {
     if (errno == EAGAIN || errno == EWOULDBLOCK)
-      return std::nullopt;
+      return nullptr;
     SPDLOG_CRITICAL("ERROR on accepting: {}", strerror(errno));
     throw SocketException("Failed to accept connection");
   }
-  return TlsStream(newSocket_fd, ctx, addr, len);
+  return std::make_unique<TlsStream>(newSocket_fd, ctx, addr, len);
 }
 
-std::optional<TcpStream> ListenerSocket::accept() {
+std::unique_ptr<TcpStream> ListenerSocket::accept() {
   sockaddr_storage addr{};
   socklen_t len = sizeof(addr);
   int newSocket_fd = ::accept4(socket_.getFd(), (sockaddr *)&addr, &len, SOCK_NONBLOCK | SOCK_CLOEXEC);
   if (newSocket_fd < 0) {
     if (errno == EAGAIN || errno == EWOULDBLOCK)
-      return std::nullopt;
+      return nullptr;
     SPDLOG_CRITICAL("ERROR on accepting: {}", strerror(errno));
     throw SocketException("Failed to accept connection");
   }
-  return TcpStream(newSocket_fd, addr, len);
+  return std::make_unique<TcpStream>(newSocket_fd, addr, len);
 }
 
 int ListenerSocket::acceptRawFd() {

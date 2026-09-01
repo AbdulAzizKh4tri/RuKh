@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include <memory>
 #include <spdlog/spdlog.h>
 
 #include <rukh/core/Executor.hpp>
@@ -108,7 +107,7 @@ public:
     }
   };
 
-  ConnectionIO(std::shared_ptr<Stream> stream) : stream_(std::move(stream)) {}
+  ConnectionIO(Stream *stream) : stream_(stream) {}
 
   /**
    * @brief Read Data
@@ -241,7 +240,7 @@ public:
   void resetConnection() { stream_->resetConnection(); }
 
 private:
-  std::shared_ptr<Stream> stream_;
+  Stream *stream_;
   size_t readOffset_ = 0, writeOffset_ = 0;
   std::vector<unsigned char> readBuffer_;
   std::vector<unsigned char> writeBuffer_;

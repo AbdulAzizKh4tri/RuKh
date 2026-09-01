@@ -1,5 +1,6 @@
 #include <liburing.h>
 #include <liburing/io_uring.h>
+#include <memory>
 #include <rukh/http/HttpServer.hpp>
 
 #include <atomic>
@@ -164,11 +165,11 @@ core::Task<void> HttpServer::tcpAcceptLoop(net::ListenerSocket &listener) {
         break;
       }
 
-      auto streamOpt = listener.accept();
-      if (!streamOpt)
+      auto stream = listener.accept();
+      if (not stream)
         break;
       globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
-      core::tl_executor->spawn(handleConnection(std::make_unique<net::TcpStream>(std::move(*streamOpt))));
+      core::tl_executor->spawn(handleConnection(std::move(stream)));
     }
   }
 }
@@ -197,11 +198,10 @@ core::Task<void> HttpServer::tlsAcceptLoop(net::ListenerSocket &listener) {
         break;
       }
 
-      auto streamOpt = listener.acceptTls(tlsContext_.get());
-      if (!streamOpt)
+      auto stream = listener.acceptTls(tlsContext_.get());
+      if (not stream)
         break;
       globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
-      auto stream = std::make_unique<net::TlsStream>(std::move(*streamOpt));
       core::tl_executor->spawn(handleConnection(std::move(stream)));
     }
   }
@@ -211,7 +211,7 @@ template <typename Stream> core::Task<void> HttpServer::handleConnection(std::un
   int fd = stream->getFd();
   core::tl_executor->registerReadFd(fd);
 
-  HttpConnection<Stream> conn(std::move(stream), *router_, errorFactory_, shutdown, globalConnectionCount_);
+  HttpConnection<Stream> conn(stream.get(), *router_, errorFactory_, shutdown, globalConnectionCount_);
   co_await conn.run();
   core::tl_executor->unregister(fd);
 }

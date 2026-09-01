@@ -32,15 +32,15 @@ public:
    *
    * Check `HttpServer::setTlsContext` for reference
    *
-   * @returns A TlsStream on success, nullopt if there are no pending connection requests.
+   * @returns A TlsStream on success, nullptr if there are no pending connection requests.
    */
-  std::optional<TlsStream> acceptTls(SSL_CTX *ctx);
+  std::unique_ptr<TlsStream> acceptTls(SSL_CTX *ctx);
 
   /**
    * @brief Accept a TCP connection
-   * @returns A TcpStream on success, nullopt if there are no pending connection requests.
+   * @returns A TcpStream on success, nullptr if there are no pending connection requests.
    */
-  std::optional<TcpStream> accept();
+  std::unique_ptr<TcpStream> accept();
 
   /**
    * @brief Accept a raw file descriptor.
