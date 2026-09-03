@@ -32,7 +32,7 @@ public:
   ///@internalMethod
   static const std::string &getServerLine() { return serverLine_; }
 
-  /// @name Timeouts (seconds)
+  /// @name Timeouts (seconds) & server limits
 
   /// Socker read/write inactivity timeout
   inline static int INACTIVITY_TIMEOUT_S = 20;
@@ -42,7 +42,11 @@ public:
   inline static int GRACEFUL_SHUTDOWN_TIMEOUT_S = 20;
 
   /// Timeout for EpollInstance::wait
-  inline static double EPOLL_WAIT_TIMEOUT_S = 0.25;
+  inline static double EPOLL_WAIT_TIMEOUT_S = 0.005;
+
+  inline static size_t CONNECTION_CLOSE_MAX_BYTES = 16 * KB;
+
+  inline static int GRACEFUL_CONNECTION_CLOSE_TIMEOUT_S = 2;
 
   /// @}
 

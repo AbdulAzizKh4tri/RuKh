@@ -88,8 +88,10 @@ public:
 
     //=== Per-request loop ===
     for (;;) {
-      if (not keepAlive_)
+      if (not keepAlive_) {
+        co_await awaitClientFinBeforeClose();
         co_return;
+      }
 
       formationDeadline_ = now() + std::chrono::seconds(ServerConfig::FORMATION_TIMEOUT_S);
 
@@ -591,7 +593,7 @@ private:
   struct ConnGuard {
     std::atomic<int> &c;
     ConnGuard(std::atomic<int> &c) : c(c) {}
-    ~ConnGuard() { c.fetch_sub(1, std::memory_order_relaxed); }
+    // ~ConnGuard() { c.fetch_sub(1, std::memory_order_relaxed); }
   };
 
   HttpRequest request_;
@@ -633,10 +635,11 @@ private:
     if (not response.serializeInto(io_.getWriteBuffer()))
       co_return;
     logRequest(request_, response);
-    do {
+    while (io_.hasPendingWrites()) {
       if (auto r = co_await io_.write(ServerConfig::INACTIVITY_TIMEOUT_S); r != net::WriteResult::OK)
         co_return;
-    } while (io_.hasPendingWrites());
+    }
+    co_await awaitClientFinBeforeClose();
   }
 
   HttpResponse buildErrorResponse(int statusCode, const std::string &message = "") {
@@ -646,6 +649,11 @@ private:
     if (statusCode == 405)
       response.headers.setHeaderLower("allow", router_.getAllowedMethodsString(request_));
     return response;
+  }
+
+  core::Task<void> awaitClientFinBeforeClose() {
+    auto deadline = now() + std::chrono::seconds(ServerConfig::GRACEFUL_CONNECTION_CLOSE_TIMEOUT_S);
+    co_await io_.awaitClientFin(deadline);
   }
 
   void resetForNextRequest() {

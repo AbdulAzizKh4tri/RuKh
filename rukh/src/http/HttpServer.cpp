@@ -152,23 +152,23 @@ core::Task<void> HttpServer::tcpAcceptLoop(net::ListenerSocket &listener) {
       continue;
     }
     for (;;) {
-      if (globalConnectionCount_.load(std::memory_order_relaxed) >= ServerConfig::CONNECTION_LIMIT) {
-        SPDLOG_WARN("Connection Limit {} hit, RST-ing new connections", ServerConfig::CONNECTION_LIMIT);
-        for (int i = 0; i < 10; i++) {
-          int fd = listener.acceptRawFd();
-          if (fd == -1)
-            break;
-          linger l{1, 0};
-          setsockopt(fd, SOL_SOCKET, SO_LINGER, &l, sizeof(l));
-          ::close(fd);
-        }
-        break;
-      }
+      // if (globalConnectionCount_.load(std::memory_order_relaxed) >= ServerConfig::CONNECTION_LIMIT) {
+      //   SPDLOG_WARN("Connection Limit {} hit, RST-ing new connections", ServerConfig::CONNECTION_LIMIT);
+      //   for (int i = 0; i < 10; i++) {
+      //     int fd = listener.acceptRawFd();
+      //     if (fd == -1)
+      //       break;
+      //     linger l{1, 0};
+      //     setsockopt(fd, SOL_SOCKET, SO_LINGER, &l, sizeof(l));
+      //     ::close(fd);
+      //   }
+      //   break;
+      // }
 
       auto stream = listener.accept();
       if (not stream)
         break;
-      globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
+      // globalConnectionCount_.fetch_add(1, std::memory_order_relaxed);
       core::tl_executor->spawn(handleConnection(std::move(stream)));
     }
   }

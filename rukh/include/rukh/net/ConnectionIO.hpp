@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "rukh/ServerConfig.hpp"
 #include <spdlog/spdlog.h>
 
 #include <rukh/core/Executor.hpp>
@@ -107,6 +108,26 @@ public:
     }
   };
 
+  struct ClientFinAwaitable {
+    ConnectionIO &io;
+    std::chrono::steady_clock::time_point deadline;
+    size_t maxBytes;
+    bool done;
+
+    bool await_ready() noexcept {
+      done = io.drainDiscard(maxBytes);
+      return done;
+    }
+
+    void await_suspend(std::coroutine_handle<> h) noexcept { core::tl_executor->waitForRead(io.getFd(), h, deadline); }
+
+    void await_resume() noexcept {
+      if (done or core::tl_timed_out)
+        return;
+      io.drainDiscard(maxBytes);
+    }
+  };
+
   ConnectionIO(Stream *stream) : stream_(stream) {}
 
   /**
@@ -129,6 +150,11 @@ public:
 
   core::Task<ssize_t> sendFile(int fileFd, off_t offset, size_t count) const {
     return stream_->sendFile(fileFd, offset, count);
+  }
+
+  [[nodiscard]] ClientFinAwaitable awaitClientFin(std::chrono::steady_clock::time_point deadline,
+                                                  size_t maxBytes = ServerConfig::CONNECTION_CLOSE_MAX_BYTES) noexcept {
+    return {*this, deadline, maxBytes};
   }
 
   /// Tries to drain whatever data is available in the kernel buffer into the read buffer up to maxBufferSize.
@@ -177,6 +203,30 @@ public:
       eraseFromWriteBuffer(n);
     }
     return true;
+  }
+
+  bool drainDiscard(size_t maxBytes) {
+    bool gotData = false;
+    size_t bytesRead = 0;
+    unsigned char buf[4096];
+
+    for (;;) {
+      auto span = std::span<unsigned char>(buf, sizeof(buf));
+      ReceiveResult result = stream_->receive(span);
+
+      switch (result.status) {
+      case ReceiveResult::Status::DATA:
+        bytesRead += result.bytes;
+        if (bytesRead >= maxBytes)
+          return true;
+        continue;
+      case ReceiveResult::Status::WOULD_BLOCK:
+        return false;
+      case ReceiveResult::Status::CLOSED:
+      case ReceiveResult::Status::ERROR:
+        return true;
+      }
+    }
   }
 
   std::vector<unsigned char>::const_iterator readBufferBegin() const { return readBuffer_.begin() + readOffset_; }
