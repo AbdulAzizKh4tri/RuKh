@@ -1,3 +1,4 @@
+# VIBE CODED ALERT!
 name: Build and deploy documentation
 
 on:
@@ -5,41 +6,67 @@ on:
     branches:
       - master
 
+# Required for GitHub Pages deployment
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout repository
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # Install Doxygen
       - name: Install Doxygen
-        run: sudo apt-get update && sudo apt-get install -y doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen
 
+      # Generate documentation
       - name: Generate documentation
         run: |
           cd doxyFolder
           doxygen Doxyfile
 
+      # Verify documentation was generated
+      - name: Verify documentation
+        run: |
+          if [ ! -f docs/index.html ]; then
+            echo "ERROR: docs/index.html was not generated"
+            exit 1
+          fi
+
+          echo "Documentation generated successfully:"
+          ls -la docs/
+
+      # Configure GitHub Pages
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      # Upload generated docs as Pages artifact
       - name: Upload documentation
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: ./docs
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
 
+    permissions:
+      pages: write
+      id-token: write
+
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
