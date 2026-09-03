@@ -20,6 +20,7 @@ namespace rukh::net {
 
 /// @brief TLS stream
 /// \todo revisit OpenSSL docs
+/// \todo implement sendFile functions
 class TlsStream {
 public:
   /// Check `HttpServer::setTlsContext` for reference
