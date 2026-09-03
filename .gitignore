@@ -16,3 +16,4 @@ tetherIP.hpp
 .clangd
 docs/html/*
 docs/latex/*
+html/*
