@@ -40,7 +40,7 @@ This is a solo learning project with a production quality bar. It's benchmarked 
 
 ## Benchmarks
 
-All frameworks were benchmarked against the same set of endpoints, with configurations matched as closely as each framework allows (same SQLite pragmas, same static file sizes, same middleware tiers where applicable). Every test ran on a single machine (my laptop, plugged-in) with the `wrk` client and the server process pinned to separate physical cores via `taskset`, release builds, logging disabled. Express is single-process by design, so it's tested at 1 core; everything else is tested up to 3 server threads/cores.
+All frameworks were benchmarked against the same set of endpoints, with configurations matched as closely as each framework allows (same SQLite pragmas, same static file sizes, same middlewares where applicable). Every test ran on a single machine (my laptop, plugged-in) with the `wrk` client and the server process pinned to separate physical cores via `taskset`, release builds, logging disabled. Express is single-process by design, so it's tested at 1 core; everything else is tested up to 3 server threads/cores.
 
 **Workloads:**
 - **plaintext**, `GET /ping`, no DB, no business logic; measures the raw request/response path
@@ -48,7 +48,7 @@ All frameworks were benchmarked against the same set of endpoints, with configur
 - **crud_mixed**, reads only (single-record fetch + list fetch) through each framework's DB layer. Writes were originally included too, but insert/update throughput turned out to be unreliable enough, even for the same framework run to run, that it wasn't a fair signal, so it was dropped from this workload. RuKh uses it's `IDatabase` interface and `QueryResult`, not the unfinished ORM.
 - **churn**, one request per connection (`Connection: close`), no keep-alive; measures pure connection setup/teardown cost rather than steady-state throughput
 
-**Results below are averaged across the full concurrency sweep, per framework at its max core count.**
+**Results below are averaged across the full concurrency sweep, per framework at 3 cores.**
 *concurrency (wrk -c) values were \[64,128,256,512,1024]*
 
 #### Plaintext
