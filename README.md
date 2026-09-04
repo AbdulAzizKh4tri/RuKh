@@ -40,7 +40,7 @@ This is a solo learning project with a production quality bar. It's benchmarked 
 
 ## Benchmarks
 
-All frameworks were benchmarked against the same set of endpoints, with configurations matched as closely as each framework allows (same SQLite pragmas, same static file sizes, same middlewares where applicable). Every test ran on a single machine (my laptop, plugged-in) with the `wrk` client and the server process pinned to separate physical cores via `taskset`, release builds, logging disabled. Express is single-process by design, so it's tested at 1 core; everything else is tested up to 3 server threads/cores.
+All frameworks were benchmarked against the same set of endpoints, with configurations matched as closely as each framework allows (same SQLite pragmas, same static file sizes, same middlewares where applicable). Every test ran on a single machine (my laptop, plugged-in) with the `wrk` client and the server process pinned to separate physical cores via `taskset`, release builds, logging disabled. Express is tested at 1 core; everything else is tested up to 3 server cores. I include go, express and starlette even though their selling point isn't performance,just so we have a reference with some popular frameworks in other languages.
 
 **Workloads:**
 - **plaintext**, `GET /ping`, no DB, no business logic; measures the raw request/response path
@@ -95,8 +95,8 @@ RuKh isn't the highest throughput here, but its p99 latency is significantly low
 | Fiber | 42,973 | 7.8 ms |
 | Drogon | 42,224 | 8.8 ms |
 | Go net/http | 41,515 | 10.4 ms |
+| **RuKh** | **15,199** | **159.0 ms** |
 | Starlette | 9,950 | 44.0 ms |
 | Express (1 core) | 8,637 | 143.3 ms |
-| **RuKh** | **15,199** | **159.0 ms** |
 
-This is RuKh's clear weak point. Every other multi-threaded framework tested handles a fresh connection per request roughly 3x better than RuKh does, and RuKh's tail latency degrades badly under it. This is also why active development is paused as of writing this ReadMe. Rather than keep prompting an LLM to guess at the fix (tried it, wasn't the move), I'm taking the time to read up on the networking/kernel internals involved in connection setup and teardown so I understand why it's this bad before touching the code again. 
+This is RuKh's clear weak point. Every other multi-threaded framework tested (except starlette) handles a fresh connection per request roughly 3x better than RuKh does, and RuKh's tail latency degrades badly under it. This is also why active development is paused as of writing this ReadMe. Rather than keep prompting an LLM to guess at the fix (tried it, didn't work), I'm taking the time to read up on the networking/kernel internals involved in connection setup and teardown so I understand why it's this bad before touching the code again. 
