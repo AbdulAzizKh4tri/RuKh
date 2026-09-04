@@ -1,8 +1,7 @@
 <p align="center">
-  <img src="./logo.png" alt="RuKh logo, a RuKh (Roc), the mythical bird" width="220">
+  <img src="./logo.png" alt="RuKh logo, a RuKh (Roc), the mythical bird" width="400">
 </p>
 
-<h1 align="center">RuKh</h1>
 <p align="center">A C++23 web framework, built entirely from scratch on Linux.</p>
 
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://abdulazizkh4tri.github.io/RuKh/)
