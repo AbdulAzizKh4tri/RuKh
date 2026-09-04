@@ -1,303 +1,103 @@
-# RuKh
+<p align="center">
+  <img src="./logo.png" alt="RuKh logo, a RuKh (Roc), the mythical bird" width="220">
+</p>
 
-![RuKh logo, A RuKh(or Roc) the mythical bird](./logo.png)
+<h1 align="center">RuKh</h1>
+<p align="center">A C++23 web framework, built entirely from scratch on Linux.</p>
 
-A high-performance HTTP/1.1 server framework built entirely from scratch in C++23 - no async libraries, no HTTP frameworks. The event loop, coroutine scheduler, connection lifecycle, and request/response pipeline are all hand-rolled.
-
-This is an ongoing solo learning project, built with production-quality goals in mind.
-
-> **Note:** Benchmarks reflect a minimal ping-pong workload. RuKh is still in active development and may not yet handle every edge case that mature frameworks do. Results are shared transparently, not as a final claim.
-
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://abdulazizkh4tri.github.io/RuKh/)
 ---
 
-## Table of Contents
+RuKh started as an attempt to write an HTTP/1.1 server from raw sockets. It grew into a full web framework, every layer between the kernel and the handler function is hand written. The only dependencies being OpenSSL, spdlog, nlohmann Json, and liburing.
 
-- [Features](#features)
-- [Build](#build)
-- [Quick Start](#quick-start)
-- [API](#api)
-- [Architecture](#architecture)
-- [Benchmarks](#benchmarks)
-- [Roadmap](#roadmap)
+This is a solo learning project with a production quality bar. It's benchmarked against Drogon (fastest I could find for C++) and some other frameworks.
 
----
+## What's actually built here
 
-## Features
+**Networking & runtime**
+- Sockets, TCP streams, and TLS streams (OpenSSL) with non-blocking I/O
+- An edge triggered `epoll` event loop, one `Executor` per worker thread
+- A custom C++20 coroutine scheduler, hand written `Task<T>` return types and awaitables
+- `SO_REUSEPORT` multi-threaded listener binding, with the kernel distributing connections across threads (May change in the future)
+- Full connection lifecycle management: accept, TLS handshake, keep-alive loop, timeouts, and a global connection limit with RST on overflow instead of unbounded queuing
+- `io_uring` for async file I/O, so disk reads never block a worker thread
 
-- HTTP/1.1 with keep-alive
-- TLS via OpenSSL
-- Chunked transfer encoding (request + response)
-- Streaming responses
-- Express-style middleware chain
-- Trie-based router with path parameters, wildcards (`*`), and deep wildcards (`**`)
-- Cookie and session management
-- Static file serving with async file I/O via io_uring
-- Content negotiation for error responses
-- Edge-triggered epoll with SO_REUSEPORT multi-threading
-- C++20 coroutines throughout - one heap allocation per connection lifetime
+**HTTP layer**
+- Request parsing and case-insensitive, multi-value header storage
+- A trie-based router, path parameters, single-segment and deep wildcards, correct `405`/`Allow` handling
+- An Express-style middleware chain (`use()`, `next()`)
+- Body parsing: `multipart/form-data`, URL-encoded forms, and JSON bodies, all via lazy pull-based body streaming rather than buffering the whole request up front
+- Three response types: `HttpResponse` for buffered bodies, `HttpFileResponse` for file responses, and `HttpStreamResponse` for generator-style streaming
+- File serving split by size: `sendfile()` for anything above a size threshold, buffered reads with caching for small files
+- Range requests (`206`/`416`, multipart ranges, `If-Range`)
+- gzip and Brotli compression via content negotiation, plus a `CacheControlMiddleware` for per-route/per-MIME caching rules
+- Cookies and server-side sessions with a pluggable session store
 
----
+**Database**
+- A backend-agnostic, coroutine-based async database interface, with a SQLite3 implementation backed by a real connection pool and cached prepared statements
+- An ORM sits on top of this today, but it's getting a full redo, not documented here until that's done
 
-## Build
-
-### Dependencies
-
-- Linux (epoll + io_uring required)
-- C++23 compiler (GCC 13+ or Clang 17+)
-- CMake 3.28+
-- OpenSSL
-- [spdlog](https://github.com/gabime/spdlog)
-- [nlohmann/json](https://github.com/nlohmann/json)
-- [liburing](https://github.com/axboe/liburing) - built automatically via CMake `ExternalProject`
-
-### Steps
-
-```bash
-sudo apt update && sudo apt install -y \
-  build-essential \
-  cmake \
-  pkg-config \
-  libssl-dev \
-  zlib1g-dev \
-  libbrotli-dev \
-  libspdlog-dev \
-  nlohmann-json3-dev
-```
-
-```bash
-# Debug
-cmake -B build/debug -S . -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/debug -j$(nproc)
-./build/debug/app/server
-```
-
-```bash
-# Release
-cmake -B build/release -S . -DCMAKE_BUILD_TYPE=Release
-cmake --build build/release -j$(nproc)
-./build/release/app/server
-```
-
-### TLS
-
-Generate a self-signed certificate for local development:
-
-```bash
-openssl req -x509 -newkey rsa:2048 -keyout app/key.pem -out app/cert.pem -days 365 -nodes
-```
-
-TLS certificate paths are configured in `app/main.cpp`.
-
----
-
-## Quick Start
-
-```cpp
-// app/main.cpp
-#include <rukh/ErrorFactory.hpp>
-#include <rukh/HttpServer.hpp>
-#include <rukh/Router.hpp>
-
-using namespace rukh;
-
-int main() {
-    ErrorFactory errorFactory;
-    Router router(errorFactory);
-
-    router.get("/hello", [](const HttpRequest& req) -> Task<Response> {
-        co_return HttpResponse(200, "Hello, World!");
-    });
-
-    HttpServer server(errorFactory);
-    server.setRouter(router);
-    server.addListener("localhost", "8080");
-    server.run(4); // 4 worker threads
-}
-```
-
----
-
-## API
-
-### Routing
-
-```cpp
-router.get("/path", handler);
-router.post("/path", handler);
-router.put("/path", handler);
-router.patch("/path", handler);
-router.delete_("/path", handler); //I know I know, I didn't think about the delete keyword
-```
-
-Handlers have the signature:
-
-```cpp
-[](const HttpRequest& req) -> Task<Response> {
-    co_return HttpResponse(200, "body");
-}
-```
-
-`Response` is `std::variant<HttpResponse, HttpStreamResponse>`.
-
-#### Path Parameters
-
-```cpp
-router.get("/users/<id>", [](const HttpRequest& req) -> Task<Response> {
-    auto id = req.getPathParam("id");
-    co_return HttpResponse(200, "User: " + id);
-});
-```
-
-#### Wildcards
-
-```cpp
-router.get("/files/*",  handler); // matches one segment
-router.get("/files/**", handler); // matches any depth
-```
-
-#### Query Parameters
-
-```cpp
-auto name = req.getQueryParam("name");          // single value
-auto tags = req.getQueryParams("tag");          // multi-value
-auto all  = req.getAllQueryParams();            // vector of pairs
-```
-
-#### Request Body
-
-```cpp
-const std::string& body = req.getBody();        // raw body string
-```
-
-#### Response
-
-```cpp
-HttpResponse res(200, "body text");
-res.headers.setHeaderLower("content-type", "text/plain");
-res.cookies.setCookie(Cookie("name", "value"));
-co_return res;
-```
-
-#### Streaming Response
-
-```cpp
-co_return HttpStreamResponse(200, [i = 0]() mutable -> Task<std::optional<std::string>> {
-    if (i >= 3) co_return std::nullopt;   // signals end of stream
-    co_return "chunk-" + std::to_string(++i);
-});
-```
-
-#### Middleware
-
-```cpp
-router.use([](HttpRequest& req, Next next) -> Task<Response> {
-    // pre-processing
-    auto res = co_await next();
-    // post-processing
-    co_return res;
-});
-```
-
-Middleware runs in registration order. `next()` advances to the next middleware or the terminal handler.
-
----
-
-## Architecture
-
-### Runtime
-
-Each worker thread owns an `Executor` - an event loop built on:
-
-- **Edge-triggered epoll** (`EPOLLIN | EPOLLOUT | EPOLLET`) - fds registered once at accept time.
-- **C++20 coroutines** - every connection is a single coroutine; one heap allocation covers the entire connection lifetime on the happy path
-- **io_uring** - async file reads/writes for static file serving, submitted in batches and drained each loop iteration
-- **SO_REUSEPORT** - each thread binds its own listener socket independently; the kernel distributes incoming connections
-
-### Connection Lifecycle
-
-```
-accept4()
-   │
-   ▼
-TLS handshake (if applicable)
-   │
-   ▼
-┌─────────────────────────────┐
-│  Per-request loop           │
-│                             │
-│  read headers               │
-│  ──► parse + validate       │
-│  read body                  │
-│  ──► content-length         │
-│  ──► chunked                │
-│                             │
-│  router.dispatch()          │
-│  ──► middleware chain       │
-│  ──► handler                │
-│                             │
-│  send response              │
-│  ──► HttpResponse           │
-│  ──► HttpStreamResponse     │
-│       (chunked encoding)    │
-└─────────────────────────────┘
-   │
-   ▼
-resetForNextRequest()  ──►  keep-alive loop
-```
-
-### File Layout
-##### (Subject to change)
-
-```
-rukh/include/rukh/      - public framework headers
-rukh/src/               - framework implementation
-rukh/external/liburing/ - vendored liburing source
-app/main.cpp            - application entry point
-app/routes.cpp          - application route definitions
-app/config/             - middleware + error formatter wiring
-app/public/             - static assets served by StaticMiddleware
-```
-
----
+**Planned:** WebSockets and Server-Sent Events.
 
 ## Benchmarks
 
-All benchmarks run on a single machine with server and load generator pinned to **separate physical cores** via `taskset`. Release build, logging disabled.
+All frameworks were benchmarked against the same set of endpoints, with configurations matched as closely as each framework allows (same SQLite pragmas, same static file sizes, same middleware tiers where applicable). Every test ran on a single machine (my laptop, plugged-in) with the `wrk` client and the server process pinned to separate physical cores via `taskset`, release builds, logging disabled. Express is single-process by design, so it's tested at 1 core; everything else is tested up to 3 server threads/cores.
 
-Tool: [`wrk`](https://github.com/wg/wrk)
+**Workloads:**
+- **plaintext**, `GET /ping`, no DB, no business logic; measures the raw request/response path
+- **static_small / static_medium / static_large**, static file serving at increasing file sizes, to see where each framework's I/O strategy starts to matter
+- **crud_mixed**, reads only (single-record fetch + list fetch) through each framework's DB layer. Writes were originally included too, but insert/update throughput turned out to be unreliable enough, even for the same framework run to run, that it wasn't a fair signal, so it was dropped from this workload. RuKh uses it's `IDatabase` interface and `QueryResult`, not the unfinished ORM.
+- **churn**, one request per connection (`Connection: close`), no keep-alive; measures pure connection setup/teardown cost rather than steady-state throughput
 
-Workload: minimal `GET /ping → "pong"` - no database, no business logic.
+**Results below are averaged across the full concurrency sweep, per framework at its max core count.**
+*concurrency (wrk -c) values were \[64,128,256,512,1024]*
 
-> These numbers reflect the best-case scenario for all frameworks tested. Real-world workloads will be lower across the board.
-
-### Single-Threaded (1 server thread, `taskset -c 6,8 wrk -t2 -c20 -d10s`)
-
-| Framework | Language | req/s |
+#### Plaintext
+| Framework | avg req/s | avg p99 latency |
 |---|---|---|
-| Drogon | C++ | ~95,000 |
-| **RuKh** | **C++** | **~90,000** |
-| Crow | C++ | ~80,000 |
-| Go net/http | Go | ~63,000 |
-| Express | Node.js | ~19,000 |
+| Drogon | 247,000 | 3.2 ms |
+| **RuKh** | **223,000** | **2.2 ms** |
+| Fiber | 217,000 | 3.3 ms |
+| Crow | 143,000 | 3.1 ms |
+| Go net/http | 142,000 | 6.4 ms |
+| Starlette | 25,400 | 84.7 ms |
+| Express (1 core) | 20,700 | 120.1 ms |
 
-RuKh reaches ~95% of Drogon's single-threaded throughput.
+#### Static files (small / medium / large)
+| Framework | small avg req/s | medium avg req/s | large avg req/s |
+|---|---|---|---|
+| Drogon | 149,000 | 9,725 | 137 |
+| **RuKh** | **142,500** | 9,725 | 131 |
+| Fiber | 109,000 | 9,708 | 131 |
+| Go net/http | 54,100 | 9,690 | 132 |
+| Crow | 9,500 | 2,953 | 64 |
+| Express | 7,600 | 633 | 5 |
+| Starlette | 3,200 | 813 | 10 |
 
-### Multi-Threaded (3 server threads, `taskset -c 6,8,10 wrk -t3 -c30 -d10s`)
+RuKh trails Drogon slightly on small files and is essentially tied on medium and large.
 
-| Framework | Language | req/s |
+#### Database reads (list and fetch)
+| Framework | avg req/s | avg p99 latency |
 |---|---|---|
-| Drogon | C++ | ~270,000 |
-| **RuKh** | **C++** | **~260,000** |
-| Go net/http | Go | ~175,000 |
-| Crow | C++ | ~161,000 |
+| Go net/http | 17,163 | 100.3 ms |
+| Fiber | 16,406 | 117.5 ms |
+| **RuKh** | **14,564** | **32.4 ms** |
+| Drogon | 12,421 | 51.5 ms |
+| Express (1 core) | 6,143 | 117.7 ms |
+| Crow | 5,971 | 63.4 ms |
+| Starlette | 3,340 | 174.8 ms |
 
-RuKh scales near-linearly with thread count (~2.9× from 1→3 threads).
+RuKh isn't the highest throughput here, but its p99 latency is significantly lower, Go and Fiber push more requests through but with far worse tail behavior.
 
-### Methodology Notes
+#### Connection churn
+| Framework | avg req/s | avg p99 latency |
+|---|---|---|
+| Crow | 44,270 | 5.4 ms |
+| Fiber | 42,973 | 7.8 ms |
+| Drogon | 42,224 | 8.8 ms |
+| Go net/http | 41,515 | 10.4 ms |
+| Starlette | 9,950 | 44.0 ms |
+| Express (1 core) | 8,637 | 143.3 ms |
+| **RuKh** | **15,199** | **159.0 ms** |
 
-- Server and `wrk` pinned to separate physical cores - no shared cache interference
-- Each result is the average of two consecutive runs; variance was low across all tests
-- Express tested single-process (standard deployment model for a single instance)
-- Go tested with `GOMAXPROCS(1)` for the single-threaded comparison; Go's runtime still uses background goroutines
-
----
+This is RuKh's clear weak point. Every other multi-threaded framework tested handles a fresh connection per request roughly 3x better than RuKh does, and RuKh's tail latency degrades badly under it. This is also why active development is paused as of writing this ReadMe. Rather than keep prompting an LLM to guess at the fix (tried it, wasn't the move), I'm taking the time to read up on the networking/kernel internals involved in connection setup and teardown so I understand why it's this bad before touching the code again. 
