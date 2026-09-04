@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/C%2B%2B-23-blue" alt="C++23">
   <img src="https://img.shields.io/badge/platform-Linux-lightgrey" alt="Linux">
   <a href="https://abdulazizkh4tri.github.io/RuKh/"><img src="https://img.shields.io/badge/docs-online-blue" alt="Docs"></a>
-  <a href="#connection-churn"><img src="https://img.shields.io/badge/status-on%20break-yellow" alt="Status"></a>
+  <a href="#connection-churn"><img src="https://img.shields.io/badge/status-on%20study%20break-yellow" alt="Status"></a>
 </p>
 
 ---
