@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo.png" alt="RuKh logo, a RuKh (Roc), the mythical bird" width="400">
+  <img src="./images/logo.png" alt="RuKh logo, a RuKh (Roc), the mythical bird" width="400">
 </p>
 
 <p align="center">A C++23 web framework, built entirely from scratch on Linux.</p>
@@ -51,52 +51,24 @@ All frameworks were benchmarked against the same set of endpoints, with configur
 **Results below are averaged across the full concurrency sweep, per framework at 3 cores.**
 *concurrency (wrk -c) values were \[64,128,256,512,1024]*
 
-#### Plaintext
-| Framework | avg req/s | avg p99 latency |
-|---|---|---|
-| Drogon | 247,000 | 3.2 ms |
-| **RuKh** | **223,000** | **2.2 ms** |
-| Fiber | 217,000 | 3.3 ms |
-| Crow | 143,000 | 3.1 ms |
-| Go net/http | 142,000 | 6.4 ms |
-| Starlette | 25,400 | 84.7 ms |
-| Express (1 core) | 20,700 | 120.1 ms |
+### Plaintext
+<img src="./images/plaintext.png" width="800">
 
-#### Static files (small / medium / large)
-| Framework | small avg req/s | medium avg req/s | large avg req/s |
-|---|---|---|---|
-| Drogon | 149,000 | 9,725 | 137 |
-| **RuKh** | **142,500** | 9,725 | 131 |
-| Fiber | 109,000 | 9,708 | 131 |
-| Go net/http | 54,100 | 9,690 | 132 |
-| Crow | 9,500 | 2,953 | 64 |
-| Express | 7,600 | 633 | 5 |
-| Starlette | 3,200 | 813 | 10 |
+### Static files (small / medium / large)
+<img src="./images/static_small.png" width="800">
+
+<img src="./images/static_medium.png" width="800">
+
+<img src="./images/static_large.png" width="800">
 
 RuKh trails Drogon slightly on small files and is essentially tied on medium and large.
 
-#### Database reads (list and fetch)
-| Framework | avg req/s | avg p99 latency |
-|---|---|---|
-| Go net/http | 17,163 | 100.3 ms |
-| Fiber | 16,406 | 117.5 ms |
-| **RuKh** | **14,564** | **32.4 ms** |
-| Drogon | 12,421 | 51.5 ms |
-| Express (1 core) | 6,143 | 117.7 ms |
-| Crow | 5,971 | 63.4 ms |
-| Starlette | 3,340 | 174.8 ms |
+### Database reads (list and fetch)
+<img src="./images/db_read.png" width="800">
 
 RuKh isn't the highest throughput here, but its p99 latency is significantly lower, Go and Fiber push more requests through but with far worse tail behavior.
 
-#### Connection churn
-| Framework | avg req/s | avg p99 latency |
-|---|---|---|
-| Crow | 44,270 | 5.4 ms |
-| Fiber | 42,973 | 7.8 ms |
-| Drogon | 42,224 | 8.8 ms |
-| Go net/http | 41,515 | 10.4 ms |
-| **RuKh** | **15,199** | **159.0 ms** |
-| Starlette | 9,950 | 44.0 ms |
-| Express (1 core) | 8,637 | 143.3 ms |
+### Connection churn
+<img src="./images/churn.png" width="800">
 
 This is RuKh's clear weak point. Every other multi-threaded framework tested (except starlette) handles a fresh connection per request roughly 3x better than RuKh does, and RuKh's tail latency degrades badly under it. This is also why active development is paused as of writing this ReadMe. Rather than keep prompting an LLM to guess at the fix (tried it, didn't work), I'm taking the time to read up on the networking/kernel internals involved in connection setup and teardown so I understand why it's this bad before touching the code again. 
