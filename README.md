@@ -4,7 +4,11 @@
 
 <p align="center">A C++23 web framework, built entirely from scratch on Linux.</p>
 
+[![C++](https://img.shields.io/badge/C%2B%2B-23-blue)]()
+[![Linux](https://img.shields.io/badge/platform-Linux-lightgrey)]()
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://abdulazizkh4tri.github.io/RuKh/)
+[![Status](https://img.shields.io/badge/status-on%20break-yellow)](#connection-churn)
+
 ---
 
 RuKh started as an attempt to write an HTTP/1.1 server from raw sockets. It grew into a full web framework, every layer between the kernel and the handler function is hand written. The only dependencies being OpenSSL, spdlog, nlohmann Json, and liburing.
